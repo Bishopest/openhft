@@ -1,0 +1,59 @@
+# Build stage
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+# Copy solution and project files
+COPY OpenHFT-Lab.sln .
+COPY src/OpenHFT.Core/*.csproj ./src/OpenHFT.Core/
+COPY src/OpenHFT.Feed/*.csproj ./src/OpenHFT.Feed/
+COPY src/OpenHFT.Book/*.csproj ./src/OpenHFT.Book/
+COPY src/OpenHFT.Strategy/*.csproj ./src/OpenHFT.Strategy/
+COPY src/OpenHFT.Risk/*.csproj ./src/OpenHFT.Risk/
+COPY src/OpenHFT.Gateway/*.csproj ./src/OpenHFT.Gateway/
+COPY src/OpenHFT.Matcher/*.csproj ./src/OpenHFT.Matcher/
+COPY src/OpenHFT.Metrics/*.csproj ./src/OpenHFT.Metrics/
+COPY src/OpenHFT.UI/*.csproj ./src/OpenHFT.UI/
+
+# Restore dependencies
+RUN dotnet restore
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN dotnet build -c Release --no-restore
+
+# Publish the application
+RUN dotnet publish src/OpenHFT.UI/OpenHFT.UI.csproj -c Release -o /app/publish --no-restore
+
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+WORKDIR /app
+
+# Install dependencies for high-performance networking
+RUN apt-get update && apt-get install -y \
+    curl \
+    htop \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy published application
+COPY --from=build /app/publish .
+
+# Create directories
+RUN mkdir -p /app/data /app/logs /app/config
+
+# Set environment variables for production
+ENV DOTNET_SYSTEM_GC_SERVER=1
+ENV DOTNET_SYSTEM_GC_CONCURRENT=1
+ENV DOTNET_TieredPGO=1
+ENV DOTNET_ReadyToRun=1
+
+# Expose ports
+EXPOSE 5000 3000 9091
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:5000/api/engine/status || exit 1
+
+# Set the entry point
+ENTRYPOINT ["dotnet", "OpenHFT.UI.dll"]

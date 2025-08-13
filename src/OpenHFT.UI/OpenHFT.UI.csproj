@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <Optimize>true</Optimize>
+    <DebugType>portable</DebugType>
+    <DefineConstants>TRACE</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenHFT.Core\OpenHFT.Core.csproj" />
+    <ProjectReference Include="..\OpenHFT.Feed\OpenHFT.Feed.csproj" />
+    <ProjectReference Include="..\OpenHFT.Book\OpenHFT.Book.csproj" />
+    <ProjectReference Include="..\OpenHFT.Strategy\OpenHFT.Strategy.csproj" />
+    <ProjectReference Include="..\OpenHFT.Risk\OpenHFT.Risk.csproj" />
+    <ProjectReference Include="..\OpenHFT.Gateway\OpenHFT.Gateway.csproj" />
+    <ProjectReference Include="..\OpenHFT.Matcher\OpenHFT.Matcher.csproj" />
+    <ProjectReference Include="..\OpenHFT.Metrics\OpenHFT.Metrics.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.SpaServices.Extensions" Version="8.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.1" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="5.0.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="ClientApp\**" CopyToPublishDirectory="PreserveNewest" Exclude="ClientApp\node_modules\**" />
+  </ItemGroup>
+
+</Project>

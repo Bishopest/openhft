@@ -1,0 +1,150 @@
+version: '3.8'
+
+services:
+  # Main HFT Engine
+  openhft-engine:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.engine
+    container_name: openhft-engine
+    restart: unless-stopped
+    ports:
+      - "5000:5000"    # API
+      - "3000:3000"    # Web UI
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:5000
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=openhft;Username=openhft;Password=openhft_password
+      - Prometheus__Enabled=true
+      - Prometheus__Port=9091
+      - Logging__LogLevel__Default=Information
+      - Binance__BaseUrl=wss://stream.binance.com:9443/ws/
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+    depends_on:
+      - postgres
+      - prometheus
+    networks:
+      - openhft-net
+
+  # PostgreSQL for persistence (optional)
+  postgres:
+    image: postgres:15-alpine
+    container_name: openhft-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=openhft
+      - POSTGRES_USER=openhft
+      - POSTGRES_PASSWORD=openhft_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - openhft-net
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: openhft-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - openhft-net
+
+  # Grafana for dashboards
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: openhft-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_DOMAIN=localhost
+      - GF_SERVER_HTTP_PORT=3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - openhft-net
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: openhft-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - openhft-net
+
+  # InfluxDB for time-series data (alternative to Prometheus)
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: openhft-influxdb
+    restart: unless-stopped
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=admin_password
+      - DOCKER_INFLUXDB_INIT_ORG=openhft
+      - DOCKER_INFLUXDB_INIT_BUCKET=metrics
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=openhft-admin-token
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    networks:
+      - openhft-net
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.47
+    container_name: openhft-jaeger
+    restart: unless-stopped
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "14268:14268"  # jaeger-collector HTTP
+      - "14250:14250"  # jaeger-collector gRPC
+      - "16686:16686"  # jaeger-ui
+      - "4317:4317"    # OTLP gRPC receiver
+      - "4318:4318"    # OTLP HTTP receiver
+    networks:
+      - openhft-net
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+  redis_data:
+  influxdb_data:
+
+networks:
+  openhft-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

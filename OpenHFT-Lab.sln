@@ -1,0 +1,90 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{8A6C3C0F-8B5A-4F8E-9C7D-1E2F3A4B5C6D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Core", "src\OpenHFT.Core\OpenHFT.Core.csproj", "{A1B2C3D4-E5F6-7890-1234-567890ABCDEF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Feed", "src\OpenHFT.Feed\OpenHFT.Feed.csproj", "{AEBB58FB-F26C-4832-8C12-4273B4A84028}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Book", "src\OpenHFT.Book\OpenHFT.Book.csproj", "{3E27FE39-7014-4FC1-80B9-38A71D8844F4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Strategy", "src\OpenHFT.Strategy\OpenHFT.Strategy.csproj", "{14176C3D-D25A-4339-BF93-1604FF2E5ACD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Risk", "src\OpenHFT.Risk\OpenHFT.Risk.csproj", "{55AF5934-9E96-47F9-A83A-762E9A3E02E5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Gateway", "src\OpenHFT.Gateway\OpenHFT.Gateway.csproj", "{F31DBCDE-0EC2-4CB5-9DC6-0982FFCBCF31}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Matcher", "src\OpenHFT.Matcher\OpenHFT.Matcher.csproj", "{CB78262E-BBA2-43EB-A19D-0B0BBBC5A018}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Metrics", "src\OpenHFT.Metrics\OpenHFT.Metrics.csproj", "{A09DF752-713A-4944-9A8A-5D49EA942606}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.UI", "src\OpenHFT.UI\OpenHFT.UI.csproj", "{7435BB53-6138-4528-A73A-8E6544CD62E4}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{9B7C8D4E-F5A6-1203-4567-890ABCDEF123}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Tests", "tests\OpenHFT.Tests\OpenHFT.Tests.csproj", "{AB3062DA-179C-4B68-947A-7FACAD025A8D}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "bench", "bench", "{1A2B3C4D-E5F6-7890-1234-567890ABCDEF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Benchmarks", "bench\OpenHFT.Benchmarks\OpenHFT.Benchmarks.csproj", "{8AAF70E6-A3BD-4CFA-A70F-C7F6FCE352B7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A1B2C3D4-E5F6-7890-1234-567890ABCDEF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-1234-567890ABCDEF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-1234-567890ABCDEF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-E5F6-7890-1234-567890ABCDEF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AEBB58FB-F26C-4832-8C12-4273B4A84028}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AEBB58FB-F26C-4832-8C12-4273B4A84028}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AEBB58FB-F26C-4832-8C12-4273B4A84028}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AEBB58FB-F26C-4832-8C12-4273B4A84028}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3E27FE39-7014-4FC1-80B9-38A71D8844F4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3E27FE39-7014-4FC1-80B9-38A71D8844F4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3E27FE39-7014-4FC1-80B9-38A71D8844F4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3E27FE39-7014-4FC1-80B9-38A71D8844F4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{14176C3D-D25A-4339-BF93-1604FF2E5ACD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{14176C3D-D25A-4339-BF93-1604FF2E5ACD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{14176C3D-D25A-4339-BF93-1604FF2E5ACD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{14176C3D-D25A-4339-BF93-1604FF2E5ACD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{55AF5934-9E96-47F9-A83A-762E9A3E02E5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{55AF5934-9E96-47F9-A83A-762E9A3E02E5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{55AF5934-9E96-47F9-A83A-762E9A3E02E5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{55AF5934-9E96-47F9-A83A-762E9A3E02E5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F31DBCDE-0EC2-4CB5-9DC6-0982FFCBCF31}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F31DBCDE-0EC2-4CB5-9DC6-0982FFCBCF31}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F31DBCDE-0EC2-4CB5-9DC6-0982FFCBCF31}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F31DBCDE-0EC2-4CB5-9DC6-0982FFCBCF31}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CB78262E-BBA2-43EB-A19D-0B0BBBC5A018}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CB78262E-BBA2-43EB-A19D-0B0BBBC5A018}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CB78262E-BBA2-43EB-A19D-0B0BBBC5A018}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CB78262E-BBA2-43EB-A19D-0B0BBBC5A018}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A09DF752-713A-4944-9A8A-5D49EA942606}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A09DF752-713A-4944-9A8A-5D49EA942606}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A09DF752-713A-4944-9A8A-5D49EA942606}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A09DF752-713A-4944-9A8A-5D49EA942606}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7435BB53-6138-4528-A73A-8E6544CD62E4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7435BB53-6138-4528-A73A-8E6544CD62E4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7435BB53-6138-4528-A73A-8E6544CD62E4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7435BB53-6138-4528-A73A-8E6544CD62E4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AB3062DA-179C-4B68-947A-7FACAD025A8D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AB3062DA-179C-4B68-947A-7FACAD025A8D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AB3062DA-179C-4B68-947A-7FACAD025A8D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AB3062DA-179C-4B68-947A-7FACAD025A8D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8AAF70E6-A3BD-4CFA-A70F-C7F6FCE352B7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8AAF70E6-A3BD-4CFA-A70F-C7F6FCE352B7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8AAF70E6-A3BD-4CFA-A70F-C7F6FCE352B7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8AAF70E6-A3BD-4CFA-A70F-C7F6FCE352B7}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{A1B2C3D4-E5F6-7890-1234-567890ABCDEF} = {8A6C3C0F-8B5A-4F8E-9C7D-1E2F3A4B5C6D}
+	EndGlobalSection
+EndGlobal
