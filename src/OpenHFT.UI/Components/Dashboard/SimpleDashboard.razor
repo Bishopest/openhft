@@ -1,0 +1,1680 @@
+@page "/dashboard"
+@using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.JSInterop
+@using System.Text.Json
+@inject IJSRuntime JSRuntime
+@inject ILogger<SimpleDashboard> Logger
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+
+<h1>OpenHFT Lab - Trading Dashboard</h1>
+
+<div class="dashboard-container">
+    <!-- Connection Status -->
+    <div class="status-section">
+        <h3>System Status</h3>
+        <div class="status-indicator @(isConnected ? "connected" : "disconnected")">
+            @(isConnected ? "Connected" : "Disconnected")
+        </div>
+        
+        @if (systemAlerts.Any())
+        {
+            <div class="alert alert-@systemAlerts.Last().Level.ToLower()">
+                <strong>@systemAlerts.Last().Level:</strong> @systemAlerts.Last().Message
+            </div>
+        }
+    </div>
+
+    <!-- Portfolio Overview -->
+    <div class="portfolio-section">
+        <h3>💼 Portfolio Overview <span class="last-update">Last updated: @DateTime.Now.ToString("HH:mm:ss")</span></h3>
+        <div class="metrics-grid">
+            <div class="metric-card total-value">
+                <div class="metric-header">
+                    <label>💰 Total Value</label>
+                    <div class="trend-indicator @GetTrendClass(portfolioStats?.TotalPnL ?? 0)">
+                        @GetTrendIcon(portfolioStats?.TotalPnL ?? 0)
+                    </div>
+                </div>
+                <span class="value big-value">$@(portfolioStats?.TotalValue.ToString("N2") ?? "0.00")</span>
+                <span class="sub-value">@GetPnLPrefix(portfolioStats?.TotalPnL ?? 0)$@(Math.Abs(portfolioStats?.TotalPnL ?? 0).ToString("N2")) total</span>
+            </div>
+            <div class="metric-card daily-pnl">
+                <div class="metric-header">
+                    <label>📈 Daily PnL</label>
+                    <div class="percentage">@(portfolioStats?.DailyPnLPercentage.ToString("N2") ?? "0.00")%</div>
+                </div>
+                <span class="value @GetPnLClass(portfolioStats?.DailyPnL ?? 0)">
+                    @GetPnLPrefix(portfolioStats?.DailyPnL ?? 0)$@(Math.Abs(portfolioStats?.DailyPnL ?? 0).ToString("N2"))
+                </span>
+                <span class="sub-value">since market open</span>
+            </div>
+            <div class="metric-card positions">
+                <div class="metric-header">
+                    <label>📊 Open Positions</label>
+                    <div class="status @(portfolioStats?.OpenPositions > 0 ? "active" : "inactive")">
+                        @(portfolioStats?.OpenPositions > 0 ? "ACTIVE" : "IDLE")
+                    </div>
+                </div>
+                <span class="value">@(portfolioStats?.OpenPositions ?? 0)</span>
+                <span class="sub-value">@(portfolioStats?.TotalTrades ?? 0) total trades</span>
+            </div>
+            <div class="metric-card win-rate">
+                <div class="metric-header">
+                    <label>🎯 Win Rate</label>
+                    <div class="quality @GetWinRateQuality(portfolioStats?.WinRate ?? 0)">
+                        @GetWinRateLabel(portfolioStats?.WinRate ?? 0)
+                    </div>
+                </div>
+                <span class="value">@(portfolioStats?.WinRate.ToString("N1") ?? "0.0")%</span>
+                <span class="sub-value">@(portfolioStats?.TotalTrades ?? 0) trades</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Strategy Controls -->
+    <div class="strategies-section">
+        <h3>⚡ Advanced Trading Strategies</h3>
+        <div class="strategies-grid">
+            @foreach (var strategy in strategyStatistics.Keys)
+            {
+                var stats = strategyStatistics[strategy];
+                var isActive = stats?.IsEnabled ?? false;
+                <div class="strategy-card @(isActive ? "active" : "inactive")">
+                    <div class="strategy-header">
+                        <div class="strategy-info">
+                            <h4>@GetStrategyIcon(strategy) @GetStrategyDisplayName(strategy)</h4>
+                            <div class="strategy-status">
+                                <span class="status-dot @(isActive ? "running" : "stopped")"></span>
+                                <span class="status-text">@(stats?.Status ?? "Unknown")</span>
+                            </div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" 
+                                   checked="@isActive"
+                                   @onchange="@((e) => ToggleStrategy(strategy, (bool)e.Value!))"
+                                   disabled="@(!isConnected)" />
+                            <span class="slider @(isActive ? "active" : "")"></span>
+                        </label>
+                    </div>
+                    <div class="strategy-stats">
+                        <div class="stat-item">
+                            <label>Performance</label>
+                            <span class="@GetPnLClass(stats?.PnL ?? 0)">
+                                @GetPnLPrefix(stats?.PnL ?? 0)$@(Math.Abs(stats?.PnL ?? 0).ToString("N2"))
+                            </span>
+                        </div>
+                        <div class="stat-item">
+                            <label>Efficiency</label>
+                            <span class="efficiency @GetEfficiencyClass(stats?.PnL ?? 0)">
+                                @GetEfficiencyLabel(stats?.PnL ?? 0)
+                            </span>
+                        </div>
+                    </div>
+                    @if (isActive)
+                    {
+                        <div class="activity-indicator">
+                            <div class="pulse"></div>
+                            <span>Processing market data...</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+        
+        <button class="btn btn-danger" @onclick="EmergencyStop" disabled="@(!isConnected)">
+            Emergency Stop
+        </button>
+    </div>
+
+    <!-- Market Data -->
+    <div class="market-data-section">
+        <h3>📊 Live Market Data <span class="data-count">(@marketData.Count events)</span></h3>
+        <div class="market-stats">
+            <div class="stat-pill">
+                <span class="label">Updates/sec:</span>
+                <span class="value">@GetMarketDataRate()</span>
+            </div>
+            <div class="stat-pill">
+                <span class="label">Last update:</span>
+                <span class="value">@(marketData.LastOrDefault()?.GetTimestamp().ToString("HH:mm:ss.fff") ?? "N/A")</span>
+            </div>
+        </div>
+        <div class="market-data-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>💱 Symbol</th>
+                        <th>💰 Price</th>
+                        <th>📈 Volume</th>
+                        <th>🔄 Side</th>
+                        <th>⏰ Time</th>
+                        <th>📊 Trend</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var data in marketData.TakeLast(15).Reverse())
+                    {
+                        <tr class="market-row @GetMarketRowClass(data)">
+                            <td class="symbol-cell">
+                                <span class="symbol-badge">@data.Symbol</span>
+                            </td>
+                            <td class="price-cell @GetPriceClass(data.Side)">
+                                <span class="price-value">$@data.Price.ToString("N4")</span>
+                                <span class="price-change">@GetPriceChangeIcon(data.Side)</span>
+                            </td>
+                            <td class="volume-cell">
+                                <span class="volume-value">@data.Volume.ToString("N2")</span>
+                            </td>
+                            <td class="side-cell">
+                                <span class="side-badge @GetSideClass(data.Side)">@data.Side</span>
+                            </td>
+                            <td class="time-cell">
+                                <span class="time-value">@data.GetTimestamp().ToString("HH:mm:ss")</span>
+                                <span class="time-ms">.@data.GetTimestamp().ToString("fff")</span>
+                            </td>
+                            <td class="trend-cell">
+                                <span class="trend-arrow @GetPriceClass(data.Side)">@GetPriceChangeIcon(data.Side)</span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Advanced Charts Section -->
+    <div class="charts-section">
+        <div class="charts-header">
+            <h3>📊 Advanced Market Analysis</h3>
+            <div class="chart-controls">
+                <select @bind="selectedSymbol" class="symbol-selector">
+                    <option value="BTCUSDT">₿ BTC/USDT</option>
+                    <option value="ETHUSDT">🔷 ETH/USDT</option>
+                    <option value="ADAUSDT">🔵 ADA/USDT</option>
+                </select>
+                <select @bind="selectedTimeframe" class="timeframe-selector">
+                    <option value="1m">1 Minute</option>
+                    <option value="5m">5 Minutes</option>
+                    <option value="15m">15 Minutes</option>
+                    <option value="1h">1 Hour</option>
+                </select>
+                <button class="refresh-charts-btn" @onclick="RefreshCharts">🔄 Refresh</button>
+            </div>
+        </div>
+
+        <!-- Candlestick Chart -->
+        <div class="chart-container">
+            <div class="chart-header">
+                <h4>📈 Candlestick Chart - @selectedSymbol (@selectedTimeframe)</h4>
+                <div class="chart-info">
+                    <span class="current-price">$@currentPrice.ToString("N4")</span>
+                    <span class="price-change @GetPriceChangeClass()">@GetPriceChangeText()</span>
+                </div>
+            </div>
+            <div id="candlestick-chart" style="height: 400px; width: 100%;"></div>
+        </div>
+
+        <!-- Volume Chart -->
+        <div class="chart-container">
+            <div class="chart-header">
+                <h4>📊 Volume Analysis</h4>
+                <div class="volume-stats">
+                    <span class="volume-total">Total: @totalVolume.ToString("N0")</span>
+                    <span class="volume-avg">Avg: @avgVolume.ToString("N0")</span>
+                </div>
+            </div>
+            <div id="volume-chart" style="height: 200px; width: 100%;"></div>
+        </div>
+
+        <!-- Technical Indicators -->
+        <div class="indicators-container">
+            <div class="indicator-card">
+                <h5>📈 Moving Averages</h5>
+                <div class="ma-indicators">
+                    <div class="ma-item">
+                        <span class="ma-label">MA7:</span>
+                        <span class="ma-value">$@ma7.ToString("N4")</span>
+                    </div>
+                    <div class="ma-item">
+                        <span class="ma-label">MA25:</span>
+                        <span class="ma-value">$@ma25.ToString("N4")</span>
+                    </div>
+                    <div class="ma-item">
+                        <span class="ma-label">MA99:</span>
+                        <span class="ma-value">$@ma99.ToString("N4")</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="indicator-card">
+                <h5>⚡ RSI Oscillator</h5>
+                <div class="rsi-container">
+                    <div class="rsi-value @GetRSIClass()">@rsi.ToString("N1")</div>
+                    <div class="rsi-bar">
+                        <div class="rsi-fill" style="width: @(rsi)%"></div>
+                        <div class="rsi-levels">
+                            <span class="level-70">70</span>
+                            <span class="level-30">30</span>
+                        </div>
+                    </div>
+                    <div class="rsi-signal @GetRSISignalClass()">@GetRSISignal()</div>
+                </div>
+            </div>
+
+            <div class="indicator-card">
+                <h5>📊 MACD Signal</h5>
+                <div class="macd-container">
+                    <div class="macd-line">
+                        <span class="macd-label">MACD:</span>
+                        <span class="macd-value @GetMACDClass()">@macd.ToString("N4")</span>
+                    </div>
+                    <div class="signal-line">
+                        <span class="signal-label">Signal:</span>
+                        <span class="signal-value">@macdSignal.ToString("N4")</span>
+                    </div>
+                    <div class="histogram">
+                        <span class="hist-label">Histogram:</span>
+                        <span class="hist-value @GetHistogramClass()">@macdHistogram.ToString("N4")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Emergency Stop Modal -->
+@if (showEmergencyDialog)
+{
+    <div class="modal-overlay" @onclick="@(() => showEmergencyDialog = false)">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <h3>⚠️ Emergency Stop Confirmation</h3>
+            <p>Are you sure you want to execute an emergency stop? This will immediately halt all trading strategies.</p>
+            <textarea @bind="emergencyStopReason" placeholder="Enter reason (optional)..." rows="3"></textarea>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" @onclick="@(() => showEmergencyDialog = false)">Cancel</button>
+                <button class="btn btn-danger" @onclick="ConfirmEmergencyStop">Execute Emergency Stop</button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .dashboard-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .status-section, .portfolio-section, .strategies-section, .market-data-section, .chart-section {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .status-indicator {
+        padding: 8px 16px;
+        border-radius: 4px;
+        font-weight: bold;
+        display: inline-block;
+        margin: 10px 0;
+    }
+
+    .status-indicator.connected {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+
+    .status-indicator.disconnected {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-top: 15px;
+    }
+
+    .metric-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .metric-card label {
+        display: block;
+        font-size: 14px;
+        opacity: 0.9;
+        margin-bottom: 5px;
+    }
+
+    .metric-card .value {
+        font-size: 24px;
+        font-weight: bold;
+        display: block;
+    }
+
+    .strategies-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 15px;
+        margin: 15px 0;
+    }
+
+    .strategy-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 15px;
+        border-left: 4px solid #007bff;
+    }
+
+    .strategy-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .strategy-header h4 {
+        margin: 0;
+        color: #495057;
+    }
+
+    .strategy-stats {
+        display: flex;
+        justify-content: space-between;
+        font-size: 14px;
+        color: #6c757d;
+    }
+
+    .switch {
+        position: relative;
+        display: inline-block;
+        width: 50px;
+        height: 24px;
+    }
+
+    .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        border-radius: 24px;
+        transition: .4s;
+    }
+
+    .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        border-radius: 50%;
+        transition: .4s;
+    }
+
+    input:checked + .slider {
+        background-color: #28a745;
+    }
+
+    input:checked + .slider:before {
+        transform: translateX(26px);
+    }
+
+    .market-data-table {
+        overflow-x: auto;
+        margin-top: 15px;
+    }
+
+    .market-data-table table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .market-data-table th,
+    .market-data-table td {
+        padding: 8px 12px;
+        text-align: left;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .market-data-table th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+    }
+
+    .price-buy {
+        color: #28a745;
+        font-weight: 600;
+    }
+
+    .price-sell {
+        color: #dc3545;
+        font-weight: 600;
+    }
+
+    .side-buy {
+        color: #28a745;
+    }
+
+    .side-sell {
+        color: #dc3545;
+    }
+
+    .pnl-positive {
+        color: #28a745;
+    }
+
+    .pnl-negative {
+        color: #dc3545;
+    }
+
+    .btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 500;
+        text-decoration: none;
+        display: inline-block;
+        transition: all 0.2s;
+    }
+
+    .btn-danger {
+        background-color: #dc3545;
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background-color: #c82333;
+    }
+
+    .btn-secondary {
+        background-color: #6c757d;
+        color: white;
+    }
+
+    .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .alert {
+        padding: 12px;
+        border-radius: 4px;
+        margin: 10px 0;
+    }
+
+    .alert-info {
+        background-color: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #bee5eb;
+    }
+
+    .alert-warning {
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+    }
+
+    .alert-error, .alert-critical {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        max-width: 500px;
+        width: 90%;
+        max-height: 90%;
+        overflow-y: auto;
+    }
+
+    .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 20px;
+    }
+
+    .modal-content textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        margin: 15px 0;
+        resize: vertical;
+    }
+
+    /* Enhanced Dashboard Styles */
+    .last-update {
+        font-size: 12px;
+        opacity: 0.7;
+        font-weight: normal;
+    }
+
+    .metric-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+    .trend-indicator {
+        font-size: 18px;
+        font-weight: bold;
+    }
+
+    .trend-up { color: #28a745; }
+    .trend-down { color: #dc3545; }
+    .trend-neutral { color: #6c757d; }
+
+    .big-value {
+        font-size: 28px !important;
+        color: #2c3e50;
+    }
+
+    .sub-value {
+        font-size: 12px;
+        opacity: 0.8;
+        margin-top: 4px;
+        display: block;
+    }
+
+    .percentage {
+        background: #e9ecef;
+        padding: 2px 6px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: bold;
+    }
+
+    .status {
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 8px;
+        font-weight: bold;
+    }
+
+    .status.active {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .status.inactive {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .quality {
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 8px;
+        font-weight: bold;
+    }
+
+    .quality.excellent { background: #d4edda; color: #155724; }
+    .quality.good { background: #d1ecf1; color: #0c5460; }
+    .quality.average { background: #fff3cd; color: #856404; }
+    .quality.poor { background: #f8d7da; color: #721c24; }
+
+    /* Enhanced Strategy Cards */
+    .strategy-card.active {
+        border-left-color: #28a745;
+        background: linear-gradient(135deg, #f8fff9 0%, #ffffff 100%);
+        box-shadow: 0 2px 8px rgba(40, 167, 69, 0.15);
+    }
+
+    .strategy-card.inactive {
+        border-left-color: #dc3545;
+        background: #f8f9fa;
+    }
+
+    .strategy-info h4 {
+        margin: 0;
+        color: #495057;
+        font-size: 16px;
+    }
+
+    .strategy-status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 4px;
+    }
+
+    .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+    }
+
+    .status-dot.running {
+        background: #28a745;
+        animation: pulse 2s infinite;
+    }
+
+    .status-dot.stopped {
+        background: #dc3545;
+    }
+
+    .status-text {
+        font-size: 12px;
+        color: #6c757d;
+    }
+
+    .stat-item {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .stat-item label {
+        font-size: 11px;
+        opacity: 0.8;
+        margin: 0;
+    }
+
+    .efficiency {
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 8px;
+        font-weight: bold;
+    }
+
+    .efficiency.high { background: #d4edda; color: #155724; }
+    .efficiency.medium { background: #fff3cd; color: #856404; }
+    .efficiency.low { background: #f8d7da; color: #721c24; }
+
+    .activity-indicator {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        padding: 6px;
+        background: rgba(40, 167, 69, 0.1);
+        border-radius: 4px;
+        font-size: 12px;
+        color: #155724;
+    }
+
+    .pulse {
+        width: 6px;
+        height: 6px;
+        background: #28a745;
+        border-radius: 50%;
+        animation: pulse 1.5s infinite;
+    }
+
+    /* Enhanced Market Data */
+    .data-count {
+        font-size: 14px;
+        opacity: 0.7;
+    }
+
+    .market-stats {
+        display: flex;
+        gap: 15px;
+        margin: 10px 0;
+    }
+
+    .stat-pill {
+        background: #e9ecef;
+        padding: 4px 12px;
+        border-radius: 15px;
+        font-size: 12px;
+        display: flex;
+        gap: 6px;
+    }
+
+    .stat-pill .label {
+        opacity: 0.8;
+    }
+
+    .stat-pill .value {
+        font-weight: bold;
+        color: #007bff;
+    }
+
+    .market-row.fresh {
+        background: rgba(40, 167, 69, 0.1);
+        animation: highlight 1s ease-out;
+    }
+
+    .market-row.recent {
+        background: rgba(255, 193, 7, 0.1);
+    }
+
+    .symbol-badge {
+        background: #007bff;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: bold;
+    }
+
+    .price-cell {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .price-change {
+        font-size: 14px;
+        margin-left: 8px;
+    }
+
+    .side-badge {
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: bold;
+    }
+
+    .side-buy {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .side-sell {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .time-cell {
+        font-family: monospace;
+    }
+
+    .time-ms {
+        opacity: 0.6;
+        font-size: 10px;
+    }
+
+    .trend-arrow {
+        font-size: 16px;
+        font-weight: bold;
+    }
+
+    /* Animations */
+    @@keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+
+    @@keyframes highlight {
+        0% { background: rgba(40, 167, 69, 0.3); }
+        100% { background: rgba(40, 167, 69, 0.1); }
+    }
+
+    /* Dark mode support */
+    @@media (prefers-color-scheme: dark) {
+        .dashboard-container {
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        
+        .metric-card, .strategy-card {
+            background: #2d2d2d;
+            border-color: #404040;
+        }
+    }
+
+    /* Advanced Charts Styles */
+    .charts-section {
+        margin: 20px 0;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 12px;
+        border: 1px solid #e9ecef;
+    }
+
+    .charts-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+
+    .chart-controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .symbol-selector, .timeframe-selector {
+        padding: 8px 12px;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        background: white;
+        font-size: 14px;
+        min-width: 120px;
+    }
+
+    .refresh-charts-btn {
+        padding: 8px 16px;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background 0.3s;
+    }
+
+    .refresh-charts-btn:hover {
+        background: #0056b3;
+    }
+
+    .chart-container {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 15px 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .chart-header h4 {
+        margin: 0;
+        color: #495057;
+        font-size: 18px;
+    }
+
+    .chart-info {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+    }
+
+    .current-price {
+        font-size: 20px;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+
+    .price-change {
+        font-size: 14px;
+        font-weight: bold;
+        padding: 4px 8px;
+        border-radius: 4px;
+    }
+
+    .price-positive {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .price-negative {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .volume-stats {
+        display: flex;
+        gap: 15px;
+        font-size: 14px;
+        color: #6c757d;
+    }
+
+    .volume-total, .volume-avg {
+        font-weight: bold;
+    }
+
+    /* Technical Indicators */
+    .indicators-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+    }
+
+    .indicator-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .indicator-card h5 {
+        margin: 0 0 15px 0;
+        color: #495057;
+        font-size: 16px;
+    }
+
+    /* Moving Averages */
+    .ma-indicators {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .ma-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px;
+        background: #f8f9fa;
+        border-radius: 4px;
+    }
+
+    .ma-label {
+        font-weight: bold;
+        color: #6c757d;
+    }
+
+    .ma-value {
+        font-weight: bold;
+        color: #007bff;
+    }
+
+    /* RSI Indicator */
+    .rsi-container {
+        text-align: center;
+    }
+
+    .rsi-value {
+        font-size: 32px;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
+
+    .rsi-overbought { color: #dc3545; }
+    .rsi-oversold { color: #28a745; }
+    .rsi-neutral { color: #ffc107; }
+
+    .rsi-bar {
+        position: relative;
+        height: 20px;
+        background: #e9ecef;
+        border-radius: 10px;
+        margin: 15px 0;
+        overflow: hidden;
+    }
+
+    .rsi-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #28a745 0%, #ffc107 50%, #dc3545 100%);
+        transition: width 0.3s ease;
+        border-radius: 10px;
+    }
+
+    .rsi-levels {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 5px;
+        font-size: 10px;
+        color: white;
+        font-weight: bold;
+    }
+
+    .level-70 {
+        margin-left: auto;
+        margin-right: 15%;
+    }
+
+    .level-30 {
+        margin-right: auto;
+        margin-left: 15%;
+    }
+
+    .rsi-signal {
+        font-size: 12px;
+        font-weight: bold;
+        padding: 4px 12px;
+        border-radius: 15px;
+        margin-top: 10px;
+        display: inline-block;
+    }
+
+    .signal-buy { background: #d4edda; color: #155724; }
+    .signal-sell { background: #f8d7da; color: #721c24; }
+    .signal-neutral { background: #fff3cd; color: #856404; }
+
+    /* MACD Indicator */
+    .macd-container {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .macd-line, .signal-line, .histogram {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px;
+        background: #f8f9fa;
+        border-radius: 4px;
+    }
+
+    .macd-bullish { color: #28a745; }
+    .macd-bearish { color: #dc3545; }
+    .hist-positive { color: #28a745; }
+    .hist-negative { color: #dc3545; }
+
+    .macd-value, .signal-value, .hist-value {
+        font-weight: bold;
+        font-family: monospace;
+    }
+</style>
+
+@code {
+    // SignalR connection
+    private HubConnection? hubConnection;
+    private bool isConnected => hubConnection?.State == HubConnectionState.Connected;
+
+    // Data models
+    private PortfolioStatistics? portfolioStats;
+    private Dictionary<string, StrategyStatistics?> strategyStatistics = new();
+    private List<MarketDataUpdate> marketData = new();
+    private List<SystemAlert> systemAlerts = new();
+
+    // UI state
+    private bool showEmergencyDialog = false;
+    private string emergencyStopReason = "";
+
+    // Advanced Charts Variables
+    private string selectedSymbol = "BTCUSDT";
+    private string selectedTimeframe = "1m";
+    private decimal currentPrice = 0;
+    private decimal priceChange = 0;
+    private decimal totalVolume = 0;
+    private decimal avgVolume = 0;
+    
+    // Technical Indicators
+    private decimal ma7 = 0;
+    private decimal ma25 = 0;
+    private decimal ma99 = 0;
+    private decimal rsi = 50;
+    private decimal macd = 0;
+    private decimal macdSignal = 0;
+    private decimal macdHistogram = 0;
+    
+    // Chart Data
+    private List<object> candlestickData = new();
+    private List<object> volumeData = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize strategy statistics
+        var strategies = new[] { "TriangularArbitrage", "OptimalMarketMaking", "MLMomentum" };
+        foreach (var strategy in strategies)
+        {
+            strategyStatistics[strategy] = new StrategyStatistics
+            {
+                IsEnabled = false,
+                PnL = 0,
+                Status = "Stopped"
+            };
+        }
+
+        // Initialize SignalR connection for real-time data
+        try
+        {
+            await InitializeSignalRConnection();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "SignalR connection failed - some features may not work");
+            systemAlerts.Add(new SystemAlert
+            {
+                Level = "Warning",
+                Message = "Real-time data connection failed - check network connectivity",
+                Timestamp = DateTime.Now
+            });
+        }
+    }
+
+    private async Task InitializeSignalRConnection()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/tradinghub"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        // Register event handlers
+        RegisterSignalRHandlers();
+
+        // Start connection
+        await hubConnection.StartAsync();
+        Logger.LogInformation("SignalR connection established");
+    }
+
+    private void RegisterSignalRHandlers()
+    {
+        if (hubConnection == null) return;
+
+        hubConnection.On<object>("PortfolioStatistics", async (stats) =>
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(stats);
+                portfolioStats = JsonSerializer.Deserialize<PortfolioStatistics>(json);
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error processing portfolio statistics");
+            }
+        });
+
+        hubConnection.On<object>("StrategyStatistics", async (data) =>
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(data);
+                var strategyUpdate = JsonSerializer.Deserialize<StrategyUpdate>(json);
+                
+                if (strategyUpdate != null && !string.IsNullOrEmpty(strategyUpdate.StrategyName))
+                {
+                    strategyStatistics[strategyUpdate.StrategyName] = strategyUpdate.Statistics;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error processing strategy statistics");
+            }
+        });
+
+        hubConnection.On<object>("MarketDataUpdate", async (data) =>
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(data);
+                // Logger.LogDebug("Received market data JSON: {Json}", json); // Commented to reduce noise
+                
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+                var update = JsonSerializer.Deserialize<MarketDataUpdate>(json, options);
+                if (update != null)
+                {
+                    // Logger.LogDebug("Deserialized market data: Symbol={Symbol}, Price={Price}", update.Symbol, update.Price); // Reduced noise
+                    
+                    marketData.Add(update);
+                    if (marketData.Count > 100)
+                    {
+                        marketData = marketData.TakeLast(100).ToList();
+                    }
+                    await InvokeAsync(StateHasChanged);
+                }
+                else
+                {
+                    Logger.LogWarning("Failed to deserialize market data update");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error processing market data update");
+            }
+        });
+
+        hubConnection.On<SystemAlert>("SystemAlert", async (alert) =>
+        {
+            systemAlerts.Add(alert);
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await RefreshCharts();
+        }
+    }
+
+    private async Task ToggleStrategy(string strategyName, bool enabled)
+    {
+        try
+        {
+            if (hubConnection?.State == HubConnectionState.Connected)
+            {
+                await hubConnection.InvokeAsync("SetStrategyEnabled", strategyName, enabled);
+            }
+            else
+            {
+                // Demo mode - update locally
+                if (strategyStatistics.TryGetValue(strategyName, out var stats) && stats != null)
+                {
+                    stats.IsEnabled = enabled;
+                    stats.Status = enabled ? "Running" : "Stopped";
+                    StateHasChanged();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error toggling strategy {StrategyName}", strategyName);
+        }
+    }
+
+    private Task EmergencyStop()
+    {
+        showEmergencyDialog = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task ConfirmEmergencyStop()
+    {
+        try
+        {
+            if (hubConnection?.State == HubConnectionState.Connected)
+            {
+                await hubConnection.InvokeAsync("EmergencyStop", 
+                    string.IsNullOrEmpty(emergencyStopReason) ? "Manual emergency stop" : emergencyStopReason);
+            }
+            else
+            {
+                // Demo mode
+                foreach (var strategy in strategyStatistics.Keys.ToList())
+                {
+                    if (strategyStatistics[strategy] != null)
+                    {
+                        strategyStatistics[strategy]!.IsEnabled = false;
+                        strategyStatistics[strategy]!.Status = "Emergency Stopped";
+                    }
+                }
+                systemAlerts.Add(new SystemAlert
+                {
+                    Level = "Critical",
+                    Message = "Emergency stop executed",
+                    Details = emergencyStopReason,
+                    Timestamp = DateTime.Now
+                });
+            }
+            
+            showEmergencyDialog = false;
+            emergencyStopReason = "";
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error executing emergency stop");
+        }
+    }
+
+    // Helper methods
+    private string GetStrategyDisplayName(string strategy) => strategy switch
+    {
+        "TriangularArbitrage" => "Triangular Arbitrage",
+        "OptimalMarketMaking" => "Market Making",
+        "MLMomentum" => "ML Momentum",
+        _ => strategy
+    };
+
+    private string GetStrategyIcon(string strategy) => strategy switch
+    {
+        "TriangularArbitrage" => "🔺",
+        "OptimalMarketMaking" => "📊",
+        "MLMomentum" => "🧠",
+        _ => "⚡"
+    };
+
+    private string GetEfficiencyClass(decimal pnl) => pnl switch
+    {
+        > 100 => "high",
+        > 0 => "medium",
+        _ => "low"
+    };
+
+    private string GetEfficiencyLabel(decimal pnl) => pnl switch
+    {
+        > 100 => "HIGH",
+        > 0 => "MEDIUM",
+        _ => "LOW"
+    };
+
+    private string GetMarketDataRate()
+    {
+        if (marketData.Count < 2) return "0";
+        var recentData = marketData.TakeLast(10).ToList();
+        if (recentData.Count < 2) return "0";
+        
+        var timeDiff = (recentData.Last().GetTimestamp() - recentData.First().GetTimestamp()).TotalSeconds;
+        var rate = timeDiff > 0 ? (recentData.Count - 1) / timeDiff : 0;
+        return rate.ToString("N1");
+    }
+
+    private string GetMarketRowClass(MarketDataUpdate data)
+    {
+        var age = DateTime.Now - data.GetTimestamp();
+        return age.TotalSeconds < 1 ? "fresh" : age.TotalSeconds < 5 ? "recent" : "old";
+    }
+
+    private string GetPriceChangeIcon(string side) => side == "Buy" ? "↗" : "↘";
+
+    // Advanced Charts Helper Methods
+    private async Task RefreshCharts()
+    {
+        UpdateTechnicalIndicators();
+        await InitializeCandlestickChart();
+        await InitializeVolumeChart();
+        StateHasChanged();
+    }
+
+    private string GetPriceChangeClass() => priceChange >= 0 ? "price-positive" : "price-negative";
+
+    private string GetPriceChangeText()
+    {
+        var prefix = priceChange >= 0 ? "+" : "";
+        var percentage = currentPrice > 0 ? (priceChange / currentPrice * 100) : 0;
+        return $"{prefix}{priceChange:N4} ({prefix}{percentage:N2}%)";
+    }
+
+    private string GetRSIClass() => rsi switch
+    {
+        > 70 => "rsi-overbought",
+        < 30 => "rsi-oversold",
+        _ => "rsi-neutral"
+    };
+
+    private string GetRSISignal() => rsi switch
+    {
+        > 70 => "OVERBOUGHT",
+        < 30 => "OVERSOLD",
+        _ => "NEUTRAL"
+    };
+
+    private string GetRSISignalClass() => rsi switch
+    {
+        > 70 => "signal-sell",
+        < 30 => "signal-buy",
+        _ => "signal-neutral"
+    };
+
+    private string GetMACDClass() => macd > macdSignal ? "macd-bullish" : "macd-bearish";
+
+    private string GetHistogramClass() => macdHistogram >= 0 ? "hist-positive" : "hist-negative";
+
+    private void UpdateTechnicalIndicators()
+    {
+        try
+        {
+            // Get recent market data for selected symbol
+            var symbolData = marketData.Where(d => d.Symbol == selectedSymbol).TakeLast(100).ToList();
+            
+            if (symbolData.Count >= 7)
+            {
+                // Calculate Moving Averages
+                ma7 = symbolData.TakeLast(7).Average(d => d.Price);
+                if (symbolData.Count >= 25) ma25 = symbolData.TakeLast(25).Average(d => d.Price);
+                if (symbolData.Count >= 99) ma99 = symbolData.TakeLast(99).Average(d => d.Price);
+                
+                // Update current price and change
+                if (symbolData.Any())
+                {
+                    var latest = symbolData.Last();
+                    var previous = symbolData.Count > 1 ? symbolData[^2] : latest;
+                    currentPrice = latest.Price;
+                    priceChange = latest.Price - previous.Price;
+                }
+                
+                // Calculate volume stats
+                totalVolume = symbolData.Sum(d => d.Volume);
+                avgVolume = symbolData.Average(d => d.Volume);
+                
+                // Simple RSI calculation (simplified)
+                if (symbolData.Count >= 14)
+                {
+                    var prices = symbolData.TakeLast(14).Select(d => d.Price).ToList();
+                    var gains = new List<decimal>();
+                    var losses = new List<decimal>();
+                    
+                    for (int i = 1; i < prices.Count; i++)
+                    {
+                        var change = prices[i] - prices[i - 1];
+                        if (change > 0) gains.Add(change);
+                        else losses.Add(Math.Abs(change));
+                    }
+                    
+                    var avgGain = gains.Any() ? gains.Average() : 0;
+                    var avgLoss = losses.Any() ? losses.Average() : 0;
+                    
+                    if (avgLoss != 0)
+                    {
+                        var rs = avgGain / avgLoss;
+                        rsi = 100 - (100 / (1 + rs));
+                    }
+                }
+                
+                // Simple MACD calculation (simplified)
+                if (symbolData.Count >= 26)
+                {
+                    var ema12 = CalculateEMA(symbolData.TakeLast(12).Select(d => d.Price).ToList(), 12);
+                    var ema26 = CalculateEMA(symbolData.TakeLast(26).Select(d => d.Price).ToList(), 26);
+                    macd = ema12 - ema26;
+                    
+                    // Signal line (9-period EMA of MACD)
+                    macdSignal = macd * 0.2m + macdSignal * 0.8m; // Simplified EMA
+                    macdHistogram = macd - macdSignal;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating technical indicators");
+        }
+    }
+
+    private decimal CalculateEMA(List<decimal> prices, int period)
+    {
+        if (!prices.Any()) return 0;
+        
+        var multiplier = 2m / (period + 1);
+        var ema = prices.First();
+        
+        foreach (var price in prices.Skip(1))
+        {
+            ema = (price * multiplier) + (ema * (1 - multiplier));
+        }
+        
+        return ema;
+    }
+
+    private async Task InitializeCandlestickChart()
+    {
+        try
+        {
+            // Generate sample candlestick data based on market data
+            var symbolData = marketData.Where(d => d.Symbol == selectedSymbol).TakeLast(50).ToList();
+            
+            if (symbolData.Any())
+            {
+                await JSRuntime.InvokeVoidAsync("initializeCandlestickChart", "candlestick-chart", symbolData.Select(d => new
+                {
+                    time = d.GetTimestamp().ToString("yyyy-MM-dd HH:mm:ss"),
+                    open = d.Price - (decimal)(new Random().NextDouble() * 0.001),
+                    high = d.Price + (decimal)(new Random().NextDouble() * 0.002),
+                    low = d.Price - (decimal)(new Random().NextDouble() * 0.002),
+                    close = d.Price
+                }).ToArray());
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing candlestick chart");
+        }
+    }
+
+    private async Task InitializeVolumeChart()
+    {
+        try
+        {
+            var symbolData = marketData.Where(d => d.Symbol == selectedSymbol).TakeLast(30).ToList();
+            
+            if (symbolData.Any())
+            {
+                await JSRuntime.InvokeVoidAsync("initializeVolumeChart", "volume-chart", symbolData.Select(d => new
+                {
+                    time = d.GetTimestamp().ToString("HH:mm:ss"),
+                    volume = d.Volume,
+                    color = d.Side == "Buy" ? "#28a745" : "#dc3545"
+                }).ToArray());
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing volume chart");
+        }
+    }
+
+    private string GetPnLClass(decimal pnl) => pnl >= 0 ? "pnl-positive" : "pnl-negative";
+    private string GetPnLPrefix(decimal pnl) => pnl >= 0 ? "+" : "";
+    private string GetPriceClass(string side) => side == "Buy" ? "price-buy" : "price-sell";
+    private string GetSideClass(string side) => side == "Buy" ? "side-buy" : "side-sell";
+
+    // New helper methods for enhanced dashboard
+    private string GetTrendClass(decimal pnl) => pnl switch
+    {
+        > 0 => "trend-up",
+        < 0 => "trend-down",
+        _ => "trend-neutral"
+    };
+
+    private string GetTrendIcon(decimal pnl) => pnl switch
+    {
+        > 0 => "↗",
+        < 0 => "↘",
+        _ => "→"
+    };
+
+    private string GetWinRateQuality(decimal winRate) => winRate switch
+    {
+        >= 70 => "excellent",
+        >= 60 => "good",
+        >= 50 => "average",
+        _ => "poor"
+    };
+
+    private string GetWinRateLabel(decimal winRate) => winRate switch
+    {
+        >= 70 => "EXCELLENT",
+        >= 60 => "GOOD",
+        >= 50 => "AVERAGE",
+        _ => "POOR"
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection != null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+
+    // Data models
+    public class PortfolioStatistics
+    {
+        public decimal TotalValue { get; set; }
+        public decimal TotalPnL { get; set; }
+        public decimal DailyPnL { get; set; }
+        public decimal DailyPnLPercentage { get; set; }
+        public int OpenPositions { get; set; }
+        public decimal WinRate { get; set; }
+        public int TotalTrades { get; set; }
+        public decimal MaxDrawdown { get; set; }
+        public decimal SharpeRatio { get; set; }
+        public decimal VaR95 { get; set; }
+        public decimal Beta { get; set; }
+    }
+
+    public class StrategyStatistics
+    {
+        public decimal PnL { get; set; }
+        public bool IsEnabled { get; set; }
+        public string Status { get; set; } = "";
+    }
+
+    public class StrategyUpdate
+    {
+        public string StrategyName { get; set; } = "";
+        public StrategyStatistics? Statistics { get; set; }
+    }
+
+    public class MarketDataUpdate
+    {
+        public string Symbol { get; set; } = "";
+        public decimal Price { get; set; }
+        public decimal Volume { get; set; }
+        public string Side { get; set; } = "";
+        public long Timestamp { get; set; }
+        
+        public DateTime GetTimestamp()
+        {
+            // Convert from ticks to DateTime
+            try
+            {
+                return new DateTime(Timestamp);
+            }
+            catch
+            {
+                return DateTime.Now;
+            }
+        }
+    }
+
+    public class SystemAlert
+    {
+        public string Level { get; set; } = "";
+        public string Message { get; set; } = "";
+        public string? Details { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+}

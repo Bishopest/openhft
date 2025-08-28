@@ -30,6 +30,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "bench", "bench", "{1A2B3C4D
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Benchmarks", "bench\OpenHFT.Benchmarks\OpenHFT.Benchmarks.csproj", "{8AAF70E6-A3BD-4CFA-A70F-C7F6FCE352B7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Strategy.Advanced", "src\OpenHFT.Strategy.Advanced\OpenHFT.Strategy.Advanced.csproj", "{0F462F0E-5C8E-4B21-BD63-D4C68860EB27}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -80,6 +82,10 @@ Global
 		{8AAF70E6-A3BD-4CFA-A70F-C7F6FCE352B7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8AAF70E6-A3BD-4CFA-A70F-C7F6FCE352B7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8AAF70E6-A3BD-4CFA-A70F-C7F6FCE352B7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0F462F0E-5C8E-4B21-BD63-D4C68860EB27}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0F462F0E-5C8E-4B21-BD63-D4C68860EB27}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0F462F0E-5C8E-4B21-BD63-D4C68860EB27}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0F462F0E-5C8E-4B21-BD63-D4C68860EB27}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

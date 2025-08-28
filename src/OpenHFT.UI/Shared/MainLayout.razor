@@ -1,0 +1,91 @@
+@inherits LayoutComponentBase
+@inject IJSRuntime JSRuntime
+
+<MudThemeProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Color="Color.Primary">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" 
+                      Color="Color.Inherit" 
+                      Edge="Edge.Start" 
+                      OnClick="@((e) => DrawerToggle())" />
+        <MudSpacer />
+        <MudText Typo="Typo.h5" Class="ml-3">OpenHFT Lab</MudText>
+        <MudSpacer />
+        <MudIconButton Icon="@Icons.Material.Filled.Brightness4" 
+                      Color="Color.Inherit" 
+                      OnClick="@(() => ToggleDarkMode())" />
+        <MudIconButton Icon="@Icons.Material.Filled.Settings" 
+                      Color="Color.Inherit" />
+    </MudAppBar>
+    
+    <MudDrawer @bind-Open="@_drawerOpen" 
+               ClipMode="DrawerClipMode.Always" 
+               Elevation="2"
+               Variant="@DrawerVariant.Mini">
+        <MudNavMenu>
+            <MudNavLink Href="/" 
+                       Match="NavLinkMatch.All" 
+                       Icon="@Icons.Material.Filled.Dashboard">
+                Dashboard
+            </MudNavLink>
+            <MudNavLink Href="/strategies" 
+                       Icon="@Icons.Material.Filled.Psychology">
+                Strategies
+            </MudNavLink>
+            <MudNavLink Href="/portfolio" 
+                       Icon="@Icons.Material.Filled.AccountBalance">
+                Portfolio
+            </MudNavLink>
+            <MudNavLink Href="/analytics" 
+                       Icon="@Icons.Material.Filled.Analytics">
+                Analytics
+            </MudNavLink>
+            <MudNavLink Href="/risk" 
+                       Icon="@Icons.Material.Filled.Security">
+                Risk Management
+            </MudNavLink>
+            <MudNavLink Href="/settings" 
+                       Icon="@Icons.Material.Filled.Settings">
+                Settings
+            </MudNavLink>
+        </MudNavMenu>
+    </MudDrawer>
+    
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="my-4 pt-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+    
+    <MudScrollToTop>
+        <MudFab Color="Color.Primary" StartIcon="@Icons.Material.Filled.KeyboardArrowUp" />
+    </MudScrollToTop>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _isDarkMode = false;
+
+    private void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    private async Task ToggleDarkMode()
+    {
+        _isDarkMode = !_isDarkMode;
+        await JSRuntime.InvokeVoidAsync("mudBlazor.toggleDarkMode", _isDarkMode);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Initialize theme
+            await JSRuntime.InvokeVoidAsync("mudBlazor.setDarkMode", _isDarkMode);
+        }
+    }
+}

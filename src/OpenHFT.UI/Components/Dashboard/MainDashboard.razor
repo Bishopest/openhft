@@ -1,0 +1,679 @@
+@page "/dashboard"
+@using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.JSInterop
+@using System.Text.Json
+@inject IJSRuntime JSRuntime
+@inject ILogger<MainDashboard> Logger
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+
+<PageTitle>OpenHFT Lab - Trading Dashboard</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <!-- Header Section -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudGrid AlignItems="Center">
+            <MudItem xs="6">
+                <MudText Typo="Typo.h4" Class="mud-text-primary">
+                    <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Class="mr-2" />
+                    Trading Dashboard
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Real-time monitoring of advanced trading strategies
+                </MudText>
+            </MudItem>
+            <MudItem xs="6" Class="text-right">
+                <MudChip T="string" Color="@GetConnectionStatusColor()" Size="Size.Small" Class="mr-2">
+                    @GetConnectionStatusText()
+                </MudChip>
+                <MudButton Variant="Variant.Outlined" 
+                          Color="Color.Error" 
+                          StartIcon="@Icons.Material.Filled.Stop"
+                          OnClick="EmergencyStop"
+                          Disabled="@(!isConnected)">
+                    Emergency Stop
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- System Alerts -->
+    @if (systemAlerts.Any())
+    {
+        <MudAlert Severity="@GetAlertSeverity(systemAlerts.Last().Level)" 
+                  ShowCloseIcon="true" 
+                  CloseIconClicked="@(() => ClearAlert(systemAlerts.Last()))"
+                  Class="mb-4">
+            <strong>@systemAlerts.Last().Level:</strong> @systemAlerts.Last().Message
+            @if (!string.IsNullOrEmpty(systemAlerts.Last().Details))
+            {
+                <br /><small>@systemAlerts.Last().Details</small>
+            }
+        </MudAlert>
+    }
+
+    <!-- Portfolio Overview -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudText Typo="Typo.h5" Class="mb-3">Portfolio Overview</MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Class="portfolio-metric-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Total Value</MudText>
+                        <MudText Typo="Typo.h4" Class="mud-text-primary">
+                            $@(portfolioStats?.TotalValue.ToString("N2") ?? "0.00")
+                        </MudText>
+                        <MudText Typo="Typo.body2" Color="@GetPnLColor(portfolioStats?.TotalPnL ?? 0)">
+                            @GetPnLPrefix(portfolioStats?.TotalPnL ?? 0)$@(Math.Abs(portfolioStats?.TotalPnL ?? 0).ToString("N2"))
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Class="portfolio-metric-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Daily PnL</MudText>
+                        <MudText Typo="Typo.h4" Color="@GetPnLColor(portfolioStats?.DailyPnL ?? 0)">
+                            @GetPnLPrefix(portfolioStats?.DailyPnL ?? 0)$@(Math.Abs(portfolioStats?.DailyPnL ?? 0).ToString("N2"))
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            @(portfolioStats?.DailyPnLPercentage?.ToString("N2") ?? "0.00")%
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Class="portfolio-metric-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Open Positions</MudText>
+                        <MudText Typo="Typo.h4" Class="mud-text-primary">
+                            @(portfolioStats?.OpenPositions ?? 0)
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            Active trades
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Class="portfolio-metric-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Win Rate</MudText>
+                        <MudText Typo="Typo.h4" Class="mud-text-primary">
+                            @(portfolioStats?.WinRate.ToString("N1") ?? "0.0")%
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            @(portfolioStats?.TotalTrades ?? 0) trades
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Strategy Grid -->
+    <MudGrid>
+        <!-- Strategy Controls -->
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Elevation="2" Style="height: 400px;">
+                <MudText Typo="Typo.h5" Class="mb-3">Strategy Controls</MudText>
+                
+                @foreach (var strategy in strategyStatistics.Keys)
+                {
+                    var stats = strategyStatistics[strategy];
+                    <MudCard Class="mb-3 strategy-control-card">
+                        <MudCardContent>
+                            <MudGrid AlignItems="Center">
+                                <MudItem xs="8">
+                                    <MudText Typo="Typo.h6">@GetStrategyDisplayName(strategy)</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        PnL: @GetPnLPrefix(stats?.PnL ?? 0)$@(Math.Abs(stats?.PnL ?? 0).ToString("N2"))
+                                    </MudText>
+                                </MudItem>
+                                <MudItem xs="4" Class="text-right">
+                                    <MudSwitch T="bool" 
+                                             @bind-Value="@GetStrategyEnabledValue(strategy)"
+                                             Color="Color.Success"
+                                             ValueChanged="@((bool enabled) => ToggleStrategy(strategy, enabled))"
+                                             Disabled="@(!isConnected)" />
+                                </MudItem>
+                            </MudGrid>
+                        </MudCardContent>
+                    </MudCard>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <!-- Performance Chart -->
+        <MudItem xs="12" md="8">
+            <MudPaper Class="pa-4" Elevation="2" Style="height: 400px;">
+                <MudText Typo="Typo.h5" Class="mb-3">Performance Chart</MudText>
+                <div id="performance-chart" style="height: 320px; width: 100%;"></div>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Market Data Table -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2" Style="height: 400px;">
+                <MudText Typo="Typo.h5" Class="mb-3">Live Market Data</MudText>
+                <MudSimpleTable Style="overflow-x: auto;" Dense="true">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Price</th>
+                            <th>Volume</th>
+                            <th>Side</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var data in marketData.TakeLast(10))
+                        {
+                            <tr>
+                                <td><MudChip T="string" Size="Size.Small">@data.Symbol</MudChip></td>
+                                <td class="@GetPriceColorClass(data.Side)">$@data.Price.ToString("N4")</td>
+                                <td>@data.Volume.ToString("N2")</td>
+                                <td>
+                                    <MudChip T="string" Size="Size.Small" 
+                                            Color="@(data.Side == "Buy" ? Color.Success : Color.Error)">
+                                        @data.Side
+                                    </MudChip>
+                                </td>
+                                <td>@data.Timestamp.ToString("HH:mm:ss")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Risk Metrics -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2" Style="height: 400px;">
+                <MudText Typo="Typo.h5" Class="mb-3">Risk Metrics</MudText>
+                <MudGrid>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Max Drawdown</MudText>
+                        <MudText Typo="Typo.h5" Color="Color.Error">
+                            @(portfolioStats?.MaxDrawdown?.ToString("N2") ?? "0.00")%
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Sharpe Ratio</MudText>
+                        <MudText Typo="Typo.h5" Class="mud-text-primary">
+                            @(portfolioStats?.SharpeRatio?.ToString("N2") ?? "0.00")
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">VaR (95%)</MudText>
+                        <MudText Typo="Typo.h5" Color="Color.Warning">
+                            $@(portfolioStats?.VaR95?.ToString("N2") ?? "0.00")
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Beta</MudText>
+                        <MudText Typo="Typo.h5" Class="mud-text-primary">
+                            @(portfolioStats?.Beta?.ToString("N2") ?? "0.00")
+                        </MudText>
+                    </MudItem>
+                </MudGrid>
+                
+                <!-- Risk Gauge -->
+                <MudProgressCircular Color="@GetRiskColor()" 
+                                   Size="Size.Large" 
+                                   Value="@GetRiskPercentage()" 
+                                   Class="mt-4" />
+                <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
+                    Risk Level: @GetRiskLevel()
+                </MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+<!-- Emergency Stop Confirmation Dialog -->
+<MudDialog @bind-IsVisible="showEmergencyDialog" Options="dialogOptions">
+    <TitleContent>
+        <div style="display: flex; align-items: center;">
+            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" class="mr-3" />
+            <MudText Typo="Typo.h6">Emergency Stop Confirmation</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body1" Class="mb-4">
+            Are you sure you want to execute an emergency stop? This will immediately halt all trading strategies and close open positions.
+        </MudText>
+        <MudTextField @bind-Value="emergencyStopReason" 
+                     Label="Reason (optional)" 
+                     Placeholder="Enter reason for emergency stop..."
+                     Lines="3"
+                     FullWidth="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Default" OnClick="() => showEmergencyDialog = false">Cancel</MudButton>
+        <MudButton Color="Color.Error" 
+                  Variant="Variant.Filled" 
+                  OnClick="ConfirmEmergencyStop"
+                  StartIcon="@Icons.Material.Filled.Stop">
+            Execute Emergency Stop
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+<style>
+    .portfolio-metric-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .portfolio-metric-card .mud-typography {
+        color: white !important;
+    }
+
+    .strategy-control-card {
+        border-left: 4px solid var(--mud-palette-primary);
+    }
+
+    .price-buy {
+        color: #4caf50;
+        font-weight: 600;
+    }
+
+    .price-sell {
+        color: #f44336;
+        font-weight: 600;
+    }
+
+    .mud-simple-table tbody tr:hover {
+        background-color: rgba(0, 0, 0, 0.04);
+    }
+</style>
+
+@code {
+    // SignalR connection
+    private HubConnection? hubConnection;
+    private bool isConnected => hubConnection?.State == HubConnectionState.Connected;
+
+    // Data models
+    private PortfolioStatistics? portfolioStats;
+    private Dictionary<string, StrategyStatistics?> strategyStatistics = new();
+    private List<MarketDataUpdate> marketData = new();
+    private List<SystemAlert> systemAlerts = new();
+
+    // UI state
+    private bool showEmergencyDialog = false;
+    private string emergencyStopReason = "";
+    private readonly DialogOptions dialogOptions = new() { CloseOnEscapeKey = true };
+
+    // Chart data
+    private List<PerformancePoint> performanceData = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize strategy statistics
+        var strategies = new[] { "TriangularArbitrage", "OptimalMarketMaking", "MLMomentum" };
+        foreach (var strategy in strategies)
+        {
+            strategyStatistics[strategy] = new StrategyStatistics
+            {
+                IsEnabled = false,
+                PnL = 0,
+                Status = "Stopped"
+            };
+        }
+
+        // Initialize with empty portfolio stats - data will come from SignalR
+        portfolioStats = new PortfolioStatistics
+        {
+            TotalValue = 0,
+            TotalPnL = 0,
+            DailyPnL = 0,
+            DailyPnLPercentage = 0,
+            OpenPositions = 0,
+            WinRate = 0,
+            TotalTrades = 0,
+            MaxDrawdown = 0,
+            SharpeRatio = 0,
+            VaR95 = 0,
+            Beta = 0
+        };
+
+        // Initialize SignalR connection
+        await InitializeSignalRConnection();
+    }
+
+    private async Task InitializeSignalRConnection()
+    {
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(Navigation.ToAbsoluteUri("/tradinghub"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            // Register event handlers
+            RegisterSignalRHandlers();
+
+            // Start connection
+            await hubConnection.StartAsync();
+            Logger.LogInformation("SignalR connection established");
+
+            // Force UI update
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to establish SignalR connection");
+            systemAlerts.Add(new SystemAlert
+            {
+                Level = "Error",
+                Message = "Failed to connect to trading server",
+                Details = ex.Message,
+                Timestamp = DateTime.Now
+            });
+        }
+    }
+
+    private void RegisterSignalRHandlers()
+    {
+        if (hubConnection == null) return;
+
+        hubConnection.On<object>("PortfolioStatistics", async (stats) =>
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(stats);
+                portfolioStats = JsonSerializer.Deserialize<PortfolioStatistics>(json);
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error processing portfolio statistics");
+            }
+        });
+
+        hubConnection.On<object>("StrategyStatistics", async (data) =>
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(data);
+                var strategyUpdate = JsonSerializer.Deserialize<StrategyUpdate>(json);
+                
+                if (strategyUpdate != null && !string.IsNullOrEmpty(strategyUpdate.StrategyName))
+                {
+                    strategyStatistics[strategyUpdate.StrategyName] = strategyUpdate.Statistics;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error processing strategy statistics");
+            }
+        });
+
+        hubConnection.On<MarketDataUpdate>("MarketDataUpdate", async (data) =>
+        {
+            marketData.Add(data);
+            if (marketData.Count > 100) // Keep only last 100 updates
+            {
+                marketData = marketData.TakeLast(100).ToList();
+            }
+            await InvokeAsync(StateHasChanged);
+        });
+
+        hubConnection.On<SystemAlert>("SystemAlert", async (alert) =>
+        {
+            systemAlerts.Add(alert);
+            await InvokeAsync(StateHasChanged);
+        });
+
+        hubConnection.On<object>("StrategyStatusChanged", async (data) =>
+        {
+            systemAlerts.Add(new SystemAlert
+            {
+                Level = "Info",
+                Message = $"Strategy status changed",
+                Details = JsonSerializer.Serialize(data),
+                Timestamp = DateTime.Now
+            });
+            await InvokeAsync(StateHasChanged);
+        });
+
+        hubConnection.On<object>("EmergencyStop", async (data) =>
+        {
+            systemAlerts.Add(new SystemAlert
+            {
+                Level = "Critical",
+                Message = "Emergency stop executed",
+                Details = JsonSerializer.Serialize(data),
+                Timestamp = DateTime.Now
+            });
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializePerformanceChart();
+        }
+    }
+
+    private async Task InitializePerformanceChart()
+    {
+        try
+        {
+            // Initialize Plotly chart
+            var chartData = new[]
+            {
+                new
+                {
+                    x = performanceData.Select(p => p.Timestamp).ToArray(),
+                    y = performanceData.Select(p => p.Value).ToArray(),
+                    type = "scatter",
+                    mode = "lines",
+                    name = "Portfolio Value",
+                    line = new { color = "#1976d2", width = 3 }
+                }
+            };
+
+            var layout = new
+            {
+                title = "Portfolio Performance",
+                xaxis = new { title = "Time" },
+                yaxis = new { title = "Value ($)" },
+                showlegend = true,
+                margin = new { l = 50, r = 50, t = 50, b = 50 }
+            };
+
+            await JSRuntime.InvokeVoidAsync("Plotly.newPlot", "performance-chart", chartData, layout);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing performance chart");
+        }
+    }
+
+    private async Task ToggleStrategy(string strategyName, bool enabled)
+    {
+        if (hubConnection == null) return;
+
+        try
+        {
+            await hubConnection.InvokeAsync("SetStrategyEnabled", strategyName, enabled);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error toggling strategy {StrategyName}", strategyName);
+            systemAlerts.Add(new SystemAlert
+            {
+                Level = "Error",
+                Message = $"Failed to toggle {strategyName}",
+                Details = ex.Message,
+                Timestamp = DateTime.Now
+            });
+        }
+    }
+
+    private Task EmergencyStop()
+    {
+        showEmergencyDialog = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task ConfirmEmergencyStop()
+    {
+        if (hubConnection == null) return;
+
+        try
+        {
+            await hubConnection.InvokeAsync("EmergencyStop", 
+                string.IsNullOrEmpty(emergencyStopReason) ? "Manual emergency stop" : emergencyStopReason);
+            showEmergencyDialog = false;
+            emergencyStopReason = "";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error executing emergency stop");
+            systemAlerts.Add(new SystemAlert
+            {
+                Level = "Error",
+                Message = "Failed to execute emergency stop",
+                Details = ex.Message,
+                Timestamp = DateTime.Now
+            });
+        }
+    }
+
+    private void ClearAlert(SystemAlert alert)
+    {
+        systemAlerts.Remove(alert);
+    }
+
+    // Helper methods
+    private Color GetConnectionStatusColor() => isConnected ? Color.Success : Color.Error;
+    private string GetConnectionStatusText() => isConnected ? "Connected" : "Disconnected";
+    private Color GetPnLColor(decimal pnl) => pnl >= 0 ? Color.Success : Color.Error;
+    private string GetPnLPrefix(decimal pnl) => pnl >= 0 ? "+" : "";
+    
+    private Severity GetAlertSeverity(string level) => level switch
+    {
+        "Critical" => Severity.Error,
+        "Error" => Severity.Error,
+        "Warning" => Severity.Warning,
+        "Info" => Severity.Info,
+        _ => Severity.Normal
+    };
+
+    private string GetStrategyDisplayName(string strategy) => strategy switch
+    {
+        "TriangularArbitrage" => "Triangular Arbitrage",
+        "OptimalMarketMaking" => "Market Making",
+        "MLMomentum" => "ML Momentum",
+        _ => strategy
+    };
+
+    private bool GetStrategyEnabledValue(string strategy)
+    {
+        return strategyStatistics.TryGetValue(strategy, out var stats) && (stats?.IsEnabled ?? false);
+    }
+
+    private string GetPriceColorClass(string side) => side == "Buy" ? "price-buy" : "price-sell";
+
+    private Color GetRiskColor()
+    {
+        var riskPercentage = GetRiskPercentage();
+        return riskPercentage switch
+        {
+            < 30 => Color.Success,
+            < 70 => Color.Warning,
+            _ => Color.Error
+        };
+    }
+
+    private int GetRiskPercentage()
+    {
+        // Calculate risk percentage based on portfolio metrics
+        var maxDrawdown = Math.Abs(portfolioStats?.MaxDrawdown ?? 0);
+        var var95 = Math.Abs(portfolioStats?.VaR95 ?? 0);
+        
+        // Simple risk calculation (can be enhanced)
+        return (int)Math.Min(100, (maxDrawdown + var95 / 1000) * 10);
+    }
+
+    private string GetRiskLevel()
+    {
+        var riskPercentage = GetRiskPercentage();
+        return riskPercentage switch
+        {
+            < 30 => "Low",
+            < 70 => "Medium",
+            _ => "High"
+        };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection != null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+
+    // Data transfer objects
+    public class PortfolioStatistics
+    {
+        public decimal TotalValue { get; set; }
+        public decimal TotalPnL { get; set; }
+        public decimal DailyPnL { get; set; }
+        public decimal DailyPnLPercentage { get; set; }
+        public int OpenPositions { get; set; }
+        public decimal WinRate { get; set; }
+        public int TotalTrades { get; set; }
+        public decimal MaxDrawdown { get; set; }
+        public decimal SharpeRatio { get; set; }
+        public decimal VaR95 { get; set; }
+        public decimal Beta { get; set; }
+    }
+
+    public class StrategyStatistics
+    {
+        public decimal PnL { get; set; }
+        public bool IsEnabled { get; set; }
+        public int TradeCount { get; set; }
+        public decimal WinRate { get; set; }
+        public string Status { get; set; } = "";
+    }
+
+    public class StrategyUpdate
+    {
+        public string StrategyName { get; set; } = "";
+        public StrategyStatistics? Statistics { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+
+    public class MarketDataUpdate
+    {
+        public string Symbol { get; set; } = "";
+        public decimal Price { get; set; }
+        public decimal Volume { get; set; }
+        public string Side { get; set; } = "";
+        public string EventType { get; set; } = "";
+        public DateTime Timestamp { get; set; }
+    }
+
+    public class SystemAlert
+    {
+        public string Level { get; set; } = "";
+        public string Message { get; set; } = "";
+        public string? Details { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+
+    public class PerformancePoint
+    {
+        public DateTime Timestamp { get; set; }
+        public decimal Value { get; set; }
+    }
+}

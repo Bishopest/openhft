@@ -3,11 +3,17 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Prometheus;
+using MudBlazor.Services;
 using OpenHFT.UI.Services;
+using OpenHFT.UI.Hubs;
 using OpenHFT.Feed.Interfaces;
 using OpenHFT.Feed.Adapters;
 using OpenHFT.Strategy.Interfaces;
 using OpenHFT.Strategy.Strategies;
+using OpenHFT.Strategy.Advanced;
+using OpenHFT.Strategy.Advanced.Arbitrage;
+using OpenHFT.Strategy.Advanced.MarketMaking;
+using OpenHFT.Strategy.Advanced.Momentum;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,11 +42,15 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Add SPA services
-builder.Services.AddSpaStaticFiles(configuration =>
-{
-    configuration.RootPath = "ClientApp/build";
-});
+// Add Blazor services
+builder.Services.AddRazorPages();
+builder.Services.AddServerSideBlazor();
+
+// Add SignalR services
+builder.Services.AddSignalR();
+
+// Add MudBlazor services
+builder.Services.AddMudServices();
 
 // Register HFT components
 RegisterHftServices(builder.Services, builder.Configuration);
@@ -62,21 +72,13 @@ app.UseMetricServer();
 app.UseHttpMetrics();
 
 app.MapControllers();
+app.MapRazorPages();
+app.MapBlazorHub();
+app.MapHub<OpenHFT.UI.Hubs.TradingHub>("/tradinghub");
+app.MapFallbackToPage("/_Host");
 
-// Serve static files for React UI
+// Serve static files
 app.UseStaticFiles();
-app.UseSpaStaticFiles();
-
-// SPA fallback
-app.UseSpa(spa =>
-{
-    spa.Options.SourcePath = "ClientApp";
-    
-    if (app.Environment.IsDevelopment())
-    {
-        spa.UseProxyToSpaDevelopmentServer("http://localhost:3000");
-    }
-});
 
 try
 {
@@ -102,9 +104,51 @@ static void RegisterHftServices(IServiceCollection services, IConfiguration conf
     services.AddSingleton<IStrategyEngine, StrategyEngine>();
     services.AddSingleton<IStrategy, MarketMakingStrategy>();
 
+    // Advanced Strategy Manager configuration
+    services.AddSingleton<AdvancedStrategyConfig>(provider =>
+    {
+        return new AdvancedStrategyConfig
+        {
+            EnableArbitrage = true,
+            ArbitrageAllocation = 10000m,
+            MaxArbitragePosition = 1000m,
+            ArbitrageRiskLimit = 0.02m,
+            
+            EnableMarketMaking = true,
+            MarketMakingAllocation = 15000m,
+            MaxMarketMakingPosition = 2000m,
+            MarketMakingRiskLimit = 0.03m,
+            
+            EnableMomentum = true,
+            MomentumAllocation = 20000m,
+            MaxMomentumPosition = 1500m,
+            MomentumRiskLimit = 0.025m,
+            
+            RiskConfig = new RiskManagementConfig
+            {
+                MaxDrawdown = 0.10m,
+                MaxPositionPerSymbol = 100m,
+                MaxOrderSize = 50m,
+                MinOrderSize = 0.01m,
+                MaxConcentrationPerSymbol = 0.25m
+            }
+        };
+    });
+
+    // Register individual advanced strategies
+    services.AddSingleton<TriangularArbitrageStrategy>();
+    services.AddSingleton<OptimalMarketMakingStrategy>();
+    services.AddSingleton<MLMomentumStrategy>();
+    
+    services.AddSingleton<IAdvancedStrategyManager, AdvancedStrategyManager>();
+
+    // Register AdvancedStrategyManager as hosted service to auto-initialize strategies
+    services.AddHostedService<AdvancedStrategyManager>(provider => 
+        (AdvancedStrategyManager)provider.GetRequiredService<IAdvancedStrategyManager>());
+
     // Main engine
     services.AddSingleton<HftEngine>();
-    services.AddHostedService<HftEngine>();
+    services.AddHostedService(provider => provider.GetRequiredService<HftEngine>());
 
     // Configure strategies
     var strategyConfig = new OpenHFT.Strategy.Interfaces.StrategyConfiguration
