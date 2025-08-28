@@ -1,9 +1,12 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.SignalR;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Collections;
 using OpenHFT.Feed.Interfaces;
 using OpenHFT.Book.Core;
 using OpenHFT.Strategy.Interfaces;
+using OpenHFT.Strategy.Advanced;
+using OpenHFT.UI.Hubs;
 
 namespace OpenHFT.UI.Services;
 
@@ -17,6 +20,8 @@ public class HftEngine : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly IFeedHandler _feedHandler;
     private readonly IStrategyEngine _strategyEngine;
+    private readonly IAdvancedStrategyManager _advancedStrategyManager;
+    private readonly IHubContext<TradingHub> _hubContext;
     
     // Core data structures
     private readonly LockFreeRingBuffer<MarketDataEvent> _marketDataQueue;
@@ -28,17 +33,22 @@ public class HftEngine : BackgroundService
     private long _eventsProcessed;
     private long _ordersGenerated;
     private DateTimeOffset _startTime;
+    private long _broadcastCounter;
 
     public HftEngine(
         ILogger<HftEngine> logger,
         IConfiguration configuration,
         IFeedHandler feedHandler,
-        IStrategyEngine strategyEngine)
+        IStrategyEngine strategyEngine,
+        IAdvancedStrategyManager advancedStrategyManager,
+        IHubContext<TradingHub> hubContext)
     {
         _logger = logger;
         _configuration = configuration;
         _feedHandler = feedHandler;
         _strategyEngine = strategyEngine;
+        _advancedStrategyManager = advancedStrategyManager;
+        _hubContext = hubContext;
         
         // Initialize market data queue with high capacity for bursts
         var queueSize = configuration.GetValue<int>("Engine:MarketDataQueueSize", 65536);
@@ -148,6 +158,7 @@ public class HftEngine : BackgroundService
                     {
                         await ProcessOrderIntent(order);
                     }
+                    
                     processingStats.LastTimerRun = DateTimeOffset.UtcNow;
                 }
 
@@ -193,13 +204,34 @@ public class HftEngine : BackgroundService
             return;
         }
 
-        // Process through strategies
-        var orderIntents = _strategyEngine.ProcessMarketData(marketDataEvent, orderBook);
+        // Broadcast market data via SignalR (throttle to avoid overwhelming clients)
+        _broadcastCounter++;
+        if (_broadcastCounter % 50 == 0) // Only broadcast every 50th event to reduce noise
+        {
+            try
+            {
+                await _hubContext.BroadcastMarketDataUpdate(marketDataEvent);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to broadcast market data update");
+            }
+        }
+
+        // Process through basic strategies
+        var basicOrderIntents = _strategyEngine.ProcessMarketData(marketDataEvent, orderBook);
+        
+        // Process through advanced strategies
+        var advancedOrderIntents = await _advancedStrategyManager.ProcessMarketDataAsync(marketDataEvent, orderBook);
+        
+        // Combine all order intents
+        var allOrderIntents = basicOrderIntents.Concat(advancedOrderIntents);
         
         // Send orders to execution
-        foreach (var orderIntent in orderIntents)
+        foreach (var orderIntent in allOrderIntents)
         {
             await ProcessOrderIntent(orderIntent);
+            Interlocked.Increment(ref _ordersGenerated);
         }
     }
 
