@@ -45,7 +45,7 @@ public class TestOrderGeneratorStrategy : IAdvancedStrategy
                 Interlocked.Increment(ref _orderCount);
                 
                 var order = new OrderIntent(
-                    clientOrderId: $"TEST_{_orderCount}_{TimestampUtils.GetTimestampMicros()}",
+                    clientOrderId: TimestampUtils.GetTimestampMicros(),
                     type: OrderType.Limit,
                     side: Side.Buy,
                     priceTicks: DecimalToPriceTicks(bestPrice.Value.bid * 0.99m), // 1% below bid
@@ -68,13 +68,13 @@ public class TestOrderGeneratorStrategy : IAdvancedStrategy
     
     private (decimal bid, decimal ask)? GetBestPrice(OrderBook orderBook)
     {
-        var bid = orderBook.BestBid?.Price;
-        var ask = orderBook.BestAsk?.Price;
+        var bid = orderBook.GetBestBid().priceTicks;
+        var ask = orderBook.GetBestAsk().priceTicks;
         
         if (bid == null || ask == null)
             return null;
             
-        return (PriceTicksToDecimal(bid.Value), PriceTicksToDecimal(ask.Value));
+        return (PriceTicksToDecimal(bid), PriceTicksToDecimal(ask));
     }
     
     private decimal PriceTicksToDecimal(long priceTicks)
@@ -113,11 +113,11 @@ public class TestOrderGeneratorStrategy : IAdvancedStrategy
         {
             StrategyName = Name,
             TotalTrades = _orderCount,
-            PnL = 0,
+            TotalPnL = 0,
             Sharpe = 0,
             MaxDrawdown = 0,
-            AverageTradeDuration = TimeSpan.Zero,
-            LastUpdateTime = DateTime.UtcNow
+            AverageHoldTime = TimeSpan.Zero,
+            LastUpdate = DateTime.UtcNow
         };
     }
 }

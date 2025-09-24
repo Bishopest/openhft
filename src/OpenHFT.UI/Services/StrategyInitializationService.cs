@@ -64,23 +64,12 @@ public class StrategyInitializationService : IHostedService
     {
         try
         {
-            var config = new TriangularArbitrageConfig
-            {
-                BaseCurrency = "USDT",
-                MinProfitThreshold = 0.001m, // 0.1% minimum profit
-                MaxPositionSize = 1000m,
-                TradingFee = 0.001m, // 0.1% trading fee
-                MaxSlippage = 0.0005m, // 0.05% max slippage
-                Symbols = new List<string> { "BTCUSDT", "ETHUSDT", "ETHBTC" },
-                IsEnabled = false // Start disabled, user can enable from dashboard
-            };
-
             var strategy = new TriangularArbitrageStrategy(
-                _serviceProvider.GetRequiredService<ILogger<TriangularArbitrageStrategy>>(),
-                config);
+                _serviceProvider.GetRequiredService<ILogger<TriangularArbitrageStrategy>>());
 
             var allocation = new StrategyAllocation
             {
+                StrategyName = "TriangularArbitrage",
                 CapitalAllocation = 10000m, // $10,000 allocation
                 MaxPosition = 1000m,
                 RiskLimit = 0.02m, // 2% risk limit
@@ -100,24 +89,12 @@ public class StrategyInitializationService : IHostedService
     {
         try
         {
-            var config = new OptimalMarketMakingConfig
-            {
-                Symbol = "BTCUSDT",
-                BaseSpread = 0.001m, // 0.1% base spread
-                InventoryLimit = 1.0m,
-                RiskAversion = 0.5m,
-                VolatilityLookback = 100,
-                MaxOrderSize = 0.1m,
-                MinOrderSize = 0.001m,
-                IsEnabled = false
-            };
-
             var strategy = new OptimalMarketMakingStrategy(
-                _serviceProvider.GetRequiredService<ILogger<OptimalMarketMakingStrategy>>(),
-                config);
+                _serviceProvider.GetRequiredService<ILogger<OptimalMarketMakingStrategy>>());
 
             var allocation = new StrategyAllocation
             {
+                StrategyName = "OptimalMarketMaking",
                 CapitalAllocation = 15000m, // $15,000 allocation
                 MaxPosition = 2000m,
                 RiskLimit = 0.03m, // 3% risk limit
@@ -137,25 +114,12 @@ public class StrategyInitializationService : IHostedService
     {
         try
         {
-            var config = new MLMomentumConfig
-            {
-                Symbol = "BTCUSDT",
-                LookbackPeriod = 50,
-                FeatureCount = 10,
-                ModelPath = "models/momentum_model.pkl", // This would be a real ML model path
-                ConfidenceThreshold = 0.7m,
-                MaxPositionSize = 500m,
-                RiskAdjustment = 0.8m,
-                RebalanceFrequency = TimeSpan.FromMinutes(5),
-                IsEnabled = false
-            };
-
             var strategy = new MLMomentumStrategy(
-                _serviceProvider.GetRequiredService<ILogger<MLMomentumStrategy>>(),
-                config);
+                _serviceProvider.GetRequiredService<ILogger<MLMomentumStrategy>>());
 
             var allocation = new StrategyAllocation
             {
+                StrategyName = "MLMomentum",
                 CapitalAllocation = 20000m, // $20,000 allocation
                 MaxPosition = 1500m,
                 RiskLimit = 0.025m, // 2.5% risk limit
