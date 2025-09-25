@@ -1,3 +1,4 @@
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -25,6 +26,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Benchmarks", "bench\OpenHFT.Benchmarks\OpenHFT.Benchmarks.csproj", "{8AAF70E6-A3BD-4CFA-A70F-C7F6FCE352B7}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Strategy.Advanced", "src\OpenHFT.Strategy.Advanced\OpenHFT.Strategy.Advanced.csproj", "{0F462F0E-5C8E-4B21-BD63-D4C68860EB27}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Processing", "src\OpenHFT.Processing\OpenHFT.Processing.csproj", "{52254A4B-8659-4D2D-9FF0-410AF98342CF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -68,10 +71,12 @@ Global
 		{0F462F0E-5C8E-4B21-BD63-D4C68860EB27}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0F462F0E-5C8E-4B21-BD63-D4C68860EB27}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0F462F0E-5C8E-4B21-BD63-D4C68860EB27}.Release|Any CPU.Build.0 = Release|Any CPU
+		{52254A4B-8659-4D2D-9FF0-410AF98342CF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{52254A4B-8659-4D2D-9FF0-410AF98342CF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{52254A4B-8659-4D2D-9FF0-410AF98342CF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{52254A4B-8659-4D2D-9FF0-410AF98342CF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(NestedProjects) = preSolution
 	EndGlobalSection
 EndGlobal
