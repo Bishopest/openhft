@@ -9,7 +9,7 @@ using OpenHFT.Feed.Interfaces;
 
 namespace OpenHFT.Feed;
 
-public class FeedHandler
+public class FeedHandler : IFeedHandler
 {
     private readonly ILogger<FeedHandler> _logger;
     private readonly ConcurrentDictionary<string, IFeedAdapter> _adapters;

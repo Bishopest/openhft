@@ -29,21 +29,6 @@ public interface IFeedHandler : IDisposable
     void RemoveAdapter(IFeedAdapter adapter);
 
     /// <summary>
-    /// Get all registered adapters
-    /// </summary>
-    IReadOnlyList<IFeedAdapter> Adapters { get; }
-
-    /// <summary>
-    /// Event fired when market data is received (for monitoring)
-    /// </summary>
-    event EventHandler<MarketDataEvent> MarketDataReceived;
-
-    /// <summary>
-    /// Event fired when gap is detected in sequence
-    /// </summary>
-    event EventHandler<GapDetectedEventArgs> GapDetected;
-
-    /// <summary>
     /// Get feed handler statistics
     /// </summary>
     FeedHandlerStatistics Statistics { get; }
