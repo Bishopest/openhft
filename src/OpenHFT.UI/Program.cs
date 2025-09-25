@@ -99,7 +99,7 @@ static void RegisterHftServices(IServiceCollection services, IConfiguration conf
 {
     // Feed components
     services.AddSingleton<IFeedAdapter, BinanceAdapter>();
-    services.AddSingleton<IFeedHandler, FeedHandler>();
+    services.AddSingleton<IFeedHandler, FeedRingBufferHandler>();
 
     // Strategy components
     services.AddSingleton<IStrategyEngine, StrategyEngine>();
@@ -114,17 +114,17 @@ static void RegisterHftServices(IServiceCollection services, IConfiguration conf
             ArbitrageAllocation = 10000m,
             MaxArbitragePosition = 1000m,
             ArbitrageRiskLimit = 0.02m,
-            
+
             EnableMarketMaking = true,
             MarketMakingAllocation = 15000m,
             MaxMarketMakingPosition = 2000m,
             MarketMakingRiskLimit = 0.03m,
-            
+
             EnableMomentum = true,
             MomentumAllocation = 20000m,
             MaxMomentumPosition = 1500m,
             MomentumRiskLimit = 0.025m,
-            
+
             RiskConfig = new RiskManagementConfig
             {
                 MaxDrawdown = 0.10m,
@@ -140,11 +140,11 @@ static void RegisterHftServices(IServiceCollection services, IConfiguration conf
     services.AddSingleton<TriangularArbitrageStrategy>();
     services.AddSingleton<OptimalMarketMakingStrategy>();
     services.AddSingleton<MLMomentumStrategy>();
-    
+
     services.AddSingleton<IAdvancedStrategyManager, AdvancedStrategyManager>();
 
     // Register AdvancedStrategyManager as hosted service to auto-initialize strategies
-    services.AddHostedService<AdvancedStrategyManager>(provider => 
+    services.AddHostedService<AdvancedStrategyManager>(provider =>
         (AdvancedStrategyManager)provider.GetRequiredService<IAdvancedStrategyManager>());
 
     // Main engine
@@ -202,7 +202,7 @@ public class StrategyEngine : IStrategyEngine
     public IEnumerable<OpenHFT.Core.Models.OrderIntent> ProcessMarketData(OpenHFT.Core.Models.MarketDataEvent marketDataEvent, OpenHFT.Book.Core.OrderBook orderBook)
     {
         var orders = new List<OpenHFT.Core.Models.OrderIntent>();
-        
+
         foreach (var strategy in _strategies.Where(s => s.IsEnabled))
         {
             try
@@ -215,7 +215,7 @@ public class StrategyEngine : IStrategyEngine
                 _logger.LogError(ex, "Error in strategy {StrategyName} processing market data", strategy.Name);
             }
         }
-        
+
         return orders;
     }
 
@@ -252,7 +252,7 @@ public class StrategyEngine : IStrategyEngine
     public IEnumerable<OpenHFT.Core.Models.OrderIntent> ProcessTimer(DateTimeOffset timestamp)
     {
         var orders = new List<OpenHFT.Core.Models.OrderIntent>();
-        
+
         foreach (var strategy in _strategies.Where(s => s.IsEnabled))
         {
             try
@@ -265,7 +265,7 @@ public class StrategyEngine : IStrategyEngine
                 _logger.LogError(ex, "Error in strategy {StrategyName} timer processing", strategy.Name);
             }
         }
-        
+
         return orders;
     }
 
@@ -275,7 +275,7 @@ public class StrategyEngine : IStrategyEngine
         {
             await strategy.StartAsync();
         }
-        
+
         _logger.LogInformation("Strategy engine started with {StrategyCount} strategies", _strategies.Count);
     }
 
@@ -285,7 +285,7 @@ public class StrategyEngine : IStrategyEngine
         {
             await strategy.StopAsync();
         }
-        
+
         _logger.LogInformation("Strategy engine stopped");
     }
 

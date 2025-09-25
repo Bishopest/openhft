@@ -9,11 +9,6 @@ namespace OpenHFT.Feed.Interfaces;
 public interface IFeedHandler : IDisposable
 {
     /// <summary>
-    /// Initialize the feed handler with market data queue
-    /// </summary>
-    void Initialize(LockFreeRingBuffer<MarketDataEvent> marketDataQueue);
-
-    /// <summary>
     /// Start processing market data from all adapters
     /// </summary>
     Task StartAsync(CancellationToken cancellationToken = default);

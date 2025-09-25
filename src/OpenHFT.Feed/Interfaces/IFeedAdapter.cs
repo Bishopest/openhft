@@ -39,6 +39,12 @@ public interface IFeedAdapter : IDisposable
     Task StopAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets the name of the exchange this adapter connects to.
+    /// Should match one of the constants in the `Exchange` class.
+    /// </summary>
+    string ExchangeName { get; }
+
+    /// <summary>
     /// Check if adapter is connected
     /// </summary>
     bool IsConnected { get; }

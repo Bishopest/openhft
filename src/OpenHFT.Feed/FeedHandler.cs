@@ -1,104 +1,132 @@
+using System;
+using System.Collections.Concurrent;
+using Disruptor;
+using Disruptor.Dsl;
 using Microsoft.Extensions.Logging;
+using OpenHFT.Core.Models;
+using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Interfaces;
 
 namespace OpenHFT.Feed;
 
-// Placeholder implementations for missing classes
-public class FeedHandler : IFeedHandler
+public class FeedHandler
 {
     private readonly ILogger<FeedHandler> _logger;
-    private readonly List<IFeedAdapter> _adapters = new();
-    private OpenHFT.Core.Collections.LockFreeRingBuffer<OpenHFT.Core.Models.MarketDataEvent>? _marketDataQueue;
+    private readonly ConcurrentDictionary<string, IFeedAdapter> _adapters;
+    private readonly RingBuffer<MarketDataEventWrapper> _ringBuffer;
+    public FeedHandlerStatistics Statistics { get; } = new();
 
-    public IReadOnlyList<IFeedAdapter> Adapters => _adapters.AsReadOnly();
-    public OpenHFT.Feed.Interfaces.FeedHandlerStatistics Statistics { get; } = new();
-
-    public event EventHandler<OpenHFT.Core.Models.MarketDataEvent>? MarketDataReceived;
-    public event EventHandler<OpenHFT.Feed.Interfaces.GapDetectedEventArgs>? GapDetected;
-
-    public FeedHandler(ILogger<FeedHandler> logger, IFeedAdapter adapter)
+    public FeedHandler(ILogger<FeedHandler> logger, ConcurrentDictionary<string, IFeedAdapter> adapters, Disruptor<MarketDataEventWrapper> disruptor)
     {
-        _logger = logger;
-        _adapters.Add(adapter);
-        
-        // Subscribe to adapter events
-        adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
-        adapter.Error += OnAdapterError;
-        adapter.MarketDataReceived += OnMarketDataReceived;
-    }
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _adapters = adapters ?? throw new ArgumentNullException(nameof(adapters));
+        _ringBuffer = disruptor.RingBuffer ?? throw new ArgumentNullException(nameof(disruptor));
 
-    public void Initialize(OpenHFT.Core.Collections.LockFreeRingBuffer<OpenHFT.Core.Models.MarketDataEvent> marketDataQueue)
-    {
-        _marketDataQueue = marketDataQueue;
         Statistics.StartTime = DateTimeOffset.UtcNow;
-        _logger.LogInformation("Feed handler initialized with {AdapterCount} adapters", _adapters.Count);
+        _logger.LogInformationWithCaller($"FeedHandler initialized with {_adapters.Count} adapters.");
+
+        foreach (var kvp in adapters)
+        {
+            var exchangeName = kvp.Key;
+            var adapter = kvp.Value;
+
+            adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
+            adapter.Error += OnAdapterError;
+            adapter.MarketDataReceived += OnMarketDataReceived;
+            _logger.LogInformationWithCaller($"Register market data handler for {exchangeName} adapter");
+        }
     }
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
-        foreach (var adapter in _adapters)
+        int cnt = 0;
+        foreach (var kvp in _adapters)
         {
-            await adapter.ConnectAsync(cancellationToken);
-            await adapter.SubscribeAsync(new[] { "BTCUSDT", "ETHUSDT" }, cancellationToken);
-            await adapter.StartAsync(cancellationToken);
+            await kvp.Value.ConnectAsync(cancellationToken);
+            await kvp.Value.SubscribeAsync(new[] { "BTCUSDT", "ETHUSDT" }, cancellationToken);
+            await kvp.Value.StartAsync(cancellationToken);
+            cnt++;
         }
-        
-        _logger.LogInformation("Feed handler started");
+
+        _logger.LogInformationWithCaller($"Feedhandler started with adapter({cnt})");
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
-        foreach (var adapter in _adapters)
+        int cnt = 0;
+        foreach (var kvp in _adapters)
         {
-            await adapter.StopAsync(cancellationToken);
+            await kvp.Value.StopAsync(cancellationToken);
+            cnt++;
         }
-        
-        _logger.LogInformation("Feed handler stopped");
+
+        _logger.LogInformationWithCaller($"Feedhandler stopped with adapter({cnt})");
     }
 
     public void AddAdapter(IFeedAdapter adapter)
     {
-        _adapters.Add(adapter);
-        adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
-        adapter.Error += OnAdapterError;
-        adapter.MarketDataReceived += OnMarketDataReceived;
+        if (_adapters.TryAdd(adapter.ExchangeName, adapter))
+        {
+            adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
+            adapter.Error += OnAdapterError;
+            adapter.MarketDataReceived += OnMarketDataReceived;
+            _logger.LogInformationWithCaller($"Adapter for {adapter.ExchangeName} added Feedhandler");
+        }
     }
 
     public void RemoveAdapter(IFeedAdapter adapter)
     {
-        _adapters.Remove(adapter);
-        adapter.ConnectionStateChanged -= OnAdapterConnectionStateChanged;
-        adapter.Error -= OnAdapterError;
-        adapter.MarketDataReceived -= OnMarketDataReceived;
+        if (_adapters.Remove(adapter.ExchangeName, out var adapter1))
+        {
+            adapter1.ConnectionStateChanged -= OnAdapterConnectionStateChanged;
+            adapter1.Error -= OnAdapterError;
+            adapter1.MarketDataReceived -= OnMarketDataReceived;
+            _logger.LogInformationWithCaller($"Adapter for {adapter.ExchangeName} removed from Feedhandler");
+        }
     }
 
-    private void OnAdapterConnectionStateChanged(object? sender, OpenHFT.Feed.Interfaces.ConnectionStateChangedEventArgs e)
+    private void OnAdapterConnectionStateChanged(object? sender, ConnectionStateChangedEventArgs e)
     {
-        _logger.LogInformation("Adapter connection state changed: {IsConnected} - {Reason}", e.IsConnected, e.Reason);
+        _logger.LogInformationWithCaller($"Adapter connection state changed: {e.IsConnected} - {e.Reason}");
     }
 
     private void OnAdapterError(object? sender, OpenHFT.Feed.Interfaces.FeedErrorEventArgs e)
     {
-        _logger.LogError(e.Exception, "Adapter error: {Context}", e.Context);
+        _logger.LogErrorWithCaller(e.Exception, $"Adapter error: {e.Context}");
     }
 
-    private void OnMarketDataReceived(object? sender, OpenHFT.Core.Models.MarketDataEvent marketDataEvent)
+    private void OnMarketDataReceived(object? sender, MarketDataEvent marketDataEvent)
     {
-        // Forward market data to the queue for processing
-        if (_marketDataQueue != null)
+        try
         {
-            if (!_marketDataQueue.TryWrite(marketDataEvent))
+            if (_ringBuffer.TryNext(out long sequence))
             {
-                _logger.LogWarning("Market data queue is full, dropping event for symbol {SymbolId}", marketDataEvent.SymbolId);
+                try
+                {
+                    var wrapper = _ringBuffer[sequence];
+                    wrapper.SetData(marketDataEvent);
+                }
+                finally
+                {
+                    _ringBuffer.Publish(sequence);
+                }
             }
+            else
+            {
+                _logger.LogWarningWithCaller($"Disruptor ring buffer is full. Dropping market data for SymbolId {marketDataEvent.SymbolId}. This indicates the consumer is too slow or has stalled.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogErrorWithCaller(ex, "An unexpected error occurred while publishing to the disruptor ring buffer.");
         }
     }
 
     public void Dispose()
     {
-        foreach (var adapter in _adapters)
+        foreach (var kvp in _adapters)
         {
-            adapter.Dispose();
+            kvp.Value.Dispose();
         }
     }
 }
