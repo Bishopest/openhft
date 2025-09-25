@@ -31,6 +31,8 @@ public class BinanceAdapter : IFeedAdapter
     public string Status => _webSocket?.State.ToString() ?? "Disconnected";
     public FeedStatistics Statistics { get; } = new();
 
+    public string ExchangeName => Exchange.BINANCE;
+
     public event EventHandler<ConnectionStateChangedEventArgs>? ConnectionStateChanged;
     public event EventHandler<FeedErrorEventArgs>? Error;
     public event EventHandler<MarketDataEvent>? MarketDataReceived;
@@ -51,7 +53,7 @@ public class BinanceAdapter : IFeedAdapter
         {
             _webSocket = new ClientWebSocket();
             _cancellationTokenSource = new CancellationTokenSource();
-            
+
             // Build combined stream URL with depth and trade streams for configured symbols
             var streams = new List<string>();
             foreach (var symbol in _defaultSymbols)
@@ -59,18 +61,18 @@ public class BinanceAdapter : IFeedAdapter
                 streams.Add($"{symbol}@depth20@100ms"); // Order book depth updates every 100ms
                 streams.Add($"{symbol}@aggTrade");      // Aggregated trades
             }
-            
+
             var streamParams = string.Join("/", streams);
             var connectUri = new Uri($"{_baseUrl}?streams={streamParams}");
-            
+
             _logger.LogInformation("Connecting to Binance WebSocket at {Url}", connectUri);
             await _webSocket.ConnectAsync(connectUri, cancellationToken);
-            
+
             Statistics.ReconnectCount++;
             _logger.LogInformation("Connected to Binance WebSocket successfully");
-            
+
             OnConnectionStateChanged(true, "Connected successfully");
-            
+
             // Start receiving messages
             _receiveTask = ReceiveLoop(_cancellationTokenSource.Token);
         }
@@ -89,17 +91,17 @@ public class BinanceAdapter : IFeedAdapter
         try
         {
             _cancellationTokenSource?.Cancel();
-            
+
             if (_webSocket?.State == WebSocketState.Open)
             {
                 await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Disconnect requested", cancellationToken);
             }
-            
+
             if (_receiveTask != null)
             {
                 await _receiveTask;
             }
-            
+
             OnConnectionStateChanged(false, "Disconnected by request");
             _logger.LogInformation("Disconnected from Binance WebSocket");
         }
@@ -201,7 +203,7 @@ public class BinanceAdapter : IFeedAdapter
                 do
                 {
                     result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
-                    
+
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
                         _logger.LogInformation("WebSocket closed by remote endpoint");
@@ -257,7 +259,7 @@ public class BinanceAdapter : IFeedAdapter
             }
 
             // Process depth update
-            if (root.TryGetProperty("stream", out var streamElement) && 
+            if (root.TryGetProperty("stream", out var streamElement) &&
                 root.TryGetProperty("data", out var dataElement))
             {
                 var stream = streamElement.GetString();
@@ -290,9 +292,9 @@ public class BinanceAdapter : IFeedAdapter
     {
         try
         {
-            var symbol = stream?.Split('@')[0].ToUpper() ?? 
+            var symbol = stream?.Split('@')[0].ToUpper() ??
                         (data.TryGetProperty("s", out var symbolElement) ? symbolElement.GetString()?.ToUpper() : null);
-            
+
             if (string.IsNullOrEmpty(symbol))
             {
                 _logger.LogWarning("Missing symbol in depth update");
@@ -301,7 +303,7 @@ public class BinanceAdapter : IFeedAdapter
 
             var symbolId = SymbolUtils.GetSymbolId(symbol);
             var timestamp = TimestampUtils.GetTimestampMicros();
-            
+
             // Check sequence number for gap detection
             if (data.TryGetProperty("u", out var lastUpdateIdElement))
             {
@@ -310,7 +312,7 @@ public class BinanceAdapter : IFeedAdapter
                 {
                     if (currentSequence != lastSequence + 1)
                     {
-                        _logger.LogDebug("Sequence gap detected for {Symbol}: expected {Expected}, received {Received}", 
+                        _logger.LogDebug("Sequence gap detected for {Symbol}: expected {Expected}, received {Received}",
                             symbol, lastSequence + 1, currentSequence);
                         Statistics.SequenceGaps++;
                     }
@@ -393,7 +395,7 @@ public class BinanceAdapter : IFeedAdapter
     public void Dispose()
     {
         if (_isDisposed) return;
-        
+
         try
         {
             DisconnectAsync().Wait(TimeSpan.FromSeconds(5));
@@ -402,7 +404,7 @@ public class BinanceAdapter : IFeedAdapter
         {
             _logger.LogError(ex, "Error during disposal");
         }
-        
+
         _webSocket?.Dispose();
         _cancellationTokenSource?.Dispose();
         _isDisposed = true;
