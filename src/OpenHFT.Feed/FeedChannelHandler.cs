@@ -30,7 +30,6 @@ public class FeedChannelHandler : IFeedHandler
         {
             await adapter.ConnectAsync(cancellationToken);
             await adapter.SubscribeAsync(new[] { "BTCUSDT", "ETHUSDT" }, cancellationToken);
-            await adapter.StartAsync(cancellationToken);
         }
 
         _logger.LogInformation("Feed handler started");
@@ -40,7 +39,7 @@ public class FeedChannelHandler : IFeedHandler
     {
         foreach (var adapter in _adapters)
         {
-            await adapter.StopAsync(cancellationToken);
+            await adapter.DisconnectAsync(cancellationToken);
         }
 
         _logger.LogInformation("Feed handler stopped");

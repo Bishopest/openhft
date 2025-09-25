@@ -44,7 +44,6 @@ public class FeedHandler : IFeedHandler
         {
             await kvp.Value.ConnectAsync(cancellationToken);
             await kvp.Value.SubscribeAsync(new[] { "BTCUSDT", "ETHUSDT" }, cancellationToken);
-            await kvp.Value.StartAsync(cancellationToken);
             cnt++;
         }
 
@@ -56,7 +55,7 @@ public class FeedHandler : IFeedHandler
         int cnt = 0;
         foreach (var kvp in _adapters)
         {
-            await kvp.Value.StopAsync(cancellationToken);
+            await kvp.Value.DisconnectAsync(cancellationToken);
             cnt++;
         }
 

@@ -19,17 +19,28 @@ public class BinanceAdapter : IFeedAdapter
     private ClientWebSocket? _webSocket;
     private CancellationTokenSource? _cancellationTokenSource;
     private Task? _receiveTask;
+    private readonly string[] _symbols;
     private readonly HashSet<string> _subscribedSymbols = new();
     private readonly Dictionary<string, long> _lastSequenceNumbers = new();
     private bool _isDisposed;
 
     // Binance WebSocket endpoints - using Futures API for better trading support
     private const string DefaultBaseUrl = "wss://fstream.binance.com/stream";
-    private readonly string[] _defaultSymbols = { "btcusdt", "ethusdt", "adausdt" };
+    private readonly string[] _defaultSymbols = { "btcusdt", "ethusdt" };
 
     public bool IsConnected => _webSocket?.State == WebSocketState.Open;
     public string Status => _webSocket?.State.ToString() ?? "Disconnected";
     public FeedStatistics Statistics { get; } = new();
+    private readonly TimeSpan[] RetryDelays =
+    {
+        TimeSpan.FromMilliseconds(100),
+        TimeSpan.FromMilliseconds(250),
+        TimeSpan.FromMilliseconds(500),
+        TimeSpan.FromSeconds(1),
+        TimeSpan.FromSeconds(2),
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(10)
+    };
 
     public string ExchangeName => Exchange.BINANCE;
 
@@ -37,10 +48,11 @@ public class BinanceAdapter : IFeedAdapter
     public event EventHandler<FeedErrorEventArgs>? Error;
     public event EventHandler<MarketDataEvent>? MarketDataReceived;
 
-    public BinanceAdapter(ILogger<BinanceAdapter> logger, string? baseUrl = null)
+    public BinanceAdapter(ILogger<BinanceAdapter> logger, string[] symbols, string? baseUrl = null)
     {
         _logger = logger;
         _baseUrl = baseUrl ?? DefaultBaseUrl;
+        _symbols = symbols;
         Statistics.StartTime = DateTimeOffset.UtcNow;
     }
 
@@ -49,39 +61,79 @@ public class BinanceAdapter : IFeedAdapter
         if (_isDisposed) throw new ObjectDisposedException(nameof(BinanceAdapter));
         if (IsConnected) return;
 
+        _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         try
         {
-            _webSocket = new ClientWebSocket();
-            _cancellationTokenSource = new CancellationTokenSource();
-
-            // Build combined stream URL with depth and trade streams for configured symbols
-            var streams = new List<string>();
-            foreach (var symbol in _defaultSymbols)
-            {
-                streams.Add($"{symbol}@depth20@100ms"); // Order book depth updates every 100ms
-                streams.Add($"{symbol}@aggTrade");      // Aggregated trades
-            }
-
-            var streamParams = string.Join("/", streams);
-            var connectUri = new Uri($"{_baseUrl}?streams={streamParams}");
-
-            _logger.LogInformation("Connecting to Binance WebSocket at {Url}", connectUri);
-            await _webSocket.ConnectAsync(connectUri, cancellationToken);
-
+            await ConnectWithRetryAsync(_symbols, _cancellationTokenSource.Token);
             Statistics.ReconnectCount++;
-            _logger.LogInformation("Connected to Binance WebSocket successfully");
-
+            _logger.LogInformationWithCaller("Connected to Binance WebSocket successfully");
             OnConnectionStateChanged(true, "Connected successfully");
-
             // Start receiving messages
-            _receiveTask = ReceiveLoop(_cancellationTokenSource.Token);
+            _receiveTask = Task.Run(() => ReceiveLoop(_cancellationTokenSource.Token));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to connect to Binance WebSocket");
+            _logger.LogErrorWithCaller(ex, "Failed to connect to Binance WebSocket");
             OnError(ex, "Connection failed");
             throw;
         }
+    }
+
+    private async Task ConnectWithRetryAsync(string[] symbols, CancellationToken cancellationToken)
+    {
+        var retryAttempt = 0;
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                _webSocket = new ClientWebSocket();
+                ConfigureWebSocket(_webSocket);
+
+                var streamUrl = BuildStreamUrl(symbols);
+                _logger.LogInformationWithCaller($"Connecting to {streamUrl} (attempt {retryAttempt + 1})");
+
+                await _webSocket.ConnectAsync(new Uri(streamUrl), cancellationToken);
+
+                _logger.LogInformationWithCaller($"Successfully connected to Binance WebSocket(state: {_webSocket.State.ToString()})");
+
+                return;
+            }
+            catch (Exception ex) when (retryAttempt < RetryDelays.Length - 1)
+            {
+                var delay = RetryDelays[retryAttempt];
+
+                _logger.LogErrorWithCaller(ex, $"Connection attempt {retryAttempt + 1} failed, retrying in {delay.TotalMilliseconds}ms");
+
+                await Task.Delay(delay, cancellationToken);
+                retryAttempt++;
+            }
+        }
+
+        throw new InvalidOperationException($"Failed to connect after {RetryDelays.Length} attempts");
+    }
+
+    private void ConfigureWebSocket(ClientWebSocket webSocket)
+    {
+        // Configure WebSocket options for optimal performance
+        webSocket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
+        webSocket.Options.SetBuffer(8192, 8192); // 8KB buffers
+    }
+
+    private string BuildStreamUrl(string[] symbols)
+    {
+        var streams = new List<string>();
+
+        foreach (var symbol in symbols)
+        {
+            var symbolLower = symbol.ToLowerInvariant();
+            // Order book depth (20 levels, 100ms update frequency)
+            streams.Add($"{symbolLower}@depth20@100ms");
+            // Real-time aggregate trades
+            streams.Add($"{symbolLower}@aggTrade");
+        }
+
+        return _baseUrl + string.Join("/", streams);
     }
 
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
@@ -103,11 +155,11 @@ public class BinanceAdapter : IFeedAdapter
             }
 
             OnConnectionStateChanged(false, "Disconnected by request");
-            _logger.LogInformation("Disconnected from Binance WebSocket");
+            _logger.LogInformationWithCaller("Disconnected from Binance WebSocket");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during disconnect");
+            _logger.LogErrorWithCaller(ex, "Error during disconnect");
             OnError(ex, "Disconnect error");
         }
         finally
@@ -168,17 +220,6 @@ public class BinanceAdapter : IFeedAdapter
         }
     }
 
-    public Task StartAsync(CancellationToken cancellationToken = default)
-    {
-        // WebSocket starts receiving automatically after connection
-        return Task.CompletedTask;
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken = default)
-    {
-        return DisconnectAsync(cancellationToken);
-    }
-
     private async Task SendMessage(string message, CancellationToken cancellationToken)
     {
         if (_webSocket?.State != WebSocketState.Open)
@@ -226,16 +267,16 @@ public class BinanceAdapter : IFeedAdapter
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("WebSocket receive loop cancelled");
+            _logger.LogInformationWithCaller("WebSocket receive loop cancelled");
         }
         catch (WebSocketException ex) when (ex.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
         {
-            _logger.LogWarning("WebSocket connection closed prematurely");
+            _logger.LogWarningWithCaller("WebSocket connection closed prematurely");
             OnConnectionStateChanged(false, "Connection closed prematurely");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in WebSocket receive loop");
+            _logger.LogErrorWithCaller(ex, "Error in WebSocket receive loop");
             OnError(ex, "Receive loop error");
             OnConnectionStateChanged(false, "Error in receive loop");
         }
@@ -282,7 +323,7 @@ public class BinanceAdapter : IFeedAdapter
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing message: {Message}", message);
+            _logger.LogErrorWithCaller(ex, "Error processing message: {Message}", message);
             Statistics.MessagesDropped++;
             OnError(ex, "Message processing error");
         }

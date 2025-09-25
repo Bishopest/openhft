@@ -29,16 +29,6 @@ public interface IFeedAdapter : IDisposable
     Task UnsubscribeAsync(IEnumerable<string> symbols, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Start processing market data
-    /// </summary>
-    Task StartAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Stop processing market data
-    /// </summary>
-    Task StopAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Gets the name of the exchange this adapter connects to.
     /// Should match one of the constants in the `Exchange` class.
     /// </summary>
