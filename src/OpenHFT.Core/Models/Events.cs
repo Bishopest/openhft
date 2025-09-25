@@ -17,7 +17,7 @@ public readonly struct MarketDataEvent
     public readonly EventKind Kind;     // Add/Update/Delete/Trade
     public readonly int SymbolId;       // Internal symbol identifier
 
-    public MarketDataEvent(long sequence, long timestamp, Side side, long priceTicks, 
+    public MarketDataEvent(long sequence, long timestamp, Side side, long priceTicks,
                           long quantity, EventKind kind, int symbolId)
     {
         Sequence = sequence;
@@ -31,6 +31,33 @@ public readonly struct MarketDataEvent
 
     public override string ToString() =>
         $"MD[{Sequence}] {Kind} {Side} {PriceTicks}@{Quantity} @{Timestamp}μs";
+}
+
+/// <summary>
+/// A mutable class that wraps a MarketDataEvent struct for use in Disrupter-like systems
+/// that require reference types.
+/// This class will be pre-allocated in the RingBuffer.
+/// </summary>
+public class MarketDataEventWrapper // class로 정의
+{
+    public MarketDataEvent Event;
+
+    public MarketDataEventWrapper()
+    {
+        Event = default(MarketDataEvent);
+    }
+
+    public void SetData(in MarketDataEvent data)
+    {
+        Event = data;
+    }
+
+    public void Clear()
+    {
+        Event = default(MarketDataEvent);
+    }
+
+    public override string ToString() => Event.ToString();
 }
 
 /// <summary>
@@ -75,7 +102,7 @@ public readonly struct OrderAck
     public readonly long TimestampOut; // When ack was generated
     public readonly string RejectReason;
 
-    public OrderAck(long clientOrderId, long exchangeOrderId, AckKind kind, 
+    public OrderAck(long clientOrderId, long exchangeOrderId, AckKind kind,
                    long timestampOut, string rejectReason = "")
     {
         ClientOrderId = clientOrderId;
