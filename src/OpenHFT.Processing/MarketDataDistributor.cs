@@ -1,81 +1,40 @@
-using OpenHFT.Core.Collections;
 using OpenHFT.Core.Models;
 using OpenHFT.Processing.Interfaces;
 using Microsoft.Extensions.Logging;
-using System.Threading.Channels;
+using Disruptor;
+using OpenHFT.Core.Utils;
+using Disruptor.Dsl;
 
 namespace OpenHFT.Processing;
 
-public class MarketDataDistributor
+public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
 {
-    private readonly ChannelReader<MarketDataEvent> _inputReader;
+    private readonly Disruptor<MarketDataEventWrapper> _disruptor;
     private readonly ILogger<MarketDataDistributor> _logger;
-    private readonly Dictionary<int, HashSet<IMarketDataConsumer>> _symbolSubscriptions;
+    private readonly Dictionary<int, HashSet<IMarketDataConsumer>> _symbolSubscriptions = new();
     private long _distributedEventCount;
-    private Task? _distributionTask;
 
-    public MarketDataDistributor(ChannelReader<MarketDataEvent> inputReader, ILogger<MarketDataDistributor> logger)
+    public MarketDataDistributor(Disruptor<MarketDataEventWrapper> disruptor, ILogger<MarketDataDistributor> logger)
     {
-        _inputReader = inputReader;
+        _disruptor = disruptor;
         _logger = logger;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Market Data Distributor is starting.");
+        _logger.LogInformationWithCaller("Market Data Distributor is starting.");
 
-        _distributionTask = Task.Run(() => DistributionLoop(cancellationToken), cancellationToken);
+        _disruptor.HandleEventsWith(this);
+        _disruptor.Start();
+
         return Task.CompletedTask;
     }
 
-    public async Task StopAsync()
+    public Task StopAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Market Data Distributor is stopping.");
-        if (_distributionTask != null)
-        {
-            await _distributionTask;
-        }
-    }
-
-    private async Task DistributionLoop(CancellationToken cancellationToken)
-    {
-        Thread.CurrentThread.Name = "Market-Processor";
-
-        try
-        {
-            await foreach (var marketEvent in _inputReader.ReadAllAsync(cancellationToken))
-            {
-                Interlocked.Increment(ref _distributedEventCount);
-
-                if (_symbolSubscriptions.TryGetValue(marketEvent.SymbolId, out var subscribers))
-                {
-                    foreach (var subscriber in subscribers)
-                    {
-                        var consumer = subscriber;
-                        // Fire-and-forget으로 각 Consumer 병렬 실행
-                        _ = Task.Run(() =>
-                        {
-                            try
-                            {
-                                consumer.OnMarketData(marketEvent);
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, $"Failed to call OnMarketData on symbol id({marketEvent.SymbolId}) from Binance adapter");
-                            }
-                        }, cancellationToken);
-                    }
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogInformation("Distribution loop was cancelled.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "An error occurred in the distribution loop.");
-        }
+        _logger.LogInformationWithCaller("Market Data Distributor is stopping.");
+        _disruptor.Shutdown(TimeSpan.FromSeconds(10));
+        return Task.CompletedTask;
     }
 
     // Subscription management
@@ -104,4 +63,30 @@ public class MarketDataDistributor
         }
     }
 
+    public void OnEvent(MarketDataEventWrapper data, long sequence, bool endOfBatch)
+    {
+        try
+        {
+            Interlocked.Increment(ref _distributedEventCount);
+            var marketEvent_copy = data.Event;
+
+            if (_symbolSubscriptions.TryGetValue(marketEvent_copy.SymbolId, out var subscribers))
+            {
+                foreach (var subscriber in subscribers)
+                {
+                    var consumer = subscriber;
+                    // Fire-and-forget
+                    _ = Task.Run(() =>
+                    {
+                        try { consumer.OnMarketData(marketEvent_copy); }
+                        catch (Exception ex) { /* ... 에러 로깅 ... */ }
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogErrorWithCaller(ex, $"Error distributing market data event sequence {sequence}");
+        }
+    }
 }
