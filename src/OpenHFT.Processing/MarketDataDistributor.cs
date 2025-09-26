@@ -4,14 +4,17 @@ using Microsoft.Extensions.Logging;
 using Disruptor;
 using OpenHFT.Core.Utils;
 using Disruptor.Dsl;
+using System.Collections.Concurrent;
 
 namespace OpenHFT.Processing;
+
+public readonly record struct ExchangeSymbolKey(ExchangeEnum Exchange, int SymbolId);
 
 public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
 {
     private readonly Disruptor<MarketDataEventWrapper> _disruptor;
     private readonly ILogger<MarketDataDistributor> _logger;
-    private readonly Dictionary<int, HashSet<IMarketDataConsumer>> _symbolSubscriptions = new();
+    private readonly ConcurrentDictionary<ExchangeSymbolKey, ConcurrentDictionary<string, IMarketDataConsumer>> _subscriptions = new();
     private long _distributedEventCount;
 
     public MarketDataDistributor(Disruptor<MarketDataEventWrapper> disruptor, ILogger<MarketDataDistributor> logger)
@@ -38,28 +41,43 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
     }
 
     // Subscription management
-    public void Subscribe(IMarketDataConsumer consumer, int symbolId)
+    public void Subscribe(IMarketDataConsumer consumer)
     {
-        if (!_symbolSubscriptions.ContainsKey(symbolId))
-        {
-            _symbolSubscriptions[symbolId] = new HashSet<IMarketDataConsumer>();
-        }
+        var key = new ExchangeSymbolKey(consumer.Exchange, consumer.SymbolId);
 
-        _symbolSubscriptions[symbolId].Add(consumer);
-        _logger.LogInformation("Consumer {Consumer} subscribed to symbol {SymbolId}",
-            consumer.GetType().Name, symbolId);
+        var innerSubscriptionDict = _subscriptions.GetOrAdd(
+            key,                                // 키
+            _ => new ConcurrentDictionary<string, IMarketDataConsumer>()
+        );
+
+        if (!innerSubscriptionDict.TryAdd(consumer.ConsumerName, consumer))
+        {
+            _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.SymbolId}) already exists");
+        }
+        else
+        {
+            _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.SymbolId}) subscribed successfully.");
+        }
     }
 
-    public void Unsubscribe(IMarketDataConsumer consumer, int symbolId)
+    public void Unsubscribe(IMarketDataConsumer consumer)
     {
-        if (_symbolSubscriptions.TryGetValue(symbolId, out var subscribers))
-        {
-            subscribers.Remove(consumer);
+        var key = new ExchangeSymbolKey(consumer.Exchange, consumer.SymbolId);
 
-            if (subscribers.Count == 0)
+        if (_subscriptions.TryGetValue(key, out var innerSubscriptionDict))
+        {
+            if (innerSubscriptionDict.TryRemove(consumer.ConsumerName, out var removedConsumer))
             {
-                _symbolSubscriptions.Remove(symbolId);
+                _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.SymbolId}) unsubscribed successfully.");
             }
+            else
+            {
+                _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.SymbolId}) not found for unsubscription.");
+            }
+        }
+        else
+        {
+            _logger.LogWarningWithCaller($"Subscription key {key} not found for unsubscription.");
         }
     }
 
@@ -69,19 +87,29 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
         {
             Interlocked.Increment(ref _distributedEventCount);
             var marketEvent_copy = data.Event;
-
-            if (_symbolSubscriptions.TryGetValue(marketEvent_copy.SymbolId, out var subscribers))
+            var key = new ExchangeSymbolKey(marketEvent_copy.SourceExchange, marketEvent_copy.SymbolId);
+            if (_subscriptions.TryGetValue(key, out var subscribers))
             {
-                foreach (var subscriber in subscribers)
+                foreach (var kvp in subscribers)
                 {
-                    var consumer = subscriber;
+                    var consumer = kvp.Value;
                     // Fire-and-forget
                     _ = Task.Run(() =>
                     {
-                        try { consumer.OnMarketData(marketEvent_copy); }
-                        catch (Exception ex) { /* ... 에러 로깅 ... */ }
+                        try
+                        {
+                            consumer.OnMarketData(marketEvent_copy);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogErrorWithCaller(ex, $"Error during consumer({consumer.ConsumerName} OnMarketData callback)");
+                        }
                     });
                 }
+            }
+            else
+            {
+                _logger.LogWarningWithCaller($"Subscription key {key} not found.");
             }
         }
         catch (Exception ex)

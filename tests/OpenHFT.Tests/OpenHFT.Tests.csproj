@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\OpenHFT.Core\OpenHFT.Core.csproj" />
+    <ProjectReference Include="..\..\src\OpenHFT.Processing\OpenHFT.Processing.csproj" />
     <ProjectReference Include="..\..\src\OpenHFT.Book\OpenHFT.Book.csproj" />
     <ProjectReference Include="..\..\src\OpenHFT.Feed\OpenHFT.Feed.csproj" />
     <ProjectReference Include="..\..\src\OpenHFT.Strategy\OpenHFT.Strategy.csproj" />
