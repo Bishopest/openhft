@@ -7,5 +7,7 @@ public interface IMarketDataConsumer
 {
     Task OnMarketData(MarketDataEvent marketEvent);
     string ConsumerName { get; }
+    int SymbolId { get; }
+    ExchangeEnum Exchange { get; }
     int Priority { get; } // Lower numbers = higher priority
 }

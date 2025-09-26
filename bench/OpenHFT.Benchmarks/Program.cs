@@ -133,7 +133,8 @@ public class OrderBookBenchmarks
                 priceTicks: PriceUtils.ToTicks((decimal)price),
                 quantity: quantity,
                 kind: EventKind.Update,
-                symbolId: _symbolId
+                symbolId: _symbolId,
+                exchange: ExchangeEnum.BINANCE
             );
         }
     }
@@ -148,7 +149,8 @@ public class OrderBookBenchmarks
             priceTicks: PriceUtils.ToTicks(50000m),
             quantity: 100000000,
             kind: EventKind.Update,
-            symbolId: _symbolId
+            symbolId: _symbolId,
+            exchange: ExchangeEnum.BINANCE
         );
 
         _orderBook.ApplyEvent(evt);
@@ -219,7 +221,8 @@ public class RingBufferBenchmarks
                 priceTicks: PriceUtils.ToTicks(50000m),
                 quantity: 100000000,
                 kind: EventKind.Update,
-                symbolId: symbolId
+                symbolId: symbolId,
+                exchange: ExchangeEnum.BINANCE
             );
         }
     }
@@ -609,7 +612,8 @@ public class MPSC_Struct_DisruptorBenchmarks
             priceTicks: PriceUtils.ToTicks(50000m),
             quantity: 100000000,
             kind: EventKind.Update,
-            symbolId: symbolId
+            symbolId: symbolId,
+            exchange: ExchangeEnum.BINANCE
         );
 
         const int operationsPerProducer = 100_000;

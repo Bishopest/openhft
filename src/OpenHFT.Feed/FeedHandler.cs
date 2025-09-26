@@ -12,11 +12,11 @@ namespace OpenHFT.Feed;
 public class FeedHandler : IFeedHandler
 {
     private readonly ILogger<FeedHandler> _logger;
-    private readonly ConcurrentDictionary<string, IFeedAdapter> _adapters;
+    private readonly ConcurrentDictionary<ExchangeEnum, IFeedAdapter> _adapters;
     private readonly RingBuffer<MarketDataEventWrapper> _ringBuffer;
     public FeedHandlerStatistics Statistics { get; } = new();
 
-    public FeedHandler(ILogger<FeedHandler> logger, ConcurrentDictionary<string, IFeedAdapter> adapters, Disruptor<MarketDataEventWrapper> disruptor)
+    public FeedHandler(ILogger<FeedHandler> logger, ConcurrentDictionary<ExchangeEnum, IFeedAdapter> adapters, Disruptor<MarketDataEventWrapper> disruptor)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _adapters = adapters ?? throw new ArgumentNullException(nameof(adapters));
@@ -64,23 +64,23 @@ public class FeedHandler : IFeedHandler
 
     public void AddAdapter(IFeedAdapter adapter)
     {
-        if (_adapters.TryAdd(adapter.ExchangeName, adapter))
+        if (_adapters.TryAdd(adapter.Exchange, adapter))
         {
             adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
             adapter.Error += OnAdapterError;
             adapter.MarketDataReceived += OnMarketDataReceived;
-            _logger.LogInformationWithCaller($"Adapter for {adapter.ExchangeName} added Feedhandler");
+            _logger.LogInformationWithCaller($"Adapter for {Exchange.Decode(adapter.Exchange)} added Feedhandler");
         }
     }
 
     public void RemoveAdapter(IFeedAdapter adapter)
     {
-        if (_adapters.Remove(adapter.ExchangeName, out var adapter1))
+        if (_adapters.Remove(adapter.Exchange, out var adapter1))
         {
             adapter1.ConnectionStateChanged -= OnAdapterConnectionStateChanged;
             adapter1.Error -= OnAdapterError;
             adapter1.MarketDataReceived -= OnMarketDataReceived;
-            _logger.LogInformationWithCaller($"Adapter for {adapter.ExchangeName} removed from Feedhandler");
+            _logger.LogInformationWithCaller($"Adapter for {Exchange.Decode(adapter.Exchange)} removed from Feedhandler");
         }
     }
 

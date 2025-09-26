@@ -16,9 +16,10 @@ public readonly struct MarketDataEvent
     public readonly long Quantity;      // Quantity in minimum units
     public readonly EventKind Kind;     // Add/Update/Delete/Trade
     public readonly int SymbolId;       // Internal symbol identifier
+    public readonly ExchangeEnum SourceExchange;
 
     public MarketDataEvent(long sequence, long timestamp, Side side, long priceTicks,
-                          long quantity, EventKind kind, int symbolId)
+                          long quantity, EventKind kind, int symbolId, ExchangeEnum exchange)
     {
         Sequence = sequence;
         Timestamp = timestamp;
@@ -27,6 +28,7 @@ public readonly struct MarketDataEvent
         Quantity = quantity;
         Kind = kind;
         SymbolId = symbolId;
+        SourceExchange = exchange;
     }
 
     public override string ToString() =>

@@ -42,7 +42,7 @@ public class BinanceAdapter : IFeedAdapter
         TimeSpan.FromSeconds(10)
     };
 
-    public string ExchangeName => Exchange.BINANCE;
+    public ExchangeEnum Exchange => ExchangeEnum.BINANCE;
 
     public event EventHandler<ConnectionStateChangedEventArgs>? ConnectionStateChanged;
     public event EventHandler<FeedErrorEventArgs>? Error;
@@ -378,7 +378,8 @@ public class BinanceAdapter : IFeedAdapter
                             priceTicks: PriceUtils.ToTicks(price),
                             quantity: (long)(quantity * 100000000), // Convert to base units
                             kind: eventKind,
-                            symbolId: symbolId
+                            symbolId: symbolId,
+                            exchange: ExchangeEnum.BINANCE
                         );
 
                         OnMarketDataReceived(marketDataEvent);
@@ -403,7 +404,8 @@ public class BinanceAdapter : IFeedAdapter
                             priceTicks: PriceUtils.ToTicks(price),
                             quantity: (long)(quantity * 100000000), // Convert to base units
                             kind: eventKind,
-                            symbolId: symbolId
+                            symbolId: symbolId,
+                            exchange: ExchangeEnum.BINANCE
                         );
 
                         OnMarketDataReceived(marketDataEvent);

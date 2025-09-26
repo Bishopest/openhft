@@ -29,9 +29,9 @@ public class Program
         // Build service collection with dependency injection
         var services = new ServiceCollection();
         ConfigureServices(services);
-        
+
         var serviceProvider = services.BuildServiceProvider();
-        
+
         try
         {
             await RunAdvancedStrategyDemo(serviceProvider);
@@ -45,7 +45,7 @@ public class Program
         {
             serviceProvider.Dispose();
         }
-        
+
         Console.WriteLine();
         Console.WriteLine("Press any key to exit...");
         Console.ReadKey();
@@ -96,7 +96,7 @@ public class Program
         var strategyManager = services.GetRequiredService<IAdvancedStrategyManager>();
 
         logger.LogInformation("🎯 Starting Advanced Strategy Demonstration");
-        
+
         // Create sample market data
         var marketEvents = GenerateRealisticMarketData();
         var orderBooks = CreateSampleOrderBooks();
@@ -109,17 +109,17 @@ public class Program
         {
             eventCounter++;
             var orderBook = orderBooks[marketEvent.SymbolId % orderBooks.Count];
-            
+
             // Update order book with market event (simulation)
             UpdateOrderBookWithEvent(orderBook, marketEvent);
-            
+
             Console.WriteLine($"Event {eventCounter:D2}: {GetEventDescription(marketEvent)}");
-            
+
             try
             {
                 // Process through strategy manager
                 var orders = await strategyManager.ProcessMarketDataAsync(marketEvent, orderBook);
-                
+
                 if (orders.Any())
                 {
                     Console.WriteLine($"         📝 Generated {orders.Count()} orders:");
@@ -141,9 +141,9 @@ public class Program
             {
                 Console.WriteLine($"         ❌ Error processing event: {ex.Message}");
             }
-            
+
             Console.WriteLine();
-            
+
             // Small delay for visualization
             await Task.Delay(200);
         }
@@ -157,7 +157,7 @@ public class Program
         var events = new List<MarketDataEvent>();
         var random = new Random(42); // Seed for reproducible results
         var baseTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000;
-        
+
         // Simulate multiple trading pairs
         var tradingPairs = new[]
         {
@@ -178,10 +178,10 @@ public class Program
                     3 => 0.01m, // BTC/ETH 1% volatility
                     _ => 0.02m
                 };
-                
+
                 var priceChange = (decimal)(random.NextDouble() - 0.5) * 2 * volatility;
                 var currentPrice = pair.basePrice * (1 + priceChange);
-                
+
                 var quantity = pair.symbolId switch
                 {
                     1 => 0.1m + (decimal)random.NextDouble() * 2.0m, // 0.1-2.1 BTC
@@ -206,7 +206,8 @@ public class Program
                     priceTicks: DecimalToPriceTicks(currentPrice),
                     quantity: DecimalToQuantityTicks(quantity),
                     kind: eventKind,
-                    symbolId: pair.symbolId
+                    symbolId: pair.symbolId,
+                    exchange: ExchangeEnum.BINANCE
                 );
 
                 events.Add(marketEvent);
@@ -245,11 +246,11 @@ public class Program
         var symbolName = marketEvent.SymbolId switch
         {
             1 => "BTC/USDT",
-            2 => "ETH/USDT", 
+            2 => "ETH/USDT",
             3 => "BTC/ETH",
             _ => $"Symbol{marketEvent.SymbolId}"
         };
-        
+
         return $"{marketEvent.Kind} | {symbolName} | ${PriceTicksToDecimal(marketEvent.PriceTicks):F2} | Vol: {PriceTicksToDecimal(marketEvent.Quantity):F4}";
     }
 
@@ -257,11 +258,11 @@ public class Program
     {
         Console.WriteLine("📈 Strategy Performance Summary");
         Console.WriteLine("==============================");
-        
+
         try
         {
             var stats = await strategyManager.GetPortfolioStatistics();
-            
+
             Console.WriteLine($"Total Strategies: {stats.TotalStrategies}");
             Console.WriteLine($"Active Strategies: {stats.ActiveStrategies}");
             Console.WriteLine($"Total PnL: ${stats.TotalPnL:F2}");
@@ -275,7 +276,7 @@ public class Program
         {
             Console.WriteLine($"Unable to retrieve performance statistics: {ex.Message}");
         }
-        
+
         Console.WriteLine();
         Console.WriteLine("✅ Advanced Strategy Demonstration Complete!");
         Console.WriteLine();

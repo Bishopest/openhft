@@ -32,7 +32,7 @@ public interface IFeedAdapter : IDisposable
     /// Gets the name of the exchange this adapter connects to.
     /// Should match one of the constants in the `Exchange` class.
     /// </summary>
-    string ExchangeName { get; }
+    ExchangeEnum Exchange { get; }
 
     /// <summary>
     /// Check if adapter is connected

@@ -55,7 +55,8 @@ public class OrderBookTests
             priceTicks: priceTicks,
             quantity: quantity,
             kind: EventKind.Add,
-            symbolId: symbolId
+            symbolId: symbolId,
+            exchange: ExchangeEnum.BINANCE
         );
 
         // Act
@@ -87,7 +88,8 @@ public class OrderBookTests
             priceTicks: priceTicks,
             quantity: quantity,
             kind: EventKind.Add,
-            symbolId: symbolId
+            symbolId: symbolId,
+            exchange: ExchangeEnum.BINANCE
         );
 
         // Act
@@ -107,17 +109,17 @@ public class OrderBookTests
         // Arrange
         var orderBook = new OrderBook("BTCUSDT", _logger);
         var symbolId = SymbolUtils.GetSymbolId("BTCUSDT");
-
+        var exchange = ExchangeEnum.BINANCE;
         var bidPrice = PriceUtils.ToTicks(50000m);
         var askPrice = PriceUtils.ToTicks(50100m);
         var expectedSpread = askPrice - bidPrice;
 
         // Add bid
-        var bidEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), Side.Buy, bidPrice, 100000000, EventKind.Add, symbolId);
+        var bidEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), Side.Buy, bidPrice, 100000000, EventKind.Add, symbolId, exchange);
         orderBook.ApplyEvent(bidEvent);
 
         // Add ask
-        var askEvent = new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), Side.Sell, askPrice, 100000000, EventKind.Add, symbolId);
+        var askEvent = new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), Side.Sell, askPrice, 100000000, EventKind.Add, symbolId, exchange);
         orderBook.ApplyEvent(askEvent);
 
         // Act
@@ -133,14 +135,14 @@ public class OrderBookTests
         // Arrange
         var orderBook = new OrderBook("BTCUSDT", _logger);
         var symbolId = SymbolUtils.GetSymbolId("BTCUSDT");
-
+        var exchange = ExchangeEnum.BINANCE;
         var bidPrice = PriceUtils.ToTicks(50000m);
         var askPrice = PriceUtils.ToTicks(50100m);
         var expectedMid = (bidPrice + askPrice) / 2;
 
         // Add bid and ask
-        var bidEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), Side.Buy, bidPrice, 100000000, EventKind.Add, symbolId);
-        var askEvent = new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), Side.Sell, askPrice, 100000000, EventKind.Add, symbolId);
+        var bidEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), Side.Buy, bidPrice, 100000000, EventKind.Add, symbolId, exchange);
+        var askEvent = new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), Side.Sell, askPrice, 100000000, EventKind.Add, symbolId, exchange);
 
         orderBook.ApplyEvent(bidEvent);
         orderBook.ApplyEvent(askEvent);
@@ -158,10 +160,11 @@ public class OrderBookTests
         // Arrange
         var orderBook = new OrderBook("BTCUSDT", _logger);
         var symbolId = SymbolUtils.GetSymbolId("BTCUSDT");
+        var exchange = ExchangeEnum.BINANCE;
         var priceTicks = PriceUtils.ToTicks(50000m);
 
         // Add bid
-        var addEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), Side.Buy, priceTicks, 100000000, EventKind.Add, symbolId);
+        var addEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), Side.Buy, priceTicks, 100000000, EventKind.Add, symbolId, exchange);
         orderBook.ApplyEvent(addEvent);
 
         // Verify bid exists
@@ -170,7 +173,7 @@ public class OrderBookTests
         bidQty.Should().Be(100000000);
 
         // Delete the bid
-        var deleteEvent = new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), Side.Buy, priceTicks, 0, EventKind.Delete, symbolId);
+        var deleteEvent = new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), Side.Buy, priceTicks, 0, EventKind.Delete, symbolId, exchange);
         orderBook.ApplyEvent(deleteEvent);
 
         // Act & Assert
@@ -185,9 +188,10 @@ public class OrderBookTests
         // Arrange
         var orderBook = new OrderBook("BTCUSDT", _logger);
         var symbolId = SymbolUtils.GetSymbolId("BTCUSDT");
+        var exchange = ExchangeEnum.BINANCE;
 
-        var bidEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), Side.Buy, PriceUtils.ToTicks(50000m), 100000000, EventKind.Add, symbolId);
-        var askEvent = new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), Side.Sell, PriceUtils.ToTicks(50100m), 100000000, EventKind.Add, symbolId);
+        var bidEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), Side.Buy, PriceUtils.ToTicks(50000m), 100000000, EventKind.Add, symbolId, exchange);
+        var askEvent = new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), Side.Sell, PriceUtils.ToTicks(50100m), 100000000, EventKind.Add, symbolId, exchange);
 
         orderBook.ApplyEvent(bidEvent);
         orderBook.ApplyEvent(askEvent);
@@ -205,14 +209,14 @@ public class OrderBookTests
         // Arrange
         var orderBook = new OrderBook("BTCUSDT", _logger);
         var symbolId = SymbolUtils.GetSymbolId("BTCUSDT");
-
+        var exchange = ExchangeEnum.BINANCE;
         // Add multiple levels
         var events = new[]
         {
-            new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), Side.Buy, PriceUtils.ToTicks(50000m), 100000000, EventKind.Add, symbolId),
-            new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), Side.Buy, PriceUtils.ToTicks(49990m), 50000000, EventKind.Add, symbolId),
-            new MarketDataEvent(3, TimestampUtils.GetTimestampMicros(), Side.Sell, PriceUtils.ToTicks(50010m), 75000000, EventKind.Add, symbolId),
-            new MarketDataEvent(4, TimestampUtils.GetTimestampMicros(), Side.Sell, PriceUtils.ToTicks(50020m), 25000000, EventKind.Add, symbolId)
+            new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), Side.Buy, PriceUtils.ToTicks(50000m), 100000000, EventKind.Add, symbolId, exchange),
+            new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), Side.Buy, PriceUtils.ToTicks(49990m), 50000000, EventKind.Add, symbolId, exchange),
+            new MarketDataEvent(3, TimestampUtils.GetTimestampMicros(), Side.Sell, PriceUtils.ToTicks(50010m), 75000000, EventKind.Add, symbolId, exchange),
+            new MarketDataEvent(4, TimestampUtils.GetTimestampMicros(), Side.Sell, PriceUtils.ToTicks(50020m), 25000000, EventKind.Add, symbolId, exchange)
         };
 
         foreach (var evt in events)
