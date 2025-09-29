@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Concurrent;
 using Disruptor;
 using Disruptor.Dsl;
@@ -14,6 +13,10 @@ public class FeedHandler : IFeedHandler
     private readonly ILogger<FeedHandler> _logger;
     private readonly ConcurrentDictionary<ExchangeEnum, IFeedAdapter> _adapters;
     private readonly RingBuffer<MarketDataEventWrapper> _ringBuffer;
+
+    public event EventHandler<MarketDataEvent> MarketDataReceived;
+    public event EventHandler<ConnectionStateChangedEventArgs> AdapterConnectionStateChanged;
+
     public FeedHandlerStatistics Statistics { get; } = new();
 
     public FeedHandler(ILogger<FeedHandler> logger, ConcurrentDictionary<ExchangeEnum, IFeedAdapter> adapters, Disruptor<MarketDataEventWrapper> disruptor)
@@ -31,7 +34,7 @@ public class FeedHandler : IFeedHandler
             var adapter = kvp.Value;
 
             adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
-            adapter.Error += OnAdapterError;
+            adapter.Error += OnFeedError;
             adapter.MarketDataReceived += OnMarketDataReceived;
             _logger.LogInformationWithCaller($"Register market data handler for {exchangeName} adapter");
         }
@@ -67,19 +70,19 @@ public class FeedHandler : IFeedHandler
         if (_adapters.TryAdd(adapter.Exchange, adapter))
         {
             adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
-            adapter.Error += OnAdapterError;
+            adapter.Error += OnFeedError;
             adapter.MarketDataReceived += OnMarketDataReceived;
             _logger.LogInformationWithCaller($"Adapter for {Exchange.Decode(adapter.Exchange)} added Feedhandler");
         }
     }
 
-    public void RemoveAdapter(IFeedAdapter adapter)
+    public void RemoveAdapter(ExchangeEnum sourceExchange)
     {
-        if (_adapters.Remove(adapter.Exchange, out var adapter1))
+        if (_adapters.Remove(sourceExchange, out var adapter))
         {
-            adapter1.ConnectionStateChanged -= OnAdapterConnectionStateChanged;
-            adapter1.Error -= OnAdapterError;
-            adapter1.MarketDataReceived -= OnMarketDataReceived;
+            adapter.ConnectionStateChanged -= OnAdapterConnectionStateChanged;
+            adapter.Error -= OnFeedError;
+            adapter.MarketDataReceived -= OnMarketDataReceived;
             _logger.LogInformationWithCaller($"Adapter for {Exchange.Decode(adapter.Exchange)} removed from Feedhandler");
         }
     }
@@ -89,7 +92,7 @@ public class FeedHandler : IFeedHandler
         _logger.LogInformationWithCaller($"Adapter connection state changed: {e.IsConnected} - {e.Reason}");
     }
 
-    private void OnAdapterError(object? sender, OpenHFT.Feed.Interfaces.FeedErrorEventArgs e)
+    private void OnFeedError(object? sender, FeedErrorEventArgs e)
     {
         _logger.LogErrorWithCaller(e.Exception, $"Adapter error: {e.Context}");
     }

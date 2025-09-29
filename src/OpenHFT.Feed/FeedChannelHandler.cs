@@ -17,6 +17,7 @@ public class FeedChannelHandler : IFeedHandler
 
     public event EventHandler<MarketDataEvent> MarketDataReceived;
     public event EventHandler<GapDetectedEventArgs> GapDetected;
+    public event EventHandler<ConnectionStateChangedEventArgs> AdapterConnectionStateChanged;
 
     public FeedChannelHandler(ILogger<FeedChannelHandler> logger, ChannelWriter<MarketDataEvent> marketDataWriter, IEnumerable<IFeedAdapter> adapters)
     {
@@ -49,16 +50,20 @@ public class FeedChannelHandler : IFeedHandler
     {
         _adapters.Add(adapter);
         adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
-        adapter.Error += OnAdapterError;
+        adapter.Error += OnFeedError;
         adapter.MarketDataReceived += OnMarketDataReceived;
     }
 
-    public void RemoveAdapter(IFeedAdapter adapter)
+    public void RemoveAdapter(ExchangeEnum sourceExchange)
     {
-        _adapters.Remove(adapter);
-        adapter.ConnectionStateChanged -= OnAdapterConnectionStateChanged;
-        adapter.Error -= OnAdapterError;
-        adapter.MarketDataReceived -= OnMarketDataReceived;
+        var adapter = _adapters.Find(p => p.Exchange == sourceExchange);
+        if (adapter != null)
+        {
+            _adapters.Remove(adapter);
+            adapter.ConnectionStateChanged -= OnAdapterConnectionStateChanged;
+            adapter.Error -= OnFeedError;
+            adapter.MarketDataReceived -= OnMarketDataReceived;
+        }
     }
 
     private void OnAdapterConnectionStateChanged(object? sender, OpenHFT.Feed.Interfaces.ConnectionStateChangedEventArgs e)
@@ -66,7 +71,7 @@ public class FeedChannelHandler : IFeedHandler
         _logger.LogInformation("Adapter connection state changed: {IsConnected} - {Reason}", e.IsConnected, e.Reason);
     }
 
-    private void OnAdapterError(object? sender, OpenHFT.Feed.Interfaces.FeedErrorEventArgs e)
+    private void OnFeedError(object? sender, FeedErrorEventArgs e)
     {
         _logger.LogError(e.Exception, "Adapter error: {Context}", e.Context);
     }

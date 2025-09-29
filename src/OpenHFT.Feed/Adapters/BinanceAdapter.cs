@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
+using OpenHFT.Feed.Exceptions;
 using OpenHFT.Feed.Interfaces;
 
 namespace OpenHFT.Feed.Adapters;
@@ -53,7 +54,6 @@ public class BinanceAdapter : IFeedAdapter
         _logger = logger;
         _baseUrl = baseUrl ?? DefaultBaseUrl;
         _symbols = symbols;
-        Statistics.StartTime = DateTimeOffset.UtcNow;
     }
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
@@ -65,16 +65,17 @@ public class BinanceAdapter : IFeedAdapter
         try
         {
             await ConnectWithRetryAsync(_symbols, _cancellationTokenSource.Token);
-            Statistics.ReconnectCount++;
-            _logger.LogInformationWithCaller("Connected to Binance WebSocket successfully");
-            OnConnectionStateChanged(true, "Connected successfully");
             // Start receiving messages
             _receiveTask = Task.Run(() => ReceiveLoop(_cancellationTokenSource.Token));
+        }
+        catch (FeedConnectionException fcex)
+        {
+            _logger.LogErrorWithCaller(fcex, "Failed to connect to Binance WebSocket");
+            Error?.Invoke(this, new FeedErrorEventArgs(fcex, null));
         }
         catch (Exception ex)
         {
             _logger.LogErrorWithCaller(ex, "Failed to connect to Binance WebSocket");
-            OnError(ex, "Connection failed");
             throw;
         }
     }
@@ -95,22 +96,20 @@ public class BinanceAdapter : IFeedAdapter
 
                 await _webSocket.ConnectAsync(new Uri(streamUrl), cancellationToken);
 
-                _logger.LogInformationWithCaller($"Successfully connected to Binance WebSocket(state: {_webSocket.State.ToString()})");
-
+                _logger.LogInformationWithCaller($"Successfully connected to Binance WebSocket(state: {_webSocket.State})");
+                ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(true, ExchangeEnum.BINANCE, "Connected Successfully on ConnectWithRetryAsync func"));
                 return;
             }
             catch (Exception ex) when (retryAttempt < RetryDelays.Length - 1)
             {
                 var delay = RetryDelays[retryAttempt];
-
                 _logger.LogErrorWithCaller(ex, $"Connection attempt {retryAttempt + 1} failed, retrying in {delay.TotalMilliseconds}ms");
-
                 await Task.Delay(delay, cancellationToken);
                 retryAttempt++;
             }
         }
 
-        throw new InvalidOperationException($"Failed to connect after {RetryDelays.Length} attempts");
+        throw new FeedConnectionException(this.Exchange, new Uri(BuildStreamUrl(symbols)), $"Failed to connect binance ws after {RetryDelays.Length} attempts");
     }
 
     private void ConfigureWebSocket(ClientWebSocket webSocket)
@@ -154,13 +153,12 @@ public class BinanceAdapter : IFeedAdapter
                 await _receiveTask;
             }
 
-            OnConnectionStateChanged(false, "Disconnected by request");
+            ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(false, ExchangeEnum.BINANCE, "Disconnected by request on DisconnectAsync func"));
             _logger.LogInformationWithCaller("Disconnected from Binance WebSocket");
         }
         catch (Exception ex)
         {
             _logger.LogErrorWithCaller(ex, "Error during disconnect");
-            OnError(ex, "Disconnect error");
         }
         finally
         {
@@ -247,15 +245,12 @@ public class BinanceAdapter : IFeedAdapter
 
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
-                        _logger.LogInformation("WebSocket closed by remote endpoint");
-                        OnConnectionStateChanged(false, "Remote endpoint closed connection");
-                        return;
+                        throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely);
                     }
 
                     if (result.MessageType == WebSocketMessageType.Text)
                     {
                         messageBuffer.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
-                        Statistics.BytesReceived += result.Count;
                     }
                 } while (!result.EndOfMessage);
 
@@ -265,20 +260,20 @@ public class BinanceAdapter : IFeedAdapter
                 }
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            _logger.LogInformationWithCaller("WebSocket receive loop cancelled");
+            _logger.LogInformationWithCaller($"WebSocket ReceiveLoop cancelled, msg: {ex.Message}");
         }
-        catch (WebSocketException ex) when (ex.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
+        catch (WebSocketException ex)
         {
             _logger.LogWarningWithCaller("WebSocket connection closed prematurely");
-            OnConnectionStateChanged(false, "Connection closed prematurely");
+            ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(false, ExchangeEnum.BINANCE, "Connection closed prematurely"));
+            await ConnectWithRetryAsync(_symbols, cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogErrorWithCaller(ex, "Error in WebSocket receive loop");
-            OnError(ex, "Receive loop error");
-            OnConnectionStateChanged(false, "Error in receive loop");
+            _logger.LogErrorWithCaller(ex, "Error in ReceiveLoop");
+            Error?.Invoke(this, new FeedErrorEventArgs(new FeedReceiveException(this.Exchange, "Unhandled exception in receive loop", ex), null));
         }
     }
 
@@ -286,9 +281,6 @@ public class BinanceAdapter : IFeedAdapter
     {
         try
         {
-            Statistics.MessagesReceived++;
-            Statistics.LastMessageTime = DateTimeOffset.UtcNow;
-
             using var document = JsonDocument.Parse(message);
             var root = document.RootElement;
 
@@ -319,13 +311,15 @@ public class BinanceAdapter : IFeedAdapter
                 }
             }
 
-            Statistics.MessagesProcessed++;
+        }
+        catch (FeedParseException fex)
+        {
+            _logger.LogErrorWithCaller(fex, "Error processing message: {Message}", fex.RawMessage);
+            Error?.Invoke(this, new FeedErrorEventArgs(fex, null));
         }
         catch (Exception ex)
         {
             _logger.LogErrorWithCaller(ex, "Error processing message: {Message}", message);
-            Statistics.MessagesDropped++;
-            OnError(ex, "Message processing error");
         }
     }
 
@@ -338,7 +332,7 @@ public class BinanceAdapter : IFeedAdapter
 
             if (string.IsNullOrEmpty(symbol))
             {
-                _logger.LogWarning("Missing symbol in depth update");
+                _logger.LogWarningWithCaller("Missing symbol in depth update");
                 return;
             }
 
@@ -355,7 +349,7 @@ public class BinanceAdapter : IFeedAdapter
                     {
                         _logger.LogDebug("Sequence gap detected for {Symbol}: expected {Expected}, received {Received}",
                             symbol, lastSequence + 1, currentSequence);
-                        Statistics.SequenceGaps++;
+                        Statistics.RecordSequenceGap();
                     }
                 }
                 _lastSequenceNumbers[symbol] = currentSequence;
@@ -382,7 +376,7 @@ public class BinanceAdapter : IFeedAdapter
                             exchange: ExchangeEnum.BINANCE
                         );
 
-                        OnMarketDataReceived(marketDataEvent);
+                        MarketDataReceived?.Invoke(this, marketDataEvent);
                     }
                 }
             }
@@ -408,31 +402,16 @@ public class BinanceAdapter : IFeedAdapter
                             exchange: ExchangeEnum.BINANCE
                         );
 
-                        OnMarketDataReceived(marketDataEvent);
+                        MarketDataReceived?.Invoke(this, marketDataEvent);
                     }
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing depth update");
-            throw;
+            var feedEx = new FeedParseException(ExchangeEnum.BINANCE, ex.Message, "Error processing depth update", ex);
+            throw feedEx;
         }
-    }
-
-    protected virtual void OnConnectionStateChanged(bool isConnected, string? reason = null)
-    {
-        ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(isConnected, reason));
-    }
-
-    protected virtual void OnError(Exception exception, string? context = null)
-    {
-        Error?.Invoke(this, new FeedErrorEventArgs(exception, context));
-    }
-
-    protected virtual void OnMarketDataReceived(MarketDataEvent marketDataEvent)
-    {
-        MarketDataReceived?.Invoke(this, marketDataEvent);
     }
 
     public void Dispose()

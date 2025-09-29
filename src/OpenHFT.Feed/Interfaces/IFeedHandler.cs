@@ -26,10 +26,14 @@ public interface IFeedHandler : IDisposable
     /// <summary>
     /// Remove a feed adapter
     /// </summary>
-    void RemoveAdapter(IFeedAdapter adapter);
+    void RemoveAdapter(ExchangeEnum sourceExchange);
 
     /// <summary>
     /// Get feed handler statistics
     /// </summary>
     FeedHandlerStatistics Statistics { get; }
+
+    event EventHandler<MarketDataEvent> MarketDataReceived;
+
+    event EventHandler<ConnectionStateChangedEventArgs> AdapterConnectionStateChanged;
 }
