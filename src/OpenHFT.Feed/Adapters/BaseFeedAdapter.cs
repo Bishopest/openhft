@@ -2,6 +2,8 @@ using System;
 using System.Net.WebSockets;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using OpenHFT.Core.Instruments;
+using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Exceptions;
@@ -12,13 +14,14 @@ namespace OpenHFT.Feed.Adapters;
 public abstract class BaseFeedAdapter : IFeedAdapter
 {
     protected readonly ILogger _logger;
+    protected readonly IInstrumentRepository _instrumentRepository;
     protected ClientWebSocket? _webSocket;
     private CancellationTokenSource? _cancellationTokenSource;
     private readonly object _connectionLock = new();
     private Task? _receiveTask;
     private bool _isDisposed;
     private readonly object _subscriptionLock = new();
-    private readonly HashSet<string> _subscribedSymbols = new();
+    private readonly HashSet<Instrument> _subscribedInsts = new();
 
     private readonly TimeSpan[] _retryDelays =
     {
@@ -31,15 +34,18 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
     public bool IsConnected => _webSocket?.State == WebSocketState.Open;
     public string Status => _webSocket?.State.ToString() ?? "Disconnected";
-    public FeedStatistics Statistics { get; } = new();
 
     public event EventHandler<ConnectionStateChangedEventArgs>? ConnectionStateChanged;
     public event EventHandler<FeedErrorEventArgs>? Error;
     public event EventHandler<MarketDataEvent>? MarketDataReceived;
 
-    protected BaseFeedAdapter(ILogger logger)
+    public ProductType ProductType { get; }
+
+    protected BaseFeedAdapter(ILogger logger, ProductType type, IInstrumentRepository instrumentRepository)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _instrumentRepository = instrumentRepository;
+        ProductType = type;
     }
 
     #region Public Methods (IFeedAdapter Implementation)
@@ -60,8 +66,8 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         }
         catch (Exception ex)
         {
-            var fex = new FeedConnectionException(Exchange, new Uri(GetBaseUrl()), "Failed to connect after all retries.", ex);
-            _logger.LogError(fex, "Failed to connect to {Exchange} WebSocket.", Exchange);
+            var fex = new FeedConnectionException(SourceExchange, new Uri(GetBaseUrl()), "Failed to connect after all retries.", ex);
+            _logger.LogError(fex, "Failed to connect to {Exchange} WebSocket.", SourceExchange);
             OnError(new FeedErrorEventArgs(fex, "Connection Failure"));
             throw fex;
         }
@@ -74,7 +80,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
             if (!IsConnected && _receiveTask == null) return;
         }
 
-        _logger.LogInformation("Disconnecting from {Exchange} WebSocket...", Exchange);
+        _logger.LogInformation("Disconnecting from {Exchange} WebSocket...", SourceExchange);
 
         if (_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
         {
@@ -88,19 +94,19 @@ public abstract class BaseFeedAdapter : IFeedAdapter
                 using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
                 await _receiveTask.WaitAsync(linkedCts.Token);
-                _logger.LogInformation("Receive task for {Exchange} completed.", Exchange);
+                _logger.LogInformation("Receive task for {Exchange} completed.", SourceExchange);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                _logger.LogWarning("Disconnection was cancelled by the caller for {Exchange}.", Exchange);
+                _logger.LogWarning("Disconnection was cancelled by the caller for {Exchange}.", SourceExchange);
             }
             catch (OperationCanceledException)
             {
-                _logger.LogWarning("Timed out waiting for the receive task to complete for {Exchange}.", Exchange);
+                _logger.LogWarning("Timed out waiting for the receive task to complete for {Exchange}.", SourceExchange);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An exception occurred while waiting for the receive task to complete for {Exchange}.", Exchange);
+                _logger.LogError(ex, "An exception occurred while waiting for the receive task to complete for {Exchange}.", SourceExchange);
             }
             finally
             {
@@ -111,20 +117,20 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         CleanupConnection();
 
         OnConnectionStateChanged(false, "Disconnected by request");
-        _logger.LogInformation("Successfully disconnected from {Exchange} WebSocket.", Exchange);
+        _logger.LogInformation("Successfully disconnected from {Exchange} WebSocket.", SourceExchange);
     }
 
-    public async Task SubscribeAsync(IEnumerable<string> symbols, CancellationToken cancellationToken = default)
+    public async Task SubscribeAsync(IEnumerable<Instrument> symbols, CancellationToken cancellationToken = default)
     {
         if (!IsConnected)
             throw new InvalidOperationException("Cannot subscribe when not connected.");
 
-        var symbolsToSubscribe = new List<string>();
+        var symbolsToSubscribe = new List<Instrument>();
         lock (_subscriptionLock)
         {
             foreach (var symbol in symbols)
             {
-                if (_subscribedSymbols.Add(symbol.ToLowerInvariant()))
+                if (_subscribedInsts.Add(symbol))
                 {
                     symbolsToSubscribe.Add(symbol);
                 }
@@ -134,24 +140,24 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         if (symbolsToSubscribe.Any())
         {
             _logger.LogInformation("Subscribing to {Count} new symbols on {Exchange}: {Symbols}",
-                symbolsToSubscribe.Count, Exchange, string.Join(", ", symbolsToSubscribe));
+                symbolsToSubscribe.Count, SourceExchange, string.Join(", ", symbolsToSubscribe.Select(s => s.Symbol)));
 
             // 실제 구독 메시지 전송은 하위 클래스에 위임
             await DoSubscribeAsync(symbolsToSubscribe, cancellationToken);
         }
     }
 
-    public async Task UnsubscribeAsync(IEnumerable<string> symbols, CancellationToken cancellationToken = default)
+    public async Task UnsubscribeAsync(IEnumerable<Instrument> symbols, CancellationToken cancellationToken = default)
     {
         if (!IsConnected)
             throw new InvalidOperationException("Cannot unsubscribe when not connected.");
 
-        var symbolsToUnsubscribe = new List<string>();
+        var symbolsToUnsubscribe = new List<Instrument>();
         lock (_subscriptionLock)
         {
             foreach (var symbol in symbols)
             {
-                if (_subscribedSymbols.Remove(symbol.ToLowerInvariant()))
+                if (_subscribedInsts.Remove(symbol))
                 {
                     symbolsToUnsubscribe.Add(symbol);
                 }
@@ -161,9 +167,8 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         if (symbolsToUnsubscribe.Any())
         {
             _logger.LogInformation("Unsubscribing from {Count} symbols on {Exchange}: {Symbols}",
-               symbolsToUnsubscribe.Count, Exchange, string.Join(", ", symbolsToUnsubscribe));
+               symbolsToUnsubscribe.Count, SourceExchange, string.Join(", ", symbolsToUnsubscribe.Select(k => k.Symbol)));
 
-            // 실제 구독 해지 메시지 전송은 하위 클래스에 위임
             await DoUnsubscribeAsync(symbolsToUnsubscribe, cancellationToken);
         }
     }
@@ -195,14 +200,14 @@ public abstract class BaseFeedAdapter : IFeedAdapter
                 _webSocket = new ClientWebSocket();
                 ConfigureWebSocket(_webSocket);
 
-                var streamUrl = BuildStreamUrl(_subscribedSymbols);
-                _logger.LogInformation("Connecting to {Url} (Attempt {Attempt})", streamUrl, retryAttempt + 1);
+                var baseUrl = GetBaseUrl();
+                _logger.LogInformation("Connecting to {Url} (Attempt {Attempt})", baseUrl, retryAttempt + 1);
 
-                await _webSocket.ConnectAsync(new Uri(streamUrl), cancellationToken);
+                await _webSocket.ConnectAsync(new Uri(baseUrl), cancellationToken);
 
                 if (_webSocket.State == WebSocketState.Open)
                 {
-                    _logger.LogInformation("Successfully connected to {Exchange} WebSocket.", Exchange);
+                    _logger.LogInformation("Successfully connected to {Exchange} WebSocket.", SourceExchange);
                     OnConnectionStateChanged(true, "Connected Successfully");
                     _receiveTask = Task.Run(() => ReceiveLoop(cancellationToken), cancellationToken);
                     return;
@@ -212,7 +217,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
             {
                 var delay = _retryDelays[retryAttempt];
                 _logger.LogWarning(ex, "Connection attempt {Attempt} for {Exchange} failed. Retrying in {Delay}s...",
-                    retryAttempt + 1, Exchange, delay.TotalSeconds);
+                    retryAttempt + 1, SourceExchange, delay.TotalSeconds);
                 await Task.Delay(delay, cancellationToken);
                 retryAttempt++;
             }
@@ -221,7 +226,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         if (cancellationToken.IsCancellationRequested)
             throw new OperationCanceledException("Connection was cancelled.");
 
-        throw new Exception($"Failed to connect to {Exchange} after {retryAttempt} attempts.");
+        throw new Exception($"Failed to connect to {SourceExchange} after {retryAttempt} attempts.");
     }
 
     private async Task ReceiveLoop(CancellationToken cancellationToken)
@@ -255,18 +260,18 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("{Exchange} ReceiveLoop was cancelled.", Exchange);
+            _logger.LogInformation("{Exchange} ReceiveLoop was cancelled.", SourceExchange);
         }
         catch (WebSocketException ex)
         {
-            _logger.LogWarning(ex, "{Exchange} WebSocket connection closed unexpectedly. Reason: {Message}. Attempting to reconnect...", Exchange, ex.Message);
+            _logger.LogWarning(ex, "{Exchange} WebSocket connection closed unexpectedly. Reason: {Message}. Attempting to reconnect...", SourceExchange, ex.Message);
             OnConnectionStateChanged(false, "Connection Lost");
             _ = Task.Run(() => ConnectWithRetryAsync(_cancellationTokenSource?.Token ?? CancellationToken.None));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled exception in {Exchange} ReceiveLoop.", Exchange);
-            OnError(new FeedErrorEventArgs(new FeedReceiveException(Exchange, "Unhandled exception in receive loop", ex), null));
+            _logger.LogError(ex, "Unhandled exception in {Exchange} ReceiveLoop.", SourceExchange);
+            OnError(new FeedErrorEventArgs(new FeedReceiveException(SourceExchange, "Unhandled exception in receive loop", ex), null));
         }
     }
 
@@ -284,19 +289,14 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
     #region Abstract & Virtual Methods for Subclasses
 
-    public abstract ExchangeEnum Exchange { get; }
+    public abstract ExchangeEnum SourceExchange { get; }
 
     /// <summary>
     /// Gets the base WebSocket URL for the exchange.
     /// </summary>
     protected abstract string GetBaseUrl();
 
-    /// <summary>
-    /// Builds the full stream URL based on the list of symbols to subscribe to.
-    /// Some exchanges (like Binance) require all symbols in the connection URL itself.
-    /// Others connect first, then subscribe.
-    /// </summary>
-    protected abstract string BuildStreamUrl(IEnumerable<string> symbols);
+    protected abstract void ConfigureWebsocket(ClientWebSocket websocket);
 
     /// <summary>
     /// Processes a raw message received from the WebSocket.
@@ -306,12 +306,12 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     /// <summary>
     /// Sends subscription messages to the WebSocket for new symbols.
     /// </summary>
-    protected abstract Task DoSubscribeAsync(IEnumerable<string> symbols, CancellationToken cancellationToken);
+    protected abstract Task DoSubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken);
 
     /// <summary>
     /// Sends unsubscription messages to the WebSocket.
     /// </summary>
-    protected abstract Task DoUnsubscribeAsync(IEnumerable<string> symbols, CancellationToken cancellationToken);
+    protected abstract Task DoUnsubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken);
 
     /// <summary>
     /// Allows subclasses to apply specific WebSocket configurations.
@@ -327,7 +327,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
     protected virtual void OnConnectionStateChanged(bool isConnected, string reason)
     {
-        ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(isConnected, Exchange, reason));
+        ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(isConnected, SourceExchange, reason));
     }
 
     protected virtual void OnError(FeedErrorEventArgs e)

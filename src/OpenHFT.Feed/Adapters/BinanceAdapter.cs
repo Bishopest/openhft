@@ -2,6 +2,8 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using OpenHFT.Core.Instruments;
+using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Exceptions;
@@ -13,422 +15,312 @@ namespace OpenHFT.Feed.Adapters;
 /// Binance WebSocket feed adapter for real-time market data
 /// Supports both individual symbol streams and combined streams
 /// </summary>
-public class BinanceAdapter : IFeedAdapter
+public class BinanceAdapter : BaseFeedAdapter
 {
-    private readonly ILogger<BinanceAdapter> _logger;
-    private readonly string _baseUrl;
-    private ClientWebSocket? _webSocket;
-    private CancellationTokenSource? _cancellationTokenSource;
-    private Task? _receiveTask;
-    private readonly string[] _symbols;
-    private readonly HashSet<string> _subscribedSymbols = new();
-    private readonly Dictionary<string, long> _lastSequenceNumbers = new();
-    private bool _isDisposed;
-
-    // Binance WebSocket endpoints - using Futures API for better trading support
+    private const string TopicAggTrade = "@aggTrade";
+    private const string TopicBookTicker = "@bookTicker";
+    private const string TopicDepth = "@depth@100ms";
     private const string DefaultBaseUrl = "wss://fstream.binance.com/stream";
-    private readonly string[] _defaultSymbols = { "btcusdt", "ethusdt" };
 
-    public bool IsConnected => _webSocket?.State == WebSocketState.Open;
-    public string Status => _webSocket?.State.ToString() ?? "Disconnected";
-    public FeedStatistics Statistics { get; } = new();
-    private readonly TimeSpan[] RetryDelays =
+    public override ExchangeEnum SourceExchange => ExchangeEnum.BINANCE;
+
+    public BinanceAdapter(ILogger<BinanceAdapter> logger, ProductType type, IInstrumentRepository instrumentRepository) : base(logger, type, instrumentRepository)
     {
-        TimeSpan.FromMilliseconds(100),
-        TimeSpan.FromMilliseconds(250),
-        TimeSpan.FromMilliseconds(500),
-        TimeSpan.FromSeconds(1),
-        TimeSpan.FromSeconds(2),
-        TimeSpan.FromSeconds(5),
-        TimeSpan.FromSeconds(10)
-    };
-
-    public ExchangeEnum Exchange => ExchangeEnum.BINANCE;
-
-    public event EventHandler<ConnectionStateChangedEventArgs>? ConnectionStateChanged;
-    public event EventHandler<FeedErrorEventArgs>? Error;
-    public event EventHandler<MarketDataEvent>? MarketDataReceived;
-
-    public BinanceAdapter(ILogger<BinanceAdapter> logger, string[] symbols, string? baseUrl = null)
-    {
-        _logger = logger;
-        _baseUrl = baseUrl ?? DefaultBaseUrl;
-        _symbols = symbols;
     }
 
-    public async Task ConnectAsync(CancellationToken cancellationToken = default)
+    private IEnumerable<string> GetDefaultStreamsForSymbol(string symbol)
     {
-        if (_isDisposed) throw new ObjectDisposedException(nameof(BinanceAdapter));
-        if (IsConnected) return;
+        var normalizedSymbol = symbol.ToLowerInvariant();
+        yield return $"{normalizedSymbol}{TopicAggTrade}";
+        yield return $"{normalizedSymbol}{TopicBookTicker}";
+        yield return $"{normalizedSymbol}{TopicDepth}";
+    }
 
-        _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        try
+    // private async Task ProcessMessage(string message)
+    // {
+    //     try
+    //     {
+    //         using var document = JsonDocument.Parse(message);
+    //         var root = document.RootElement;
+
+    //         // Check if this is a subscription response
+    //         if (root.TryGetProperty("result", out _) || root.TryGetProperty("id", out _))
+    //         {
+    //             _logger.LogDebug("Received subscription response: {Message}", message);
+    //             return;
+    //         }
+
+    //         // Process depth update
+    //         if (root.TryGetProperty("stream", out var streamElement) &&
+    //             root.TryGetProperty("data", out var dataElement))
+    //         {
+    //             var stream = streamElement.GetString();
+    //             if (stream?.Contains("@depth") == true)
+    //             {
+    //                 await ProcessDepthUpdate(dataElement, stream);
+    //             }
+    //         }
+    //         else if (root.TryGetProperty("e", out var eventTypeElement))
+    //         {
+    //             // Direct depth update (single stream)
+    //             var eventType = eventTypeElement.GetString();
+    //             if (eventType == "depthUpdate")
+    //             {
+    //                 await ProcessDepthUpdate(root);
+    //             }
+    //         }
+
+    //     }
+    //     catch (FeedParseException fex)
+    //     {
+    //         _logger.LogErrorWithCaller(fex, "Error processing message: {Message}", fex.RawMessage);
+    //         Error?.Invoke(this, new FeedErrorEventArgs(fex, null));
+    //     }
+    //     catch (Exception ex)
+    //     {
+    //         _logger.LogErrorWithCaller(ex, "Error processing message: {Message}", message);
+    //     }
+    // }
+
+    private void ProcessAggTrade(JsonElement data)
+    {
+        var symbol = data.GetProperty("s").GetString();
+        if (symbol == null) return;
+        var instrument = _instrumentRepository.FindBySymbol(symbol, ProductType, SourceExchange);
+        if (instrument == null) return;
+
+        var price = data.GetProperty("p").GetDecimal();
+        var quantity = data.GetProperty("q").GetDecimal();
+        var tradeTime = data.GetProperty("T").GetInt64(); // Milliseconds
+        var isBuyerMaker = data.GetProperty("m").GetBoolean();
+
+        // If buyer is the maker, the aggressor was a seller. Otherwise, a buyer.
+        var side = isBuyerMaker ? Side.Sell : Side.Buy;
+
+        var marketDataEvent = new MarketDataEvent(
+            sequence: 0, // aggTrade doesn't have a clear sequence like depth updates
+            timestamp: tradeTime * 1000, // Convert ms to microseconds
+            side: side,
+            priceTicks: PriceUtils.ToTicks(price), // Assumes a PriceUtils helper
+            quantity: (long)(quantity * 100_000_000), // Convert to base units
+            kind: EventKind.Trade,
+            instrumentId: instrument.InstrumentId,
+            exchange: SourceExchange
+        );
+
+        OnMarketDataReceived(marketDataEvent);
+    }
+
+    private void ProcessBookTicker(JsonElement data)
+    {
+        var symbol = data.GetProperty("s").GetString();
+        // if (symbol == null || !SymbolToInstrumentMap.TryGetValue(symbol, out var instrument)) return;
+        if (symbol == null) return;
+        var instrument = _instrumentRepository.FindBySymbol(symbol, ProductType, SourceExchange);
+        if (instrument == null) return;
+
+
+        var updateId = data.GetProperty("u").GetInt64();
+        var eventTime = data.GetProperty("E").GetInt64() * 1000; // Convert ms to microseconds
+
+        // Process Best Bid
+        if (decimal.TryParse(data.GetProperty("b").GetString(), out var bidPrice) &&
+            decimal.TryParse(data.GetProperty("B").GetString(), out var bidQty) && bidQty > 0)
         {
-            await ConnectWithRetryAsync(_symbols, _cancellationTokenSource.Token);
-            // Start receiving messages
-            _receiveTask = Task.Run(() => ReceiveLoop(_cancellationTokenSource.Token));
+            var bidEvent = new MarketDataEvent(
+                sequence: updateId,
+                timestamp: eventTime,
+                side: Side.Buy,
+                priceTicks: PriceUtils.ToTicks(bidPrice),
+                quantity: (long)(bidQty * 100_000_000),
+                kind: EventKind.Update,
+                instrumentId: instrument.InstrumentId,
+                exchange: SourceExchange
+            );
+            OnMarketDataReceived(bidEvent);
         }
-        catch (FeedConnectionException fcex)
+
+        // Process Best Ask
+        if (decimal.TryParse(data.GetProperty("a").GetString(), out var askPrice) &&
+            decimal.TryParse(data.GetProperty("A").GetString(), out var askQty) && askQty > 0)
         {
-            _logger.LogErrorWithCaller(fcex, "Failed to connect to Binance WebSocket");
-            Error?.Invoke(this, new FeedErrorEventArgs(fcex, null));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogErrorWithCaller(ex, "Failed to connect to Binance WebSocket");
-            throw;
+            var askEvent = new MarketDataEvent(
+                sequence: updateId,
+                timestamp: eventTime,
+                side: Side.Sell,
+                priceTicks: PriceUtils.ToTicks(askPrice),
+                quantity: (long)(askQty * 100_000_000),
+                kind: EventKind.Update,
+                instrumentId: instrument.InstrumentId,
+                exchange: SourceExchange
+            );
+            OnMarketDataReceived(askEvent);
         }
     }
 
-    private async Task ConnectWithRetryAsync(string[] symbols, CancellationToken cancellationToken)
+    private void ProcessDepthUpdate(JsonElement data)
     {
-        var retryAttempt = 0;
+        var symbol = data.GetProperty("s").GetString();
+        if (symbol == null) return;
+        var instrument = _instrumentRepository.FindBySymbol(symbol, ProductType, SourceExchange);
+        if (instrument == null) return;
 
-        while (!cancellationToken.IsCancellationRequested)
+        var timestamp = data.GetProperty("E").GetInt64() * 1000; // Event time in microseconds
+        var finalUpdateId = data.GetProperty("u").GetInt64();
+
+        // Here you should check sequence continuity using 'pu' and 'U'/'u' as per Binance docs.
+        // For simplicity, this example just processes the updates.
+
+        // Process bids
+        if (data.TryGetProperty("b", out var bidsElement))
         {
-            try
+            foreach (var bid in bidsElement.EnumerateArray())
             {
-                _webSocket = new ClientWebSocket();
-                ConfigureWebSocket(_webSocket);
-
-                var streamUrl = BuildStreamUrl(symbols);
-                _logger.LogInformationWithCaller($"Connecting to {streamUrl} (attempt {retryAttempt + 1})");
-
-                await _webSocket.ConnectAsync(new Uri(streamUrl), cancellationToken);
-
-                _logger.LogInformationWithCaller($"Successfully connected to Binance WebSocket(state: {_webSocket.State})");
-                ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(true, ExchangeEnum.BINANCE, "Connected Successfully on ConnectWithRetryAsync func"));
-                return;
-            }
-            catch (Exception ex) when (retryAttempt < RetryDelays.Length - 1)
-            {
-                var delay = RetryDelays[retryAttempt];
-                _logger.LogErrorWithCaller(ex, $"Connection attempt {retryAttempt + 1} failed, retrying in {delay.TotalMilliseconds}ms");
-                await Task.Delay(delay, cancellationToken);
-                retryAttempt++;
-            }
-        }
-
-        throw new FeedConnectionException(this.Exchange, new Uri(BuildStreamUrl(symbols)), $"Failed to connect binance ws after {RetryDelays.Length} attempts");
-    }
-
-    private void ConfigureWebSocket(ClientWebSocket webSocket)
-    {
-        // Configure WebSocket options for optimal performance
-        webSocket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
-        webSocket.Options.SetBuffer(8192, 8192); // 8KB buffers
-    }
-
-    private string BuildStreamUrl(string[] symbols)
-    {
-        var streams = new List<string>();
-
-        foreach (var symbol in symbols)
-        {
-            var symbolLower = symbol.ToLowerInvariant();
-            // Order book depth (20 levels, 100ms update frequency)
-            streams.Add($"{symbolLower}@depth20@100ms");
-            // Real-time aggregate trades
-            streams.Add($"{symbolLower}@aggTrade");
-        }
-
-        return _baseUrl + string.Join("/", streams);
-    }
-
-    public async Task DisconnectAsync(CancellationToken cancellationToken = default)
-    {
-        if (!IsConnected) return;
-
-        try
-        {
-            _cancellationTokenSource?.Cancel();
-
-            if (_webSocket?.State == WebSocketState.Open)
-            {
-                await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Disconnect requested", cancellationToken);
-            }
-
-            if (_receiveTask != null)
-            {
-                await _receiveTask;
-            }
-
-            ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(false, ExchangeEnum.BINANCE, "Disconnected by request on DisconnectAsync func"));
-            _logger.LogInformationWithCaller("Disconnected from Binance WebSocket");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogErrorWithCaller(ex, "Error during disconnect");
-        }
-        finally
-        {
-            _webSocket?.Dispose();
-            _webSocket = null;
-            _cancellationTokenSource?.Dispose();
-            _cancellationTokenSource = null;
-        }
-    }
-
-    public async Task SubscribeAsync(IEnumerable<string> symbols, CancellationToken cancellationToken = default)
-    {
-        if (!IsConnected)
-            throw new InvalidOperationException("Not connected to WebSocket");
-
-        var symbolList = symbols.ToList();
-        foreach (var symbol in symbolList)
-        {
-            var normalizedSymbol = symbol.ToLower();
-            if (_subscribedSymbols.Add(normalizedSymbol))
-            {
-                // Subscribe to depth stream for order book updates
-                var subscribeMessage = JsonSerializer.Serialize(new
+                if (decimal.TryParse(bid[0].GetString(), out var price) &&
+                    decimal.TryParse(bid[1].GetString(), out var quantity))
                 {
-                    method = "SUBSCRIBE",
-                    @params = new[] { $"{normalizedSymbol}@depth@100ms" },
-                    id = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                });
-
-                await SendMessage(subscribeMessage, cancellationToken);
-                _logger.LogInformation("Subscribed to {Symbol} depth stream", normalizedSymbol);
-            }
-        }
-    }
-
-    public async Task UnsubscribeAsync(IEnumerable<string> symbols, CancellationToken cancellationToken = default)
-    {
-        if (!IsConnected)
-            throw new InvalidOperationException("Not connected to WebSocket");
-
-        var symbolList = symbols.ToList();
-        foreach (var symbol in symbolList)
-        {
-            var normalizedSymbol = symbol.ToLower();
-            if (_subscribedSymbols.Remove(normalizedSymbol))
-            {
-                var unsubscribeMessage = JsonSerializer.Serialize(new
-                {
-                    method = "UNSUBSCRIBE",
-                    @params = new[] { $"{normalizedSymbol}@depth@100ms" },
-                    id = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                });
-
-                await SendMessage(unsubscribeMessage, cancellationToken);
-                _logger.LogInformation("Unsubscribed from {Symbol} depth stream", normalizedSymbol);
-            }
-        }
-    }
-
-    private async Task SendMessage(string message, CancellationToken cancellationToken)
-    {
-        if (_webSocket?.State != WebSocketState.Open)
-            throw new InvalidOperationException("WebSocket is not connected");
-
-        var bytes = Encoding.UTF8.GetBytes(message);
-        await _webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
-    }
-
-    private async Task ReceiveLoop(CancellationToken cancellationToken)
-    {
-        var buffer = new byte[8192];
-        var messageBuffer = new StringBuilder();
-
-        try
-        {
-            while (!cancellationToken.IsCancellationRequested && _webSocket?.State == WebSocketState.Open)
-            {
-                WebSocketReceiveResult result;
-                messageBuffer.Clear();
-
-                do
-                {
-                    result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
-
-                    if (result.MessageType == WebSocketMessageType.Close)
-                    {
-                        throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely);
-                    }
-
-                    if (result.MessageType == WebSocketMessageType.Text)
-                    {
-                        messageBuffer.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
-                    }
-                } while (!result.EndOfMessage);
-
-                if (messageBuffer.Length > 0)
-                {
-                    await ProcessMessage(messageBuffer.ToString());
+                    OnMarketDataReceived(new MarketDataEvent(
+                        sequence: finalUpdateId,
+                        timestamp: timestamp,
+                        side: Side.Buy,
+                        priceTicks: PriceUtils.ToTicks(price),
+                        quantity: (long)(quantity * 100_000_000),
+                        kind: quantity == 0 ? EventKind.Delete : EventKind.Update,
+                        instrumentId: instrument.InstrumentId,
+                        exchange: SourceExchange
+                    ));
                 }
             }
         }
-        catch (OperationCanceledException ex)
+
+        // Process asks
+        if (data.TryGetProperty("a", out var asksElement))
         {
-            _logger.LogInformationWithCaller($"WebSocket ReceiveLoop cancelled, msg: {ex.Message}");
-        }
-        catch (WebSocketException ex)
-        {
-            _logger.LogWarningWithCaller("WebSocket connection closed prematurely");
-            ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(false, ExchangeEnum.BINANCE, "Connection closed prematurely"));
-            await ConnectWithRetryAsync(_symbols, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogErrorWithCaller(ex, "Error in ReceiveLoop");
-            Error?.Invoke(this, new FeedErrorEventArgs(new FeedReceiveException(this.Exchange, "Unhandled exception in receive loop", ex), null));
+            foreach (var ask in asksElement.EnumerateArray())
+            {
+                if (decimal.TryParse(ask[0].GetString(), out var price) &&
+                    decimal.TryParse(ask[1].GetString(), out var quantity))
+                {
+                    OnMarketDataReceived(new MarketDataEvent(
+                        sequence: finalUpdateId,
+                        timestamp: timestamp,
+                        side: Side.Sell,
+                        priceTicks: PriceUtils.ToTicks(price),
+                        quantity: (long)(quantity * 100_000_000),
+                        kind: quantity == 0 ? EventKind.Delete : EventKind.Update,
+                        instrumentId: instrument.InstrumentId,
+                        exchange: SourceExchange
+                    ));
+                }
+            }
         }
     }
 
-    private async Task ProcessMessage(string message)
+    protected override string GetBaseUrl()
+    {
+        return DefaultBaseUrl;
+    }
+
+    protected override async Task ProcessMessage(MemoryStream messageStream)
     {
         try
         {
-            using var document = JsonDocument.Parse(message);
+            using var document = await JsonDocument.ParseAsync(messageStream);
             var root = document.RootElement;
 
-            // Check if this is a subscription response
+            // Subscription response, ignore it.
             if (root.TryGetProperty("result", out _) || root.TryGetProperty("id", out _))
             {
-                _logger.LogDebug("Received subscription response: {Message}", message);
                 return;
             }
 
-            // Process depth update
+            // Combined stream format: {"stream":"<streamName>","data":{...}}
             if (root.TryGetProperty("stream", out var streamElement) &&
                 root.TryGetProperty("data", out var dataElement))
             {
-                var stream = streamElement.GetString();
-                if (stream?.Contains("@depth") == true)
-                {
-                    await ProcessDepthUpdate(dataElement, stream);
-                }
-            }
-            else if (root.TryGetProperty("e", out var eventTypeElement))
-            {
-                // Direct depth update (single stream)
-                var eventType = eventTypeElement.GetString();
-                if (eventType == "depthUpdate")
-                {
-                    await ProcessDepthUpdate(root);
-                }
-            }
+                var streamName = streamElement.GetString() ?? string.Empty;
+                var eventType = dataElement.TryGetProperty("e", out var et) ? et.GetString() : null;
 
+                switch (eventType)
+                {
+                    case "aggTrade":
+                        ProcessAggTrade(dataElement);
+                        break;
+                    case "bookTicker":
+                        ProcessBookTicker(dataElement);
+                        break;
+                    case "depthUpdate":
+                        ProcessDepthUpdate(dataElement);
+                        break;
+                }
+            }
         }
-        catch (FeedParseException fex)
+        catch (JsonException jex)
         {
-            _logger.LogErrorWithCaller(fex, "Error processing message: {Message}", fex.RawMessage);
-            Error?.Invoke(this, new FeedErrorEventArgs(fex, null));
+            // Handle parsing errors
+            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "JSON parsing failed.", GetRawMessage(messageStream), jex), null));
         }
         catch (Exception ex)
         {
-            _logger.LogErrorWithCaller(ex, "Error processing message: {Message}", message);
+            // Handle other processing errors
+            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "Failed to process message.", GetRawMessage(messageStream), ex), null));
         }
     }
 
-    private async Task ProcessDepthUpdate(JsonElement data, string? stream = null)
+    private string GetRawMessage(MemoryStream ms)
     {
-        try
-        {
-            var symbol = stream?.Split('@')[0].ToUpper() ??
-                        (data.TryGetProperty("s", out var symbolElement) ? symbolElement.GetString()?.ToUpper() : null);
-
-            if (string.IsNullOrEmpty(symbol))
-            {
-                _logger.LogWarningWithCaller("Missing symbol in depth update");
-                return;
-            }
-
-            var symbolId = SymbolUtils.GetSymbolId(symbol);
-            var timestamp = TimestampUtils.GetTimestampMicros();
-
-            // Check sequence number for gap detection
-            if (data.TryGetProperty("u", out var lastUpdateIdElement))
-            {
-                var currentSequence = lastUpdateIdElement.GetInt64();
-                if (_lastSequenceNumbers.TryGetValue(symbol, out var lastSequence))
-                {
-                    if (currentSequence != lastSequence + 1)
-                    {
-                        _logger.LogDebug("Sequence gap detected for {Symbol}: expected {Expected}, received {Received}",
-                            symbol, lastSequence + 1, currentSequence);
-                        Statistics.RecordSequenceGap();
-                    }
-                }
-                _lastSequenceNumbers[symbol] = currentSequence;
-            }
-
-            // Process bids
-            if (data.TryGetProperty("b", out var bidsElement))
-            {
-                foreach (var bid in bidsElement.EnumerateArray())
-                {
-                    if (bid.GetArrayLength() >= 2 &&
-                        decimal.TryParse(bid[0].GetString(), out var price) &&
-                        decimal.TryParse(bid[1].GetString(), out var quantity))
-                    {
-                        var eventKind = quantity == 0 ? EventKind.Delete : EventKind.Update;
-                        var marketDataEvent = new MarketDataEvent(
-                            sequence: _lastSequenceNumbers.GetValueOrDefault(symbol),
-                            timestamp: timestamp,
-                            side: Side.Buy,
-                            priceTicks: PriceUtils.ToTicks(price),
-                            quantity: (long)(quantity * 100000000), // Convert to base units
-                            kind: eventKind,
-                            symbolId: symbolId,
-                            exchange: ExchangeEnum.BINANCE
-                        );
-
-                        MarketDataReceived?.Invoke(this, marketDataEvent);
-                    }
-                }
-            }
-
-            // Process asks
-            if (data.TryGetProperty("a", out var asksElement))
-            {
-                foreach (var ask in asksElement.EnumerateArray())
-                {
-                    if (ask.GetArrayLength() >= 2 &&
-                        decimal.TryParse(ask[0].GetString(), out var price) &&
-                        decimal.TryParse(ask[1].GetString(), out var quantity))
-                    {
-                        var eventKind = quantity == 0 ? EventKind.Delete : EventKind.Update;
-                        var marketDataEvent = new MarketDataEvent(
-                            sequence: _lastSequenceNumbers.GetValueOrDefault(symbol),
-                            timestamp: timestamp,
-                            side: Side.Sell,
-                            priceTicks: PriceUtils.ToTicks(price),
-                            quantity: (long)(quantity * 100000000), // Convert to base units
-                            kind: eventKind,
-                            symbolId: symbolId,
-                            exchange: ExchangeEnum.BINANCE
-                        );
-
-                        MarketDataReceived?.Invoke(this, marketDataEvent);
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            var feedEx = new FeedParseException(ExchangeEnum.BINANCE, ex.Message, "Error processing depth update", ex);
-            throw feedEx;
-        }
+        ms.Position = 0;
+        using var reader = new StreamReader(ms, Encoding.UTF8);
+        return reader.ReadToEnd();
     }
 
-    public void Dispose()
+    protected override Task DoSubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
     {
-        if (_isDisposed) return;
+        var allStreams = insts
+            .SelectMany(inst => GetDefaultStreamsForSymbol(inst.Symbol))
+            .ToArray();
 
-        try
+        if (!allStreams.Any())
         {
-            DisconnectAsync().Wait(TimeSpan.FromSeconds(5));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during disposal");
+            return Task.CompletedTask;
         }
 
-        _webSocket?.Dispose();
-        _cancellationTokenSource?.Dispose();
-        _isDisposed = true;
+        var subscribeMessage = JsonSerializer.Serialize(new
+        {
+            method = "SUBSCRIBE",
+            @params = allStreams,
+            id = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        });
+
+        _logger.LogInformation("Subscribing to {StreamCount} streams on {Exchange}", allStreams.Length, Exchange.Decode(SourceExchange));
+        return SendMessageAsync(subscribeMessage, cancellationToken);
+    }
+
+    protected override Task DoUnsubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
+    {
+        var allStreams = insts
+            .SelectMany(inst => GetDefaultStreamsForSymbol(inst.Symbol))
+            .ToArray();
+
+        if (!allStreams.Any())
+        {
+            return Task.CompletedTask;
+        }
+
+        var unsubscribeMessage = JsonSerializer.Serialize(new
+        {
+            method = "UNSUBSCRIBE",
+            @params = allStreams,
+            id = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        });
+
+        _logger.LogInformation("Unsubscribing from {StreamCount} streams on {Exchange}", allStreams.Length, Exchange.Decode(SourceExchange));
+        return SendMessageAsync(unsubscribeMessage, cancellationToken);
+    }
+
+    protected override void ConfigureWebsocket(ClientWebSocket websocket)
+    {
+        websocket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
+        websocket.Options.SetBuffer(8192, 8192); // 8KB buffersthrow new NotImplementedException();
     }
 }

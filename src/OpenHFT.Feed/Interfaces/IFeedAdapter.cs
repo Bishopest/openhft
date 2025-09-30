@@ -1,5 +1,6 @@
+using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
-using OpenHFT.Core.Collections;
+using OpenHFT.Feed.Exceptions;
 
 namespace OpenHFT.Feed.Interfaces;
 
@@ -19,20 +20,20 @@ public interface IFeedAdapter : IDisposable
     Task DisconnectAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Subscribe to market data for specific symbols
+    /// Subscribe to market data for specific instruments
     /// </summary>
-    Task SubscribeAsync(IEnumerable<string> symbols, CancellationToken cancellationToken = default);
+    Task SubscribeAsync(IEnumerable<Instrument> instruments, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Unsubscribe from market data for specific symbols
+    /// Unsubscribe from market data for specific instruments
     /// </summary>
-    Task UnsubscribeAsync(IEnumerable<string> symbols, CancellationToken cancellationToken = default);
+    Task UnsubscribeAsync(IEnumerable<Instrument> instruments, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the name of the exchange this adapter connects to.
     /// Should match one of the constants in the `Exchange` class.
     /// </summary>
-    ExchangeEnum Exchange { get; }
+    ExchangeEnum SourceExchange { get; }
 
     /// <summary>
     /// Check if adapter is connected
@@ -58,11 +59,6 @@ public interface IFeedAdapter : IDisposable
     /// Event fired when market data is received
     /// </summary>
     event EventHandler<MarketDataEvent> MarketDataReceived;
-
-    /// <summary>
-    /// Statistics about the feed
-    /// </summary>
-    FeedStatistics Statistics { get; }
 }
 
 /// <summary>
@@ -73,11 +69,13 @@ public class ConnectionStateChangedEventArgs : EventArgs
     public bool IsConnected { get; }
     public string? Reason { get; }
     public DateTimeOffset Timestamp { get; }
+    public ExchangeEnum SourceExchange { get; }
 
-    public ConnectionStateChangedEventArgs(bool isConnected, string? reason = null)
+    public ConnectionStateChangedEventArgs(bool isConnected, ExchangeEnum exchange, string? reason = null)
     {
         IsConnected = isConnected;
         Reason = reason;
+        SourceExchange = exchange;
         Timestamp = DateTimeOffset.UtcNow;
     }
 }
@@ -87,13 +85,13 @@ public class ConnectionStateChangedEventArgs : EventArgs
 /// </summary>
 public class FeedErrorEventArgs : EventArgs
 {
-    public Exception Exception { get; }
+    public FeedException Exception { get; }
     public string? Context { get; }
     public DateTimeOffset Timestamp { get; }
 
-    public FeedErrorEventArgs(Exception exception, string? context = null)
+    public FeedErrorEventArgs(FeedException fe, string? context = null)
     {
-        Exception = exception;
+        Exception = fe;
         Context = context;
         Timestamp = DateTimeOffset.UtcNow;
     }
