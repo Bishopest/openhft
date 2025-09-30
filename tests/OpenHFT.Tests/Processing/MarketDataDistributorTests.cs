@@ -129,7 +129,7 @@ public class MarketDataDistributorTests
 public class TestConsumer : IMarketDataConsumer
 {
     public string ConsumerName { get; }
-    public int SymbolId { get; }
+    public int InstrumentId { get; }
     public ExchangeEnum Exchange { get; }
     private readonly IEnumerable<string> _subscriptionKeys;
     public List<MarketDataEvent> ReceivedEvents { get; } = new();
@@ -141,7 +141,7 @@ public class TestConsumer : IMarketDataConsumer
     {
         ConsumerName = consumerName;
         Exchange = exchange;
-        SymbolId = symbolId;
+        InstrumentId = symbolId;
         _subscriptionKeys = subscriptionKeys;
     }
 

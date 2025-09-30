@@ -5,21 +5,23 @@ using Disruptor;
 using OpenHFT.Core.Utils;
 using Disruptor.Dsl;
 using System.Collections.Concurrent;
+using OpenHFT.Core.Interfaces;
 
 namespace OpenHFT.Processing;
-
-public readonly record struct ExchangeSymbolKey(ExchangeEnum Exchange, int SymbolId);
 
 public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
 {
     private readonly Disruptor<MarketDataEventWrapper> _disruptor;
     private readonly ILogger<MarketDataDistributor> _logger;
-    private readonly ConcurrentDictionary<ExchangeSymbolKey, ConcurrentDictionary<string, IMarketDataConsumer>> _subscriptions = new();
+    private readonly IInstrumentRepository _instrumentRepository;
+    // key = InstrumentID
+    private readonly ConcurrentDictionary<int, ConcurrentDictionary<string, IMarketDataConsumer>> _subscriptions = new();
     private long _distributedEventCount;
 
-    public MarketDataDistributor(Disruptor<MarketDataEventWrapper> disruptor, ILogger<MarketDataDistributor> logger)
+    public MarketDataDistributor(Disruptor<MarketDataEventWrapper> disruptor, ILogger<MarketDataDistributor> logger, IInstrumentRepository instrumentRepository)
     {
         _disruptor = disruptor;
+        _instrumentRepository = instrumentRepository;
         _logger = logger;
     }
 
@@ -43,41 +45,43 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
     // Subscription management
     public void Subscribe(IMarketDataConsumer consumer)
     {
-        var key = new ExchangeSymbolKey(consumer.Exchange, consumer.SymbolId);
+        var instrument = _instrumentRepository.GetById(consumer.InstrumentId);
+        if (instrument == null) return;
 
         var innerSubscriptionDict = _subscriptions.GetOrAdd(
-            key,                                // 키
+            consumer.InstrumentId,
             _ => new ConcurrentDictionary<string, IMarketDataConsumer>()
         );
 
         if (!innerSubscriptionDict.TryAdd(consumer.ConsumerName, consumer))
         {
-            _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.SymbolId}) already exists");
+            _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol: {instrument.Symbol}) already exists");
         }
         else
         {
-            _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.SymbolId}) subscribed successfully.");
+            _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol: {instrument.Symbol}) subscribed successfully.");
         }
     }
 
     public void Unsubscribe(IMarketDataConsumer consumer)
     {
-        var key = new ExchangeSymbolKey(consumer.Exchange, consumer.SymbolId);
+        var instrument = _instrumentRepository.GetById(consumer.InstrumentId);
+        if (instrument == null) return;
 
-        if (_subscriptions.TryGetValue(key, out var innerSubscriptionDict))
+        if (_subscriptions.TryGetValue(consumer.InstrumentId, out var innerSubscriptionDict))
         {
             if (innerSubscriptionDict.TryRemove(consumer.ConsumerName, out var removedConsumer))
             {
-                _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.SymbolId}) unsubscribed successfully.");
+                _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol: {instrument.Symbol}) unsubscribed successfully.");
             }
             else
             {
-                _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.SymbolId}) not found for unsubscription.");
+                _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol: {instrument.Symbol}) not found for unsubscription.");
             }
         }
         else
         {
-            _logger.LogWarningWithCaller($"Subscription key {key} not found for unsubscription.");
+            _logger.LogWarningWithCaller($"Subscription symbol: {instrument.Symbol}(id: {consumer.InstrumentId}) not found for unsubscription.");
         }
     }
 
@@ -87,8 +91,10 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
         {
             Interlocked.Increment(ref _distributedEventCount);
             var marketEvent_copy = data.Event;
-            var key = new ExchangeSymbolKey(marketEvent_copy.SourceExchange, marketEvent_copy.InstrumentId);
-            if (_subscriptions.TryGetValue(key, out var subscribers))
+            var instrument = _instrumentRepository.GetById(marketEvent_copy.InstrumentId);
+            if (instrument == null) return;
+
+            if (_subscriptions.TryGetValue(marketEvent_copy.InstrumentId, out var subscribers))
             {
                 foreach (var kvp in subscribers)
                 {
@@ -109,7 +115,7 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
             }
             else
             {
-                _logger.LogWarningWithCaller($"Subscription key {key} not found.");
+                _logger.LogWarningWithCaller($"Subscription symbol: {instrument.Symbol}(id: {instrument.InstrumentId}) not found.");
             }
         }
         catch (Exception ex)
