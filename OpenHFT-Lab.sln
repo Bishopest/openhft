@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Strategy.Advanced",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Processing", "src\OpenHFT.Processing\OpenHFT.Processing.csproj", "{52254A4B-8659-4D2D-9FF0-410AF98342CF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.FeedMonitor", "src\OpenHFT.FeedMonitor\OpenHFT.FeedMonitor.csproj", "{1908294F-C7FA-4C59-A5C3-B641B9F3D881}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -75,8 +77,14 @@ Global
 		{52254A4B-8659-4D2D-9FF0-410AF98342CF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{52254A4B-8659-4D2D-9FF0-410AF98342CF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{52254A4B-8659-4D2D-9FF0-410AF98342CF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1908294F-C7FA-4C59-A5C3-B641B9F3D881}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1908294F-C7FA-4C59-A5C3-B641B9F3D881}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1908294F-C7FA-4C59-A5C3-B641B9F3D881}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1908294F-C7FA-4C59-A5C3-B641B9F3D881}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
 	EndGlobalSection
 EndGlobal
