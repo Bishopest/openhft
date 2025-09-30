@@ -1,0 +1,12 @@
+{
+    "subscription": {
+        "binance": {
+            "spot": ["BTCUSDT"],
+            "perpetual": ["BTCUSDT"]
+        },
+        "bitmex": {
+            "spot": [],
+            "perpetual": []
+        }
+    }
+}
