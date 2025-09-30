@@ -11,6 +11,10 @@ using OpenHFT.Feed.Interfaces;
 using OpenHFT.Processing;
 using OpenHFT.Processing.Interfaces;
 using System.Collections.Concurrent;
+using OpenHFT.Core.Instruments;
+using OpenHFT.Feed.Adapters;
+using System.Net.WebSockets;
+using OpenHFT.Core.Interfaces;
 
 namespace OpenHFT.Tests.Processing;
 
@@ -19,14 +23,13 @@ public class MarketDataDistributorTests
 {
     // 테스트에 사용될 핵심 컴포넌트들
     private Disruptor<MarketDataEventWrapper> _disruptor = null!;
-    private Mock<IFeedAdapter> _mockAdapter = null!;
+    private MockAdapter _mockAdapter = null!;
     private FeedHandler _feedHandler = null!;
     private MarketDataDistributor _distributor = null!;
 
     // 테스트 결과를 확인할 테스트용 Consumer들
     private TestConsumer _btcConsumer = null!;
     private TestConsumer _ethConsumer = null!;
-    private TestConsumer _allTopicsConsumer = null!;
 
     private ILogger<MarketDataDistributor> _logger = null!;
 
@@ -54,8 +57,7 @@ public class MarketDataDistributorTests
         );
 
         // --- 4. Mock IFeedAdapter 생성 ---
-        _mockAdapter = new Mock<IFeedAdapter>();
-        _mockAdapter.Setup(a => a.SourceExchange).Returns(ExchangeEnum.BINANCE);
+        _mockAdapter = new MockAdapter(_logger, ProductType.PerpetualFuture, null);
 
         // --- 5. 핵심 컴포넌트들을 '수동'으로 조립 ---
         // a) Distributor 생성 (Disruptor와 로거 주입)
@@ -65,8 +67,9 @@ public class MarketDataDistributorTests
         );
 
         // b) FeedHandler 생성 (어댑터와 Disruptor 주입)
-        var adapters = new ConcurrentDictionary<ExchangeEnum, IFeedAdapter>();
-        adapters.TryAdd(ExchangeEnum.BINANCE, _mockAdapter.Object);
+        var adapters = new ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, BaseFeedAdapter>>();
+        var innerDict = adapters.GetOrAdd(ExchangeEnum.BINANCE, _ => new ConcurrentDictionary<ProductType, BaseFeedAdapter>());
+        innerDict.TryAdd(ProductType.PerpetualFuture, _mockAdapter);
         _feedHandler = new FeedHandler(
             loggerFactory.CreateLogger<FeedHandler>(),
             adapters,
@@ -105,8 +108,8 @@ public class MarketDataDistributorTests
         // --- Act ---
         // Mock 어댑터에서 이벤트를 '발생'시킴.
         // 이는 _feedHandler.OnMarketDataReceived를 트리거하고, 데이터는 Disruptor에 기록됨.
-        _mockAdapter.Raise(m => m.MarketDataReceived += null, this, btcEvent);
-        _mockAdapter.Raise(m => m.MarketDataReceived += null, this, ethEvent);
+        _mockAdapter.FireMarketDataEvent(btcEvent);
+        _mockAdapter.FireMarketDataEvent(ethEvent);
 
         // Distributor의 소비자 스레드가 이벤트를 처리할 충분한 시간을 줌
         await Task.Delay(200);
@@ -156,5 +159,45 @@ public class TestConsumer : IMarketDataConsumer
         }
 
         return Task.CompletedTask;
+    }
+}
+
+public class MockAdapter : BaseFeedAdapter
+{
+    public MockAdapter(ILogger logger, ProductType type, IInstrumentRepository instrumentRepository) : base(logger, type, instrumentRepository)
+    {
+    }
+
+    public override ExchangeEnum SourceExchange => ExchangeEnum.BINANCE;
+
+    protected override void ConfigureWebsocket(ClientWebSocket websocket)
+    {
+        throw new NotImplementedException();
+    }
+
+    protected override Task DoSubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+
+    protected override Task DoUnsubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+
+    protected override string GetBaseUrl()
+    {
+        throw new NotImplementedException();
+    }
+
+    protected override Task ProcessMessage(MemoryStream messageStream)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void FireMarketDataEvent(MarketDataEvent marketDataEvent)
+    {
+        // BaseFeedAdapter의 protected virtual 메서드를 호출하여 이벤트를 발생시킵니다.
+        base.OnMarketDataReceived(marketDataEvent);
     }
 }
