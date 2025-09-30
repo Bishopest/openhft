@@ -11,7 +11,7 @@ public abstract class Instrument
     /// <summary>
     /// Unique internal identifier for the instrument.
     /// </summary>
-    public long InstrumentId { get; }
+    public int InstrumentId { get; }
 
     /// <summary>
     /// Gets the specific product type of this instrument.
@@ -48,14 +48,20 @@ public abstract class Instrument
     /// </summary>
     public decimal LotSize { get; }
 
+    /// <summary>
+    /// The smallest quantity allowed to send order with
+    /// </summary>
+    public decimal MinOrderSize { get; }
+
     protected Instrument(
-        long instrumentId,
+        int instrumentId,
         string symbol,
         ExchangeEnum exchange,
         Currency baseCurrency,
         Currency quoteCurrency,
         decimal tickSize,
-        decimal lotSize)
+        decimal lotSize,
+        decimal minOrderSize)
     {
         InstrumentId = instrumentId;
         Symbol = symbol;
@@ -64,6 +70,7 @@ public abstract class Instrument
         QuoteCurrency = quoteCurrency;
         TickSize = tickSize;
         LotSize = lotSize;
+        MinOrderSize = minOrderSize;
     }
 
     public override string ToString() => $"{Symbol} on {Exchange}";

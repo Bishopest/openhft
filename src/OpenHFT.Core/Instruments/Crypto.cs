@@ -6,14 +6,15 @@ namespace OpenHFT.Core.Instruments;
 public class Crypto : Instrument
 {
     public Crypto(
-        long instrumentId,
+        int instrumentId,
         string symbol,
         ExchangeEnum exchange,
         Currency baseCurrency,
         Currency quoteCurrency,
         decimal tickSize,
-        decimal lotSize
-    ) : base(instrumentId, symbol, exchange, baseCurrency, quoteCurrency, tickSize, lotSize)
+        decimal lotSize,
+        decimal minOrderSize
+    ) : base(instrumentId, symbol, exchange, baseCurrency, quoteCurrency, tickSize, lotSize, minOrderSize)
     {
 
     }

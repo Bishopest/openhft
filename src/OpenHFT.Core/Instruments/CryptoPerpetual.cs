@@ -6,15 +6,16 @@ namespace OpenHFT.Core.Instruments;
 public class CryptoPerpetual : CryptoFuture
 {
     public CryptoPerpetual(
-        long instrumentId,
+        int instrumentId,
         string symbol,
         ExchangeEnum exchange,
         Currency baseCurrency,
         Currency quoteCurrency,
         decimal tickSize,
         decimal lotSize,
-        decimal multiplier)
-        : base(instrumentId, symbol, exchange, baseCurrency, quoteCurrency, tickSize, lotSize, multiplier)
+        decimal multiplier,
+        decimal minOrderSize)
+        : base(instrumentId, symbol, exchange, baseCurrency, quoteCurrency, tickSize, lotSize, multiplier, minOrderSize)
     {
     }
 

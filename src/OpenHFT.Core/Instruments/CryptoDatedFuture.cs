@@ -15,8 +15,7 @@ public class CryptoDatedFuture : CryptoFuture
 
 
     public CryptoDatedFuture(
-        long instrumentId,
-
+        int instrumentId,
         string symbol,
         ExchangeEnum exchange,
         Currency baseCurrency,
@@ -24,8 +23,9 @@ public class CryptoDatedFuture : CryptoFuture
         decimal tickSize,
         decimal lotSize,
         decimal multiplier,
+        decimal minOrderSize,
         DateTimeOffset expirationDate)
-        : base(instrumentId, symbol, exchange, baseCurrency, quoteCurrency, tickSize, lotSize, multiplier)
+        : base(instrumentId, symbol, exchange, baseCurrency, quoteCurrency, tickSize, lotSize, multiplier, minOrderSize)
     {
         ExpirationDate = expirationDate;
     }

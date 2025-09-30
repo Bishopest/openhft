@@ -15,15 +15,16 @@ public abstract class CryptoFuture : Instrument
     public decimal Multiplier { get; }
 
     protected CryptoFuture(
-        long instrumentId,
+        int instrumentId,
         string symbol,
         ExchangeEnum exchange,
         Currency baseCurrency,
         Currency quoteCurrency,
         decimal tickSize,
         decimal lotSize,
-        decimal multiplier)
-        : base(instrumentId, symbol, exchange, baseCurrency, quoteCurrency, tickSize, lotSize)
+        decimal multiplier,
+        decimal minOrderSize)
+        : base(instrumentId, symbol, exchange, baseCurrency, quoteCurrency, tickSize, lotSize, minOrderSize)
     {
         Multiplier = multiplier;
     }
