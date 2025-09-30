@@ -1,5 +1,8 @@
+using Disruptor.Dsl;
 using OpenHFT.Core.Collections;
+using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
+using OpenHFT.Feed.Adapters;
 
 namespace OpenHFT.Feed.Interfaces;
 
@@ -21,12 +24,17 @@ public interface IFeedHandler : IDisposable
     /// <summary>
     /// Add a feed adapter
     /// </summary>
-    void AddAdapter(IFeedAdapter adapter);
+    void AddAdapter(BaseFeedAdapter adapter);
 
     /// <summary>
     /// Remove a feed adapter
     /// </summary>
-    void RemoveAdapter(ExchangeEnum sourceExchange);
+    void RemoveAdapter(ExchangeEnum sourceExchange, ProductType type);
+
+    /// <summary>
+    /// get a feed adapter
+    /// </summary>
+    BaseFeedAdapter? GetAdapter(ExchangeEnum sourceExchange, ProductType type);
 
     /// <summary>
     /// Get feed handler statistics

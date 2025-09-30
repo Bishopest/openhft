@@ -99,7 +99,7 @@ static void RegisterHftServices(IServiceCollection services, IConfiguration conf
 {
     // Feed components
     services.AddSingleton<IFeedAdapter, BinanceAdapter>();
-    services.AddSingleton<IFeedHandler, FeedRingBufferHandler>();
+    services.AddSingleton<IFeedHandler, FeedHandler>();
 
     // Strategy components
     services.AddSingleton<IStrategyEngine, StrategyEngine>();

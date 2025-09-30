@@ -2,8 +2,10 @@ using System.Collections.Concurrent;
 using Disruptor;
 using Disruptor.Dsl;
 using Microsoft.Extensions.Logging;
+using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
+using OpenHFT.Feed.Adapters;
 using OpenHFT.Feed.Interfaces;
 
 namespace OpenHFT.Feed;
@@ -11,15 +13,15 @@ namespace OpenHFT.Feed;
 public class FeedHandler : IFeedHandler
 {
     private readonly ILogger<FeedHandler> _logger;
-    private readonly ConcurrentDictionary<ExchangeEnum, IFeedAdapter> _adapters;
+    private readonly ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, BaseFeedAdapter>> _adapters;
     private readonly RingBuffer<MarketDataEventWrapper> _ringBuffer;
 
-    public event EventHandler<MarketDataEvent> MarketDataReceived;
-    public event EventHandler<ConnectionStateChangedEventArgs> AdapterConnectionStateChanged;
+    public event EventHandler<MarketDataEvent>? MarketDataReceived;
+    public event EventHandler<ConnectionStateChangedEventArgs>? AdapterConnectionStateChanged;
 
     public FeedHandlerStatistics Statistics { get; } = new();
 
-    public FeedHandler(ILogger<FeedHandler> logger, ConcurrentDictionary<ExchangeEnum, IFeedAdapter> adapters, Disruptor<MarketDataEventWrapper> disruptor)
+    public FeedHandler(ILogger<FeedHandler> logger, ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, BaseFeedAdapter>> adapters, Disruptor<MarketDataEventWrapper> disruptor)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _adapters = adapters ?? throw new ArgumentNullException(nameof(adapters));
@@ -28,26 +30,31 @@ public class FeedHandler : IFeedHandler
         Statistics.StartTime = DateTimeOffset.UtcNow;
         _logger.LogInformationWithCaller($"FeedHandler initialized with {_adapters.Count} adapters.");
 
-        foreach (var kvp in adapters)
+        foreach (var exchangeKvp in adapters)
         {
-            var exchangeName = kvp.Key;
-            var adapter = kvp.Value;
+            var exchangeName = exchangeKvp.Key;
 
-            adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
-            adapter.Error += OnFeedError;
-            adapter.MarketDataReceived += OnMarketDataReceived;
-            _logger.LogInformationWithCaller($"Register market data handler for {exchangeName} adapter");
+            foreach (var adapterKvp in exchangeKvp.Value)
+            {
+                var adapter = adapterKvp.Value;
+
+                adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
+                adapter.Error += OnFeedError;
+                adapter.MarketDataReceived += OnMarketDataReceived;
+                _logger.LogInformationWithCaller($"Register market data handler for {exchangeName} adapter (Producer: {adapterKvp.Key})");
+            }
         }
     }
-
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         int cnt = 0;
-        foreach (var kvp in _adapters)
+        foreach (var exchangeKvp in _adapters)
         {
-            await kvp.Value.ConnectAsync(cancellationToken);
-            await kvp.Value.SubscribeAsync(new[] { "BTCUSDT", "ETHUSDT" }, cancellationToken);
-            cnt++;
+            foreach (var adapterKvp in exchangeKvp.Value)
+            {
+                await adapterKvp.Value.ConnectAsync(cancellationToken);
+                cnt++;
+            }
         }
 
         _logger.LogInformationWithCaller($"Feedhandler started with adapter({cnt})");
@@ -56,40 +63,100 @@ public class FeedHandler : IFeedHandler
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         int cnt = 0;
-        foreach (var kvp in _adapters)
+        foreach (var exchangeKvp in _adapters)
         {
-            await kvp.Value.DisconnectAsync(cancellationToken);
-            cnt++;
+            foreach (var adapterKvp in exchangeKvp.Value)
+            {
+                await adapterKvp.Value.DisconnectAsync(cancellationToken);
+                cnt++;
+            }
         }
 
         _logger.LogInformationWithCaller($"Feedhandler stopped with adapter({cnt})");
     }
 
-    public void AddAdapter(IFeedAdapter adapter)
+    public void AddAdapter(BaseFeedAdapter adapter)
     {
-        if (_adapters.TryAdd(adapter.Exchange, adapter))
+        var innerDict = _adapters.GetOrAdd(
+        adapter.SourceExchange,
+        _ => new ConcurrentDictionary<ProductType, BaseFeedAdapter>()
+    );
+
+        // 2. 내부 딕셔너리에 ProducerType 키와 함께 어댑터를 추가합니다.
+        if (innerDict.TryAdd(adapter.ProductType, adapter)) // assumes adapter has ProducerType property
         {
             adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
             adapter.Error += OnFeedError;
             adapter.MarketDataReceived += OnMarketDataReceived;
-            _logger.LogInformationWithCaller($"Adapter for {Exchange.Decode(adapter.Exchange)} added Feedhandler");
+            _logger.LogInformationWithCaller($"Adapter for {Exchange.Decode(adapter.SourceExchange)} ({adapter.ProductType}) added Feedhandler");
         }
     }
 
-    public void RemoveAdapter(ExchangeEnum sourceExchange)
+    public void RemoveAdapter(ExchangeEnum sourceExchange, ProductType type)
     {
-        if (_adapters.Remove(sourceExchange, out var adapter))
+        if (_adapters.TryGetValue(sourceExchange, out var innerDict))
         {
-            adapter.ConnectionStateChanged -= OnAdapterConnectionStateChanged;
-            adapter.Error -= OnFeedError;
-            adapter.MarketDataReceived -= OnMarketDataReceived;
-            _logger.LogInformationWithCaller($"Adapter for {Exchange.Decode(adapter.Exchange)} removed from Feedhandler");
+            if (innerDict.TryRemove(type, out var adapter))
+            {
+                adapter.ConnectionStateChanged -= OnAdapterConnectionStateChanged;
+                adapter.Error -= OnFeedError;
+                adapter.MarketDataReceived -= OnMarketDataReceived;
+                _logger.LogInformationWithCaller($"Adapter for {Exchange.Decode(adapter.SourceExchange)} ({type}) removed from Feedhandler");
+
+            }
+        }
+    }
+    /// <summary>
+    /// Retrieves the specific BaseFeedAdapter for the given exchange and producer type.
+    /// </summary>
+    /// <param name="sourceExchange">The exchange enum of the desired adapter.</param>
+    /// <param name="type">The producer type of the desired adapter.</param>
+    /// <returns>The requested BaseFeedAdapter instance.</returns>
+    /// <exception cref="KeyNotFoundException">Thrown if the adapter for the specified exchange and producer type is not found.</exception>
+    public BaseFeedAdapter? GetAdapter(ExchangeEnum sourceExchange, ProductType type)
+    {
+        // 1. Exchange 키로 내부 딕셔너리를 찾습니다.
+        if (_adapters.TryGetValue(sourceExchange, out var innerDict))
+        {
+            // 2. ProducerType 키로 어댑터를 찾습니다.
+            if (innerDict.TryGetValue(type, out var adapter))
+            {
+                return adapter;
+            }
+            else
+            {
+                var msg = $"Adapter for exchange {Exchange.Decode(sourceExchange)} and ProducerType {type} not found.";
+                _logger.LogError(msg);
+                throw new KeyNotFoundException(msg);
+            }
+        }
+        else
+        {
+            // 3. Exchange 키 자체가 존재하지 않을 경우 예외를 발생시킵니다.
+            var msg = $"Adapter for exchange {Exchange.Decode(sourceExchange)} not found in FeedHandler.";
+            _logger.LogError(msg);
+            throw new KeyNotFoundException(msg);
         }
     }
 
     private void OnAdapterConnectionStateChanged(object? sender, ConnectionStateChangedEventArgs e)
     {
-        _logger.LogInformationWithCaller($"Adapter connection state changed: {e.IsConnected} - {e.Reason}");
+        var adapter = sender as IFeedAdapter;
+
+        _logger.LogInformationWithCaller($"Adapter({adapter?.SourceExchange}) connection state changed: {e.IsConnected} - {e.Reason}");
+
+        if (!e.IsConnected)
+        {
+            _logger.LogInformationWithCaller($"Adapter({adapter?.SourceExchange}) reconnect attempt start");
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(1000);
+                if (adapter != null)
+                {
+                    await adapter.ConnectAsync();
+                }
+            });
+        }
     }
 
     private void OnFeedError(object? sender, FeedErrorEventArgs e)
@@ -115,7 +182,7 @@ public class FeedHandler : IFeedHandler
             }
             else
             {
-                _logger.LogWarningWithCaller($"Disruptor ring buffer is full. Dropping market data for SymbolId {marketDataEvent.SymbolId}. This indicates the consumer is too slow or has stalled.");
+                _logger.LogWarningWithCaller($"Disruptor ring buffer is full. Dropping market data for SymbolId {marketDataEvent.InstrumentId}. This indicates the consumer is too slow or has stalled.");
             }
         }
         catch (Exception ex)
@@ -126,9 +193,12 @@ public class FeedHandler : IFeedHandler
 
     public void Dispose()
     {
-        foreach (var kvp in _adapters)
+        foreach (var exchangeKvp in _adapters)
         {
-            kvp.Value.Dispose();
+            foreach (var adapterKvp in exchangeKvp.Value)
+            {
+                adapterKvp.Value.Dispose();
+            }
         }
     }
 }
