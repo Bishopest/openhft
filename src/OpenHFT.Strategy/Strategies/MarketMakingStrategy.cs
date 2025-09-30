@@ -18,7 +18,7 @@ namespace OpenHFT.Strategy.Strategies;
 public class MarketMakingStrategy : BaseStrategy
 {
     private readonly ILogger<MarketMakingStrategy> _logger;
-    
+
     // Configuration parameters
     private decimal _baseSpreadTicks = 2;
     private decimal _maxPosition = 1000;
@@ -47,17 +47,17 @@ public class MarketMakingStrategy : BaseStrategy
     public override async Task InitializeAsync(StrategyConfiguration configuration)
     {
         await base.InitializeAsync(configuration);
-        
+
         // Load configuration parameters
         if (configuration.Parameters.TryGetValue("BaseSpreadTicks", out var baseSpread))
             _baseSpreadTicks = Convert.ToDecimal(baseSpread);
-        
+
         if (configuration.Parameters.TryGetValue("MaxPosition", out var maxPos))
             _maxPosition = Convert.ToDecimal(maxPos);
-        
+
         if (configuration.Parameters.TryGetValue("QuoteSizeTicks", out var quoteSize))
             _quoteSizeTicks = Convert.ToDecimal(quoteSize);
-        
+
         if (configuration.Parameters.TryGetValue("MaxOrderSize", out var maxOrderSize))
             _maxOrderSize = Convert.ToDecimal(maxOrderSize);
 
@@ -69,7 +69,7 @@ public class MarketMakingStrategy : BaseStrategy
             _marketStates[symbol] = new MarketState();
         }
 
-        _logger.LogInformation("MarketMaking strategy initialized with {SymbolCount} symbols, BaseSpread={BaseSpread}, MaxPosition={MaxPosition}", 
+        _logger.LogInformation("MarketMaking strategy initialized with {SymbolCount} symbols, BaseSpread={BaseSpread}, MaxPosition={MaxPosition}",
             Symbols.Count, _baseSpreadTicks, _maxPosition);
     }
 
@@ -78,16 +78,16 @@ public class MarketMakingStrategy : BaseStrategy
     {
         if (!IsEnabled || !IsRunning) return Enumerable.Empty<OrderIntent>();
 
-        var symbol = SymbolUtils.GetSymbol(marketDataEvent.SymbolId);
+        var symbol = SymbolUtils.GetSymbol(marketDataEvent.InstrumentId);
         if (!Symbols.Contains(symbol)) return Enumerable.Empty<OrderIntent>();
 
         try
         {
             // Update market state
             UpdateMarketState(symbol, orderBook, marketDataEvent.Timestamp);
-            
+
             var orders = new List<OrderIntent>();
-            
+
             // Check if we should requote
             if (ShouldRequote(symbol, orderBook))
             {
@@ -144,7 +144,7 @@ public class MarketMakingStrategy : BaseStrategy
     {
         var quoteState = _quoteStates[symbol];
         var marketState = _marketStates[symbol];
-        
+
         // Always quote if we don't have active quotes
         if (quoteState.BidOrderId == 0 && quoteState.AskOrderId == 0)
             return true;
@@ -178,7 +178,7 @@ public class MarketMakingStrategy : BaseStrategy
     private IEnumerable<OrderIntent> CancelActiveQuotes(string symbol)
     {
         var quoteState = _quoteStates[symbol];
-        
+
         if (quoteState.BidOrderId > 0)
         {
             yield return new OrderIntent(
@@ -244,7 +244,7 @@ public class MarketMakingStrategy : BaseStrategy
             var bidOrderId = Interlocked.Increment(ref _nextClientOrderId);
             quoteState.BidOrderId = bidOrderId;
             quoteState.LastBidPrice = bidPrice;
-            
+
             _activeQuotes[bidOrderId] = new ActiveQuote
             {
                 Symbol = symbol,
@@ -271,7 +271,7 @@ public class MarketMakingStrategy : BaseStrategy
             var askOrderId = Interlocked.Increment(ref _nextClientOrderId);
             quoteState.AskOrderId = askOrderId;
             quoteState.LastAskPrice = askPrice;
-            
+
             _activeQuotes[askOrderId] = new ActiveQuote
             {
                 Symbol = symbol,
@@ -318,14 +318,14 @@ public class MarketMakingStrategy : BaseStrategy
         // Skew quotes based on inventory to target neutral position
         var inventoryRatio = position / _maxPosition;
         var adjustmentTicks = inventoryRatio * _baseSpreadTicks * 0.5m; // Max adjustment = half spread
-        
+
         return (long)adjustmentTicks;
     }
 
     private long CalculateOrderSize(string symbol, Side side, decimal position)
     {
         var baseSize = _quoteSizeTicks;
-        
+
         // Reduce size when approaching position limits
         var inventoryRatio = Math.Abs(position) / _maxPosition;
         if (inventoryRatio > 0.7m)
@@ -349,7 +349,7 @@ public class MarketMakingStrategy : BaseStrategy
         {
             _activeQuotes.Remove(orderAck.ClientOrderId);
         }
-        
+
         base.OnOrderAck(orderAck);
     }
 
@@ -359,18 +359,18 @@ public class MarketMakingStrategy : BaseStrategy
         {
             var symbol = quote.Symbol;
             var fillQuantity = quote.Side == Side.Buy ? fillEvent.Quantity : -fillEvent.Quantity;
-            
+
             // Update position
             _positions[symbol] = _positions.GetValueOrDefault(symbol) + fillQuantity;
-            
+
             // Update realized PnL (simplified)
             var fillValue = fillEvent.PriceTicks * fillEvent.Quantity;
             State.RealizedPnL += quote.Side == Side.Buy ? -fillValue : fillValue;
-            
+
             if (fillEvent.IsFullFill)
             {
                 _activeQuotes.Remove(fillEvent.ClientOrderId);
-                
+
                 // Clear quote state
                 var quoteState = _quoteStates[symbol];
                 if (quoteState.BidOrderId == fillEvent.ClientOrderId)
@@ -378,11 +378,11 @@ public class MarketMakingStrategy : BaseStrategy
                 if (quoteState.AskOrderId == fillEvent.ClientOrderId)
                     quoteState.AskOrderId = 0;
             }
-            
-            _logger.LogInformation("Fill: {Symbol} {Side} {Quantity}@{Price}, Position: {Position}", 
+
+            _logger.LogInformation("Fill: {Symbol} {Side} {Quantity}@{Price}, Position: {Position}",
                 symbol, quote.Side, fillEvent.Quantity, fillEvent.PriceTicks, _positions[symbol]);
         }
-        
+
         base.OnFill(fillEvent);
     }
 
@@ -391,15 +391,15 @@ public class MarketMakingStrategy : BaseStrategy
         var state = base.GetState();
         state.Positions = new Dictionary<string, decimal>(_positions);
         state.ActiveOrders = _quoteStates.ToDictionary(
-            kvp => kvp.Key, 
+            kvp => kvp.Key,
             kvp => (kvp.Value.BidOrderId > 0 ? 1 : 0) + (kvp.Value.AskOrderId > 0 ? 1 : 0)
         );
-        
+
         // Add strategy-specific metrics
         state.Metrics["ActiveQuotes"] = _activeQuotes.Count;
         state.Metrics["TotalPosition"] = _positions.Values.Sum();
         state.Metrics["MaxPosition"] = _maxPosition;
-        
+
         return state;
     }
 

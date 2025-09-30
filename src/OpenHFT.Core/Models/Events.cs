@@ -15,11 +15,11 @@ public readonly struct MarketDataEvent
     public readonly long PriceTicks;    // Price in ticks (e.g., *10000 for 4 decimal places)
     public readonly long Quantity;      // Quantity in minimum units
     public readonly EventKind Kind;     // Add/Update/Delete/Trade
-    public readonly int SymbolId;       // Internal symbol identifier
+    public readonly int InstrumentId;       // Internal symbol identifier
     public readonly ExchangeEnum SourceExchange;
 
     public MarketDataEvent(long sequence, long timestamp, Side side, long priceTicks,
-                          long quantity, EventKind kind, int symbolId, ExchangeEnum exchange)
+                          long quantity, EventKind kind, int instrumentId, ExchangeEnum exchange)
     {
         Sequence = sequence;
         Timestamp = timestamp;
@@ -27,7 +27,7 @@ public readonly struct MarketDataEvent
         PriceTicks = priceTicks;
         Quantity = quantity;
         Kind = kind;
-        SymbolId = symbolId;
+        InstrumentId = instrumentId;
         SourceExchange = exchange;
     }
 

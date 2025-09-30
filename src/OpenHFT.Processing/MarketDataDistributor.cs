@@ -87,7 +87,7 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
         {
             Interlocked.Increment(ref _distributedEventCount);
             var marketEvent_copy = data.Event;
-            var key = new ExchangeSymbolKey(marketEvent_copy.SourceExchange, marketEvent_copy.SymbolId);
+            var key = new ExchangeSymbolKey(marketEvent_copy.SourceExchange, marketEvent_copy.InstrumentId);
             if (_subscriptions.TryGetValue(key, out var subscribers))
             {
                 foreach (var kvp in subscribers)

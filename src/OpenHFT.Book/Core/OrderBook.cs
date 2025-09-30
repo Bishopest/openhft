@@ -18,16 +18,16 @@ public class OrderBook
     private readonly int _symbolId;
     private readonly BookSide _bids;
     private readonly BookSide _asks;
-    
+
     // Book state tracking
     private long _lastSequence;
     private long _lastUpdateTimestamp;
     private long _snapshotSequence;
-    
+
     // Statistics
     private long _updateCount;
     private long _tradeCount;
-    
+
     // L3 simulation support
     private readonly bool _enableL3;
     private long _nextOrderId = 1;
@@ -38,10 +38,10 @@ public class OrderBook
         _symbolId = SymbolUtils.GetSymbolId(symbol);
         _logger = logger;
         _enableL3 = enableL3;
-        
+
         _bids = new BookSide(Side.Buy);
         _asks = new BookSide(Side.Sell);
-        
+
         _lastSequence = 0;
         _lastUpdateTimestamp = 0;
         _snapshotSequence = 0;
@@ -63,17 +63,17 @@ public class OrderBook
     public bool ApplyEvent(in MarketDataEvent mdEvent)
     {
         // Validate symbol
-        if (mdEvent.SymbolId != _symbolId)
+        if (mdEvent.InstrumentId != _symbolId)
         {
-            _logger?.LogWarning("Symbol mismatch: expected {ExpectedSymbol}, got {ActualSymbolId}", 
-                _symbol, mdEvent.SymbolId);
+            _logger?.LogWarning("Symbol mismatch: expected {ExpectedSymbol}, got {ActualSymbolId}",
+                _symbol, mdEvent.InstrumentId);
             return false;
         }
 
         // Check sequence order (basic gap detection)
         if (_lastSequence > 0 && mdEvent.Sequence <= _lastSequence)
         {
-            _logger?.LogWarning("Out of order sequence for {Symbol}: current={Current}, received={Received}", 
+            _logger?.LogWarning("Out of order sequence for {Symbol}: current={Current}, received={Received}",
                 _symbol, _lastSequence, mdEvent.Sequence);
             // Still process the event, but log the issue
         }
@@ -90,19 +90,19 @@ public class OrderBook
             case EventKind.Update:
                 UpdateLevel(mdEvent.Side, mdEvent.PriceTicks, mdEvent.Quantity, mdEvent.Sequence, mdEvent.Timestamp);
                 return true;
-                
+
             case EventKind.Delete:
                 UpdateLevel(mdEvent.Side, mdEvent.PriceTicks, 0, mdEvent.Sequence, mdEvent.Timestamp);
                 return true;
-                
+
             case EventKind.Trade:
                 ProcessTrade(mdEvent);
                 return true;
-                
+
             case EventKind.Snapshot:
                 ProcessSnapshot(mdEvent);
                 return true;
-                
+
             default:
                 _logger?.LogWarning("Unknown event kind: {Kind}", mdEvent.Kind);
                 return false;
@@ -119,10 +119,10 @@ public class OrderBook
     private void ProcessTrade(in MarketDataEvent mdEvent)
     {
         _tradeCount++;
-        
+
         // In a real implementation, we might update the book based on trade
         // For now, just log the trade
-        _logger?.LogDebug("Trade: {Symbol} {Side} {Price}@{Quantity}", 
+        _logger?.LogDebug("Trade: {Symbol} {Side} {Price}@{Quantity}",
             _symbol, mdEvent.Side, mdEvent.PriceTicks, mdEvent.Quantity);
     }
 
@@ -131,7 +131,7 @@ public class OrderBook
         // Snapshot processing would typically involve clearing the book
         // and rebuilding from snapshot data
         _snapshotSequence = mdEvent.Sequence;
-        _logger?.LogInformation("Processed snapshot for {Symbol} at sequence {Sequence}", 
+        _logger?.LogInformation("Processed snapshot for {Symbol} at sequence {Sequence}",
             _symbol, mdEvent.Sequence);
     }
 
@@ -194,10 +194,10 @@ public class OrderBook
     {
         var bidDepth = _bids.GetDepth(levels);
         var askDepth = _asks.GetDepth(levels);
-        
+
         var totalDepth = bidDepth + askDepth;
         if (totalDepth == 0) return 0.0;
-        
+
         return (double)(bidDepth - askDepth) / totalDepth;
     }
 
@@ -239,10 +239,10 @@ public class OrderBook
     /// </summary>
     public BookSnapshot GetSnapshot(int levels = 10)
     {
-        var bidLevels = _bids.GetTopLevels(levels).Select(l => 
+        var bidLevels = _bids.GetTopLevels(levels).Select(l =>
             new BookLevel(l.PriceTicks, l.TotalQuantity, l.OrderCount)).ToArray();
-        
-        var askLevels = _asks.GetTopLevels(levels).Select(l => 
+
+        var askLevels = _asks.GetTopLevels(levels).Select(l =>
             new BookLevel(l.PriceTicks, l.TotalQuantity, l.OrderCount)).ToArray();
 
         return new BookSnapshot
@@ -276,7 +276,7 @@ public class OrderBook
             {
                 if (level.TotalQuantity < 0)
                 {
-                    _logger?.LogError("Negative quantity in bids for {Symbol}: {Price}@{Quantity}", 
+                    _logger?.LogError("Negative quantity in bids for {Symbol}: {Price}@{Quantity}",
                         _symbol, level.PriceTicks, level.TotalQuantity);
                     return false;
                 }
@@ -286,7 +286,7 @@ public class OrderBook
             {
                 if (level.TotalQuantity < 0)
                 {
-                    _logger?.LogError("Negative quantity in asks for {Symbol}: {Price}@{Quantity}", 
+                    _logger?.LogError("Negative quantity in asks for {Symbol}: {Price}@{Quantity}",
                         _symbol, level.PriceTicks, level.TotalQuantity);
                     return false;
                 }

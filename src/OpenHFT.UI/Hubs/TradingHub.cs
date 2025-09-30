@@ -26,13 +26,13 @@ public class TradingHub : Hub
     public override async Task OnConnectedAsync()
     {
         _logger.LogInformation("Client {ConnectionId} connected to TradingHub", Context.ConnectionId);
-        
+
         // Add client to general updates group
         await Groups.AddToGroupAsync(Context.ConnectionId, "TradingUpdates");
-        
+
         // Send initial data to newly connected client
         await SendInitialData();
-        
+
         await base.OnConnectedAsync();
     }
 
@@ -42,12 +42,12 @@ public class TradingHub : Hub
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         _logger.LogInformation("Client {ConnectionId} disconnected from TradingHub", Context.ConnectionId);
-        
+
         if (exception != null)
         {
             _logger.LogWarning(exception, "Client disconnected with exception");
         }
-        
+
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, "TradingUpdates");
         await base.OnDisconnectedAsync(exception);
     }
@@ -59,8 +59,8 @@ public class TradingHub : Hub
     {
         var groupName = $"Strategy_{strategyName}";
         await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
-        
-        _logger.LogDebug("Client {ConnectionId} subscribed to strategy {StrategyName}", 
+
+        _logger.LogDebug("Client {ConnectionId} subscribed to strategy {StrategyName}",
             Context.ConnectionId, strategyName);
     }
 
@@ -71,8 +71,8 @@ public class TradingHub : Hub
     {
         var groupName = $"Strategy_{strategyName}";
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
-        
-        _logger.LogDebug("Client {ConnectionId} unsubscribed from strategy {StrategyName}", 
+
+        _logger.LogDebug("Client {ConnectionId} unsubscribed from strategy {StrategyName}",
             Context.ConnectionId, strategyName);
     }
 
@@ -93,7 +93,7 @@ public class TradingHub : Hub
                     Timestamp = DateTime.UtcNow
                 };
             }
-            
+
             return new
             {
                 Success = false,
@@ -131,7 +131,7 @@ public class TradingHub : Hub
                     Timestamp = DateTime.UtcNow
                 };
             }
-            
+
             return new
             {
                 Success = false,
@@ -162,7 +162,7 @@ public class TradingHub : Hub
             if (_strategyManager != null)
             {
                 await _strategyManager.SetStrategyEnabled(strategyName, enabled);
-                
+
                 // Notify all clients about the strategy status change
                 await Clients.Group("TradingUpdates").SendAsync("StrategyStatusChanged", new
                 {
@@ -170,16 +170,16 @@ public class TradingHub : Hub
                     Enabled = enabled,
                     Timestamp = DateTime.UtcNow
                 });
-                
-                _logger.LogInformation("Strategy {StrategyName} {Status} by client {ConnectionId}", 
+
+                _logger.LogInformation("Strategy {StrategyName} {Status} by client {ConnectionId}",
                     strategyName, enabled ? "enabled" : "disabled", Context.ConnectionId);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error setting strategy {StrategyName} enabled status to {Enabled}", 
+            _logger.LogError(ex, "Error setting strategy {StrategyName} enabled status to {Enabled}",
                 strategyName, enabled);
-            
+
             // Send error back to calling client
             await Clients.Caller.SendAsync("Error", new
             {
@@ -200,7 +200,7 @@ public class TradingHub : Hub
             if (_strategyManager != null)
             {
                 await _strategyManager.EmergencyStopAsync(reason);
-                
+
                 // Notify all clients about emergency stop
                 await Clients.Group("TradingUpdates").SendAsync("EmergencyStop", new
                 {
@@ -208,15 +208,15 @@ public class TradingHub : Hub
                     Timestamp = DateTime.UtcNow,
                     InitiatedBy = Context.ConnectionId
                 });
-                
-                _logger.LogWarning("Emergency stop initiated by client {ConnectionId}. Reason: {Reason}", 
+
+                _logger.LogWarning("Emergency stop initiated by client {ConnectionId}. Reason: {Reason}",
                     Context.ConnectionId, reason);
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during emergency stop");
-            
+
             await Clients.Caller.SendAsync("Error", new
             {
                 Message = "Failed to execute emergency stop",
@@ -238,10 +238,10 @@ public class TradingHub : Hub
                 // Send current portfolio statistics
                 var portfolioStats = await _strategyManager.GetPortfolioStatistics();
                 await Clients.Caller.SendAsync("PortfolioStatistics", portfolioStats);
-                
+
                 // Send individual strategy statistics
                 var strategies = new[] { "TriangularArbitrage", "OptimalMarketMaking", "MLMomentum" };
-                
+
                 foreach (var strategyName in strategies)
                 {
                     var strategyStats = _strategyManager.GetStrategyStatistics(strategyName);
@@ -255,7 +255,7 @@ public class TradingHub : Hub
                     }
                 }
             }
-            
+
             // Send system status
             await Clients.Caller.SendAsync("SystemStatus", new
             {
@@ -279,18 +279,18 @@ public static class TradingHubExtensions
     /// <summary>
     /// Broadcast market data update to all connected clients
     /// </summary>
-    public static async Task BroadcastMarketDataUpdate(this IHubContext<TradingHub> hubContext, 
+    public static async Task BroadcastMarketDataUpdate(this IHubContext<TradingHub> hubContext,
         MarketDataEvent marketData)
     {
-        var symbol = GetSymbolName(marketData.SymbolId);
+        var symbol = GetSymbolName(marketData.InstrumentId);
         var price = PriceTicksToDecimal(marketData.PriceTicks);
         var volume = QuantityTicksToDecimal(marketData.Quantity);
         var side = marketData.Side.ToString();
         var timestamp = marketData.Timestamp;
-        
+
         // Debug logging (commented to reduce console noise)
         // Console.WriteLine($"Broadcasting: {symbol} - Price: {price}, Volume: {volume}, Side: {side}, Time: {timestamp:HH:mm:ss}");
-        
+
         await hubContext.Clients.Group("TradingUpdates").SendAsync("MarketDataUpdate", new
         {
             Symbol = symbol,
@@ -304,7 +304,7 @@ public static class TradingHubExtensions
     /// <summary>
     /// Broadcast portfolio statistics update
     /// </summary>
-    public static async Task BroadcastPortfolioUpdate(this IHubContext<TradingHub> hubContext, 
+    public static async Task BroadcastPortfolioUpdate(this IHubContext<TradingHub> hubContext,
         object portfolioStats)
     {
         await hubContext.Clients.Group("TradingUpdates").SendAsync("PortfolioStatistics", portfolioStats);
@@ -313,7 +313,7 @@ public static class TradingHubExtensions
     /// <summary>
     /// Broadcast strategy-specific update
     /// </summary>
-    public static async Task BroadcastStrategyUpdate(this IHubContext<TradingHub> hubContext, 
+    public static async Task BroadcastStrategyUpdate(this IHubContext<TradingHub> hubContext,
         string strategyName, object strategyStats)
     {
         await hubContext.Clients.Group($"Strategy_{strategyName}")
@@ -328,7 +328,7 @@ public static class TradingHubExtensions
     /// <summary>
     /// Broadcast system alert to all clients
     /// </summary>
-    public static async Task BroadcastSystemAlert(this IHubContext<TradingHub> hubContext, 
+    public static async Task BroadcastSystemAlert(this IHubContext<TradingHub> hubContext,
         string level, string message, string? details = null)
     {
         await hubContext.Clients.Group("TradingUpdates").SendAsync("SystemAlert", new
@@ -345,7 +345,7 @@ public static class TradingHubExtensions
         return symbolId switch
         {
             1 => "BTCUSDT",
-            2 => "ETHUSDT", 
+            2 => "ETHUSDT",
             3 => "ADAUSDT",
             _ => $"SYMBOL_{symbolId}"
         };

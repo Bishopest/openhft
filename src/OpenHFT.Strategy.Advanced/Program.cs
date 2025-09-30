@@ -108,7 +108,7 @@ public class Program
         foreach (var marketEvent in marketEvents)
         {
             eventCounter++;
-            var orderBook = orderBooks[marketEvent.SymbolId % orderBooks.Count];
+            var orderBook = orderBooks[marketEvent.InstrumentId % orderBooks.Count];
 
             // Update order book with market event (simulation)
             UpdateOrderBookWithEvent(orderBook, marketEvent);
@@ -206,7 +206,7 @@ public class Program
                     priceTicks: DecimalToPriceTicks(currentPrice),
                     quantity: DecimalToQuantityTicks(quantity),
                     kind: eventKind,
-                    symbolId: pair.symbolId,
+                    instrumentId: pair.symbolId,
                     exchange: ExchangeEnum.BINANCE
                 );
 
@@ -243,12 +243,12 @@ public class Program
 
     private static string GetEventDescription(MarketDataEvent marketEvent)
     {
-        var symbolName = marketEvent.SymbolId switch
+        var symbolName = marketEvent.InstrumentId switch
         {
             1 => "BTC/USDT",
             2 => "ETH/USDT",
             3 => "BTC/ETH",
-            _ => $"Symbol{marketEvent.SymbolId}"
+            _ => $"Symbol{marketEvent.InstrumentId}"
         };
 
         return $"{marketEvent.Kind} | {symbolName} | ${PriceTicksToDecimal(marketEvent.PriceTicks):F2} | Vol: {PriceTicksToDecimal(marketEvent.Quantity):F4}";

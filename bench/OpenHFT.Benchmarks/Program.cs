@@ -133,7 +133,7 @@ public class OrderBookBenchmarks
                 priceTicks: PriceUtils.ToTicks((decimal)price),
                 quantity: quantity,
                 kind: EventKind.Update,
-                symbolId: _symbolId,
+                instrumentId: _symbolId,
                 exchange: ExchangeEnum.BINANCE
             );
         }
@@ -149,7 +149,7 @@ public class OrderBookBenchmarks
             priceTicks: PriceUtils.ToTicks(50000m),
             quantity: 100000000,
             kind: EventKind.Update,
-            symbolId: _symbolId,
+            instrumentId: _symbolId,
             exchange: ExchangeEnum.BINANCE
         );
 
@@ -221,7 +221,7 @@ public class RingBufferBenchmarks
                 priceTicks: PriceUtils.ToTicks(50000m),
                 quantity: 100000000,
                 kind: EventKind.Update,
-                symbolId: symbolId,
+                instrumentId: symbolId,
                 exchange: ExchangeEnum.BINANCE
             );
         }
@@ -612,7 +612,7 @@ public class MPSC_Struct_DisruptorBenchmarks
             priceTicks: PriceUtils.ToTicks(50000m),
             quantity: 100000000,
             kind: EventKind.Update,
-            symbolId: symbolId,
+            instrumentId: symbolId,
             exchange: ExchangeEnum.BINANCE
         );
 

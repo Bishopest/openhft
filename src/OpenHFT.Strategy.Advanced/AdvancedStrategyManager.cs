@@ -24,22 +24,22 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
     private readonly ConcurrentDictionary<string, IAdvancedStrategy> _strategies;
     private readonly ConcurrentDictionary<string, StrategyAllocation> _allocations;
     private readonly ConcurrentQueue<StrategyEvent> _eventQueue;
-    
+
     // Risk management
     private readonly RiskManager _riskManager;
     private readonly PerformanceAnalyzer _performanceAnalyzer;
-    
+
     // Configuration
     private readonly AdvancedStrategyConfig _config;
     private bool _isRunning;
     private readonly CancellationTokenSource _cancellationTokenSource;
-    
+
     // Performance tracking
     private long _totalOrdersGenerated;
     private long _totalOrdersExecuted;
     private decimal _totalPnL;
     private readonly object _statsLock = new();
-    
+
     public AdvancedStrategyManager(
         ILogger<AdvancedStrategyManager> logger,
         IServiceProvider serviceProvider,
@@ -55,21 +55,21 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
         _performanceAnalyzer = new PerformanceAnalyzer(logger);
         _cancellationTokenSource = new CancellationTokenSource();
     }
-    
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Advanced Strategy Manager starting...");
-        
+
         try
         {
             // Initialize strategies
             await InitializeStrategies();
-            
+
             // Start risk management
             await _riskManager.StartAsync();
-            
+
             _isRunning = true;
-            
+
             // Main processing loop
             while (!stoppingToken.IsCancellationRequested && _isRunning)
             {
@@ -78,7 +78,7 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
                     await ProcessStrategyEvents(stoppingToken);
                     await UpdatePerformanceMetrics();
                     await _riskManager.MonitorRisk();
-                    
+
                     // Brief pause to prevent excessive CPU usage
                     await Task.Delay(1, stoppingToken);
                 }
@@ -104,14 +104,14 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
             _logger.LogInformation("Advanced Strategy Manager stopped");
         }
     }
-    
+
     /// <summary>
     /// Initialize all advanced strategies with proper configuration
     /// </summary>
     private async Task InitializeStrategies()
     {
         _logger.LogInformation("Initializing advanced strategies...");
-        
+
         try
         {
             // Initialize Triangular Arbitrage Strategy
@@ -127,7 +127,7 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
                     IsEnabled = true
                 });
             }
-            
+
             // Initialize Optimal Market Making Strategy
             if (_config.EnableMarketMaking)
             {
@@ -141,7 +141,7 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
                     IsEnabled = true
                 });
             }
-            
+
             // Initialize ML Momentum Strategy
             if (_config.EnableMomentum)
             {
@@ -155,7 +155,7 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
                     IsEnabled = true
                 });
             }
-            
+
             _logger.LogInformation("Initialized {StrategyCount} advanced strategies", _strategies.Count);
         }
         catch (Exception ex)
@@ -164,7 +164,7 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
             throw;
         }
     }
-    
+
     /// <summary>
     /// Register a strategy with the manager
     /// </summary>
@@ -172,11 +172,11 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
     {
         if (strategy == null)
             throw new ArgumentNullException(nameof(strategy));
-        
+
         if (_strategies.TryAdd(strategy.Name, strategy))
         {
             _allocations.TryAdd(strategy.Name, allocation);
-            
+
             if (allocation.IsEnabled)
             {
                 await strategy.StartAsync();
@@ -192,100 +192,100 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
             _logger.LogWarning("Strategy {StrategyName} already registered", strategy.Name);
         }
     }
-    
+
     /// <summary>
     /// Process market data through all active strategies
     /// </summary>
     public async Task<List<OrderIntent>> ProcessMarketDataAsync(MarketDataEvent marketEvent, OrderBook orderBook)
     {
         var allOrders = new List<OrderIntent>();
-        
+
         if (!_isRunning)
             return allOrders;
-        
+
         try
         {
             // Pre-flight risk checks
-            if (!await _riskManager.CanTrade(marketEvent.SymbolId))
+            if (!await _riskManager.CanTrade(marketEvent.InstrumentId))
             {
                 return allOrders;
             }
-            
+
             // Process through all active strategies in parallel
             var strategyTasks = new List<Task<IEnumerable<OrderIntent>>>();
-            
+
             foreach (var kvp in _strategies)
             {
                 var strategy = kvp.Value;
                 var allocation = _allocations.GetValueOrDefault(kvp.Key);
-                
+
                 if (allocation?.IsEnabled == true && strategy.State == AdvancedStrategyState.Running)
                 {
                     strategyTasks.Add(ProcessStrategyAsync(strategy, marketEvent, orderBook, allocation));
                 }
             }
-            
+
             // Wait for all strategies to complete
             var strategyResults = await Task.WhenAll(strategyTasks);
-            
+
             // Combine all orders
             foreach (var orders in strategyResults)
             {
                 allOrders.AddRange(orders);
             }
-            
+
             // Apply portfolio-level risk management
             var filteredOrders = await _riskManager.FilterOrders(allOrders, orderBook);
-            
+
             // Log activity
             if (filteredOrders.Count > 0)
             {
                 Interlocked.Add(ref _totalOrdersGenerated, allOrders.Count);
                 Interlocked.Add(ref _totalOrdersExecuted, filteredOrders.Count);
-                
+
                 _logger.LogDebug(
                     "Generated {TotalOrders} orders, executed {FilteredOrders} after risk filtering for symbol {SymbolId}",
-                    allOrders.Count, filteredOrders.Count, marketEvent.SymbolId);
+                    allOrders.Count, filteredOrders.Count, marketEvent.InstrumentId);
             }
-            
+
             return filteredOrders;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing market data for symbol {SymbolId}", marketEvent.SymbolId);
+            _logger.LogError(ex, "Error processing market data for symbol {SymbolId}", marketEvent.InstrumentId);
             return allOrders;
         }
     }
-    
+
     /// <summary>
     /// Process individual strategy with allocation limits
     /// </summary>
     private async Task<IEnumerable<OrderIntent>> ProcessStrategyAsync(
-        IAdvancedStrategy strategy, 
-        MarketDataEvent marketEvent, 
+        IAdvancedStrategy strategy,
+        MarketDataEvent marketEvent,
         OrderBook orderBook,
         StrategyAllocation allocation)
     {
         try
         {
-                            var orders = await strategy.ProcessMarketData(marketEvent, orderBook);
-            
+            var orders = await strategy.ProcessMarketData(marketEvent, orderBook);
+
             // Apply strategy-specific position and risk limits
             var filteredOrders = ApplyStrategyLimits(orders, allocation);
-            
+
             // Record strategy event for analytics
             if (filteredOrders.Any())
             {
                 _eventQueue.Enqueue(new StrategyEvent
                 {
                     StrategyName = strategy.Name,
-                    SymbolId = marketEvent.SymbolId,
+                    SymbolId = marketEvent.InstrumentId,
                     EventType = StrategyEventType.OrderGenerated,
                     OrderCount = filteredOrders.Count(),
                     Timestamp = TimestampUtils.GetTimestampMicros()
                 });
             }
-            
+
             return filteredOrders;
         }
         catch (Exception ex)
@@ -294,24 +294,24 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
             return Enumerable.Empty<OrderIntent>();
         }
     }
-    
+
     /// <summary>
     /// Apply strategy-specific limits and constraints
     /// </summary>
     private List<OrderIntent> ApplyStrategyLimits(IEnumerable<OrderIntent> orders, StrategyAllocation allocation)
     {
         var filteredOrders = new List<OrderIntent>();
-        
+
         foreach (var order in orders)
         {
             // Check position limits
             var currentPosition = GetCurrentPosition(allocation.StrategyName, order.SymbolId);
-            var orderSize = order.Side == Side.Buy ? 
-                PriceTicksToDecimal(order.Quantity) : 
+            var orderSize = order.Side == Side.Buy ?
+                PriceTicksToDecimal(order.Quantity) :
                 -PriceTicksToDecimal(order.Quantity);
-            
+
             var newPosition = Math.Abs(currentPosition + orderSize);
-            
+
             if (newPosition <= allocation.MaxPosition)
             {
                 filteredOrders.Add(order);
@@ -324,10 +324,10 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
                     allocation.StrategyName, currentPosition, newPosition, allocation.MaxPosition);
             }
         }
-        
+
         return filteredOrders;
     }
-    
+
     /// <summary>
     /// Process strategy events for analytics and monitoring
     /// </summary>
@@ -335,7 +335,7 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
     {
         const int maxEventsPerBatch = 100;
         var processedEvents = 0;
-        
+
         while (_eventQueue.TryDequeue(out var strategyEvent) && processedEvents < maxEventsPerBatch)
         {
             try
@@ -349,7 +349,7 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
             }
         }
     }
-    
+
     /// <summary>
     /// Update performance metrics for all strategies
     /// </summary>
@@ -361,7 +361,7 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
             {
                 var strategy = kvp.Value;
                 var stats = strategy.GetStatistics();
-                
+
                 await _performanceAnalyzer.UpdateStrategyMetrics(strategy.Name, stats);
             }
         }
@@ -370,7 +370,7 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
             _logger.LogError(ex, "Error updating performance metrics");
         }
     }
-    
+
     /// <summary>
     /// Get comprehensive portfolio statistics
     /// </summary>
@@ -385,14 +385,14 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
             OrderExecutionRate = _totalOrdersGenerated > 0 ? (decimal)_totalOrdersExecuted / _totalOrdersGenerated : 0m,
             LastUpdateTime = TimestampUtils.GetTimestampMicros()
         };
-        
+
         // Aggregate strategy statistics
         var allStats = new List<StrategyStatistics>();
         foreach (var strategy in _strategies.Values)
         {
             allStats.Add(strategy.GetStatistics());
         }
-        
+
         if (allStats.Any())
         {
             portfolioStats.TotalPnL = allStats.Sum(s => s.TotalPnL);
@@ -405,16 +405,16 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
             portfolioStats.TotalActivePositions = allStats.Sum(s => s.ActivePositions);
             portfolioStats.OverallSuccessRate = allStats.Average(s => s.SuccessRate);
         }
-        
+
         // Add risk metrics
         portfolioStats.RiskMetrics = await _riskManager.GetRiskMetrics();
-        
+
         // Add performance analytics
         portfolioStats.PerformanceAnalytics = await _performanceAnalyzer.GetAnalytics();
-        
+
         return portfolioStats;
     }
-    
+
     /// <summary>
     /// Get strategy-specific statistics
     /// </summary>
@@ -426,7 +426,7 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
         }
         return null;
     }
-    
+
     /// <summary>
     /// Enable or disable a specific strategy
     /// </summary>
@@ -436,14 +436,14 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
         {
             throw new ArgumentException($"Strategy '{strategyName}' not found");
         }
-        
+
         if (!_allocations.TryGetValue(strategyName, out var allocation))
         {
             throw new InvalidOperationException($"No allocation found for strategy '{strategyName}'");
         }
-        
+
         allocation.IsEnabled = enabled;
-        
+
         if (enabled && strategy.State != AdvancedStrategyState.Running)
         {
             await strategy.StartAsync();
@@ -475,7 +475,7 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
     {
         return _strategies.Keys.ToList();
     }
-    
+
     /// <summary>
     /// Update strategy allocation
     /// </summary>
@@ -486,7 +486,7 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
             currentAllocation.CapitalAllocation = newAllocation.CapitalAllocation;
             currentAllocation.MaxPosition = newAllocation.MaxPosition;
             currentAllocation.RiskLimit = newAllocation.RiskLimit;
-            
+
             _logger.LogInformation("Updated allocation for strategy {StrategyName}: " +
                 "Capital={Capital}, MaxPosition={MaxPosition}, RiskLimit={RiskLimit}",
                 strategyName, newAllocation.CapitalAllocation, newAllocation.MaxPosition, newAllocation.RiskLimit);
@@ -496,29 +496,29 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
             throw new ArgumentException($"Strategy '{strategyName}' not found");
         }
     }
-    
+
     /// <summary>
     /// Emergency stop all strategies
     /// </summary>
     public async Task EmergencyStopAsync(string reason)
     {
         _logger.LogWarning("Emergency stop triggered: {Reason}", reason);
-        
+
         _isRunning = false;
-        
+
         // Stop all strategies immediately
         var stopTasks = _strategies.Values.Select(s => s.StopAsync()).ToArray();
         await Task.WhenAll(stopTasks);
-        
+
         await _riskManager.EmergencyStop(reason);
-        
+
         _logger.LogWarning("Emergency stop completed");
     }
-    
+
     private async Task StopStrategies()
     {
         _logger.LogInformation("Stopping all strategies...");
-        
+
         var stopTasks = _strategies.Values.Select(async strategy =>
         {
             try
@@ -531,11 +531,11 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
                 _logger.LogError(ex, "Error stopping strategy: {StrategyName}", strategy.Name);
             }
         });
-        
+
         await Task.WhenAll(stopTasks);
         _logger.LogInformation("All strategies stopped");
     }
-    
+
     // Helper methods
     private decimal GetCurrentPosition(string strategyName, int symbolId)
     {
@@ -543,10 +543,10 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
         // For now, return 0 as a placeholder
         return 0m;
     }
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private decimal PriceTicksToDecimal(long ticks) => ticks * 0.01m;
-    
+
     public override void Dispose()
     {
         _cancellationTokenSource?.Cancel();
@@ -561,19 +561,19 @@ public class AdvancedStrategyConfig
     public bool EnableArbitrage { get; set; } = true;
     public bool EnableMarketMaking { get; set; } = true;
     public bool EnableMomentum { get; set; } = true;
-    
+
     public decimal ArbitrageAllocation { get; set; } = 0.3m;      // 30% allocation
     public decimal MarketMakingAllocation { get; set; } = 0.5m;  // 50% allocation
     public decimal MomentumAllocation { get; set; } = 0.2m;      // 20% allocation
-    
+
     public decimal MaxArbitragePosition { get; set; } = 10m;
     public decimal MaxMarketMakingPosition { get; set; } = 50m;
     public decimal MaxMomentumPosition { get; set; } = 20m;
-    
+
     public decimal ArbitrageRiskLimit { get; set; } = 0.05m;     // 5% risk limit
     public decimal MarketMakingRiskLimit { get; set; } = 0.03m; // 3% risk limit
     public decimal MomentumRiskLimit { get; set; } = 0.10m;     // 10% risk limit
-    
+
     public RiskManagementConfig RiskConfig { get; set; } = new();
 }
 

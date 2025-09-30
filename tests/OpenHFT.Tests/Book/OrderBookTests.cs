@@ -55,7 +55,7 @@ public class OrderBookTests
             priceTicks: priceTicks,
             quantity: quantity,
             kind: EventKind.Add,
-            symbolId: symbolId,
+            instrumentId: symbolId,
             exchange: ExchangeEnum.BINANCE
         );
 
@@ -88,7 +88,7 @@ public class OrderBookTests
             priceTicks: priceTicks,
             quantity: quantity,
             kind: EventKind.Add,
-            symbolId: symbolId,
+            instrumentId: symbolId,
             exchange: ExchangeEnum.BINANCE
         );
 

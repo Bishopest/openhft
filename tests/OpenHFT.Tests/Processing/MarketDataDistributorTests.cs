@@ -55,7 +55,7 @@ public class MarketDataDistributorTests
 
         // --- 4. Mock IFeedAdapter 생성 ---
         _mockAdapter = new Mock<IFeedAdapter>();
-        _mockAdapter.Setup(a => a.Exchange).Returns(ExchangeEnum.BINANCE);
+        _mockAdapter.Setup(a => a.SourceExchange).Returns(ExchangeEnum.BINANCE);
 
         // --- 5. 핵심 컴포넌트들을 '수동'으로 조립 ---
         // a) Distributor 생성 (Disruptor와 로거 주입)
@@ -114,11 +114,11 @@ public class MarketDataDistributorTests
         // --- Assert ---
         // 1. BTC Consumer는 BTC 이벤트만 받아야 함
         _btcConsumer.ReceivedEvents.Should().HaveCount(1);
-        _btcConsumer.ReceivedEvents[0].SymbolId.Should().Be(btcSymbolId);
+        _btcConsumer.ReceivedEvents[0].InstrumentId.Should().Be(btcSymbolId);
 
         // 2. ETH Consumer는 ETH 이벤트만 받아야 함
         _ethConsumer.ReceivedEvents.Should().HaveCount(1);
-        _ethConsumer.ReceivedEvents[0].SymbolId.Should().Be(ethSymbolId);
+        _ethConsumer.ReceivedEvents[0].InstrumentId.Should().Be(ethSymbolId);
     }
 }
 

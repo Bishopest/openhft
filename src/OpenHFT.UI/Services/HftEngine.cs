@@ -189,7 +189,7 @@ public class HftEngine : BackgroundService
 
     private async Task ProcessMarketDataEvent(MarketDataEvent marketDataEvent)
     {
-        var symbol = OpenHFT.Core.Utils.SymbolUtils.GetSymbol(marketDataEvent.SymbolId);
+        var symbol = OpenHFT.Core.Utils.SymbolUtils.GetSymbol(marketDataEvent.InstrumentId);
 
         if (!_orderBooks.TryGetValue(symbol, out var orderBook))
         {
