@@ -54,7 +54,8 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
         }
         else
         {
-            _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.InstrumentId}) subscribed successfully.");
+            consumer.Start();
+            _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.InstrumentId}) subscribed and started successfully.");
         }
     }
 
@@ -64,7 +65,8 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
         {
             if (innerSubscriptionDict.TryRemove(consumer.ConsumerName, out var removedConsumer))
             {
-                _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.InstrumentId}) unsubscribed successfully.");
+                removedConsumer.Stop();
+                _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.InstrumentId}) unsubscribed and stopped successfully.");
             }
             else
             {
@@ -88,19 +90,7 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
             {
                 foreach (var kvp in subscribers)
                 {
-                    var consumer = kvp.Value;
-                    // Fire-and-forget
-                    _ = Task.Run(() =>
-                    {
-                        try
-                        {
-                            consumer.OnMarketData(marketEvent_copy);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogErrorWithCaller(ex, $"Error during consumer({consumer.ConsumerName} OnMarketData callback)");
-                        }
-                    });
+                    kvp.Value.Post(marketEvent_copy);
                 }
             }
             else

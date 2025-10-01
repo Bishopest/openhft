@@ -5,9 +5,24 @@ namespace OpenHFT.Processing.Interfaces;
 
 public interface IMarketDataConsumer
 {
-    Task OnMarketData(MarketDataEvent marketEvent);
     string ConsumerName { get; }
     int InstrumentId { get; }
     ExchangeEnum Exchange { get; }
-    int Priority { get; } // Lower numbers = higher priority
+
+    /// <summary>
+    /// Posts a market data event to the consumer's internal queue for processing.
+    /// This method should be non-blocking and return immediately.
+    /// keyword 'in' => pass by reference & read-only
+    /// </summary>
+    void Post(in MarketDataEvent data);
+
+    /// <summary>
+    /// Starts the consumer's internal processing thread.
+    /// </summary>
+    void Start();
+
+    /// <summary>
+    /// Stops the consumer's internal processing thread and waits for it to finish.
+    /// </summary>
+    void Stop();
 }

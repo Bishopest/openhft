@@ -43,8 +43,8 @@ public class MarketDataDistributorTests
         // --- 2. 테스트용 Consumer(옵저버) 생성 ---
         var btc = SymbolUtils.GetSymbolId("BTCUSDT");
         var eth = SymbolUtils.GetSymbolId("ETHUSDT");
-        _btcConsumer = new TestConsumer(btc, ExchangeEnum.BINANCE, "BTC_Consumer", new[] { "BTCUSDT@depth" });
-        _ethConsumer = new TestConsumer(eth, ExchangeEnum.BINANCE, "ETH_Consumer", new[] { "ETHUSDT@depth" });
+        _btcConsumer = new TestConsumer(_logger, btc, ExchangeEnum.BINANCE, "BTC_Consumer", new[] { "BTCUSDT@depth" });
+        _ethConsumer = new TestConsumer(_logger, eth, ExchangeEnum.BINANCE, "ETH_Consumer", new[] { "ETHUSDT@depth" });
         var allConsumers = new List<IMarketDataConsumer> { _btcConsumer, _ethConsumer };
 
         // --- 3. Disruptor 인스턴스 생성 ---
@@ -126,22 +126,20 @@ public class MarketDataDistributorTests
 }
 
 // --- 테스트를 위한 Helper 클래스 (수정) ---
-public class TestConsumer : IMarketDataConsumer
+public class TestConsumer : BaseMarketDataConsumer
 {
-    public string ConsumerName { get; }
-    public int InstrumentId { get; }
-    public ExchangeEnum Exchange { get; }
+    public override string ConsumerName { get; }
+    public override int InstrumentId { get; }
+    public override ExchangeEnum Exchange { get; }
     private readonly IEnumerable<string> _subscriptionKeys;
     public List<MarketDataEvent> ReceivedEvents { get; } = new();
 
-    public int Priority => 1;
-
-
-    public TestConsumer(int symbolId, ExchangeEnum exchange, string consumerName, IEnumerable<string> subscriptionKeys)
+    public TestConsumer(ILogger logger, int instrumentId, ExchangeEnum exchange, string consumerName, IEnumerable<string> subscriptionKeys) : base(logger)
     {
+
         ConsumerName = consumerName;
         Exchange = exchange;
-        InstrumentId = symbolId;
+        InstrumentId = instrumentId;
         _subscriptionKeys = subscriptionKeys;
     }
 
@@ -159,6 +157,11 @@ public class TestConsumer : IMarketDataConsumer
         }
 
         return Task.CompletedTask;
+    }
+
+    protected override void OnMarketData(in MarketDataEvent data)
+    {
+        ReceivedEvents.Add(data);
     }
 }
 
