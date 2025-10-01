@@ -47,13 +47,22 @@ public class InstrumentRepository : IInstrumentRepository
             {
                 var market = Enum.Parse<ExchangeEnum>(record.market, true);
                 var symbol = (string)record.symbol;
-                var productType = ParseProductType(record.type);
+                Enum.TryParse<ProductType>(record.type, true, out ProductType productType);
                 var baseCurrency = Currency.FromString(symbol.Replace((string)record.quote_currency, "")); // Simplified logic
                 var quoteCurrency = Currency.FromString(record.quote_currency);
                 var tickSize = decimal.Parse(record.minimum_price_variation);
                 var lotSize = decimal.Parse(record.lot_size);
                 var multiplier = decimal.Parse(record.contract_multiplier);
-                var minOrderSize = decimal.Parse(record.minimum_order_size);
+
+                decimal minOrderSize;
+                try
+                {
+                    minOrderSize = decimal.Parse(record.minimum_order_size);
+                }
+                catch (Exception)
+                {
+                    minOrderSize = lotSize;
+                }
 
                 var instrumentId = _nextInstrumentId++;
                 Instrument newInstrument;
@@ -82,16 +91,6 @@ public class InstrumentRepository : IInstrumentRepository
         }
 
         _logger.LogInformationWithCaller($"Successfully loaded {_instrumentsById.Count} instruments from {filePath}.");
-    }
-
-    private ProductType ParseProductType(string type)
-    {
-        return type.ToLowerInvariant() switch
-        {
-            "cryptofuture" => ProductType.PerpetualFuture,
-            "cryptospot" => ProductType.Spot,
-            _ => throw new ArgumentException($"Unknown product type string: {type}")
-        };
     }
 
     public Instrument? GetById(int instrumentId)
