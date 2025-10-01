@@ -22,10 +22,7 @@
     <ProjectReference Include="..\OpenHFT.Book\OpenHFT.Book.csproj" />
     <ProjectReference Include="..\OpenHFT.Strategy\OpenHFT.Strategy.csproj" />
     <ProjectReference Include="..\OpenHFT.Strategy.Advanced\OpenHFT.Strategy.Advanced.csproj" />
-    <ProjectReference Include="..\OpenHFT.Risk\OpenHFT.Risk.csproj" />
     <ProjectReference Include="..\OpenHFT.Gateway\OpenHFT.Gateway.csproj" />
-    <ProjectReference Include="..\OpenHFT.Matcher\OpenHFT.Matcher.csproj" />
-    <ProjectReference Include="..\OpenHFT.Metrics\OpenHFT.Metrics.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -35,8 +32,8 @@
     <PackageReference Include="MudBlazor" Version="8.11.0" />
     <PackageReference Include="Plotly.Blazor" Version="6.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.SpaServices.Extensions" Version="8.0.7" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" Version="9.0.9" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.9" />
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.1" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
