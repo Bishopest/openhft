@@ -1,4 +1,6 @@
 {
+    
+  
   "subscriptions": [
     {
       "exchange": "binance",
@@ -7,13 +9,14 @@
     },
     {
       "exchange": "binance",
-      "product-type": "perpetual",
+      "product-type": "perp",
       "symbols": [ "BTCUSDT", "ETHUSDT" ]
     },
     {
       "exchange": "bybit",
-      "product-type": "perpetual",
+      "product-type": "perp",
       "symbols": [ "BTCUSDT" ]
     }
-  ]
+  ],
+  "data-folder": "/Users/jskim/workspace/openhft/data"
 }

@@ -1,5 +1,5 @@
 
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace OpenHFT.Core.Configuration;
 
@@ -8,7 +8,7 @@ namespace OpenHFT.Core.Configuration;
 /// </summary>
 public class SubscriptionConfig
 {
-    [JsonPropertyName("subscriptions")]
+    [JsonProperty("subscriptions")]
     public List<SubscriptionGroup> Subscriptions { get; set; } = new();
 }
 
@@ -18,13 +18,13 @@ public class SubscriptionConfig
 /// </summary>
 public class SubscriptionGroup
 {
-    [JsonPropertyName("exchange")]
+    [JsonProperty("exchange")]
     public string Exchange { get; set; } = string.Empty;
 
     // This attribute maps the JSON key "product-type" to the C# property "ProductType".
-    [JsonPropertyName("product-type")]
+    [JsonProperty("product-type")]
     public string ProductType { get; set; } = string.Empty;
 
-    [JsonPropertyName("symbols")]
+    [JsonProperty("symbols")]
     public string[] Symbols { get; set; } = Array.Empty<string>();
 }
