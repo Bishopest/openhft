@@ -58,6 +58,31 @@ public class FeedStatistics
     {
         _e2eLatencies.Add(e2eLatencyMs);
     }
+
+    /// <summary>
+    /// Calculates the latency for a given percentile.
+    /// </summary>
+    /// <param name="percentile">The percentile to calculate (e.g., 0.95 for 95th percentile).</param>
+    /// <returns>The latency value at the specified percentile.</returns>
+    public double GetLatencyPercentile(double percentile)
+    {
+        if (percentile < 0.0 || percentile > 1.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(percentile), "Percentile must be between 0.0 and 1.0.");
+        }
+
+        var latenciesSnapshot = _e2eLatencies.ToArray();
+
+        if (latenciesSnapshot.Length == 0)
+        {
+            return 0.0;
+        }
+
+        Array.Sort(latenciesSnapshot);
+
+        int index = (int)Math.Ceiling(percentile * latenciesSnapshot.Length) - 1;
+        return latenciesSnapshot[Math.Max(0, index)];
+    }
 }
 
 /// <summary>

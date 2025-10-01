@@ -54,4 +54,21 @@ public class CircularBuffer<T>
             }
         }
     }
+
+    /// <summary>
+    /// Copies the elements of the circular buffer to a new array.
+    /// </summary>
+    /// <returns>A new array containing the elements of the circular buffer.</returns>
+    public T[] ToArray()
+    {
+        lock (_lock)
+        {
+            var array = new T[_count];
+            for (int i = 0; i < _count; i++)
+            {
+                array[i] = _buffer[(_tail + i) % _buffer.Length];
+            }
+            return array;
+        }
+    }
 }
