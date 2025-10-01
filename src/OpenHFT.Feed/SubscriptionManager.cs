@@ -18,72 +18,75 @@ public class SubscriptionManager : ISubscriptionManager
         ILogger<SubscriptionManager> logger,
         IFeedHandler feedHandler,
         IInstrumentRepository instrumentRepository,
-        SubscriptionConfig configOptions) // IOptions pattern is best practice
+        SubscriptionConfig subscriptionConfig) // IOptions pattern is best practice
     {
         _logger = logger;
         _feedHandler = feedHandler;
         _instrumentRepository = instrumentRepository;
-        _config = configOptions;
+        _config = subscriptionConfig;
     }
 
     public async Task InitializeSubscriptionsAsync(CancellationToken cancellationToken = default)
     {
-        _logger.LogInformationWithCaller("Initializing subscriptions based on config.json...");
+        _logger.LogInformationWithCaller("Initializing subscriptions from config.json...");
 
-        int totalSymbolsConfigured = 0;
+        var instrumentsByAdapter = new Dictionary<(ExchangeEnum, ProductType), List<Instrument>>();
 
         // The _config object itself is the dictionary of exchanges
-        foreach (var exchangeEntry in _config)
+        foreach (var group in _config.Subscriptions)
         {
-            var exchangeName = exchangeEntry.Key;
+            if (group.Symbols == null || !group.Symbols.Any()) continue;
 
-            foreach (var productTypeEntry in exchangeEntry.Value)
+            try
             {
-                var productTypeName = productTypeEntry.Key;
-                var symbols = productTypeEntry.Value;
+                var exchange = ParseEnum<ExchangeEnum>(group.Exchange);
+                var productType = ParseProductType(group.ProductType);
+                var adapterKey = (exchange, productType);
 
-                if (symbols == null || !symbols.Any()) continue;
-
-                var instrumentsToSubscribe = new List<Instrument>();
-                var exchange = ParseEnum<ExchangeEnum>(exchangeName);
-                var productType = ParseProductType(productTypeName);
-                foreach (var symbolName in symbols)
+                if (!instrumentsByAdapter.ContainsKey(adapterKey))
                 {
-                    totalSymbolsConfigured++;
-                    try
-                    {
-                        var instrument = _instrumentRepository.FindBySymbol(symbolName, productType, exchange);
-
-                        if (instrument != null)
-                        {
-                            instrumentsToSubscribe.Add(instrument);
-                        }
-                        else
-                        {
-                            _logger.LogWarningWithCaller($"Instrument not found in repository for: [Exchange: {exchangeName}, ProductType: {productTypeName}, Symbol: {symbolName}]. Skipping.");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogErrorWithCaller(ex, $"Failed to process subscription entry: [Exchange: {exchangeName}, ProductType: {productTypeName}, Symbol: {symbolName}]");
-                    }
+                    instrumentsByAdapter[adapterKey] = new List<Instrument>();
                 }
 
-                if (instrumentsToSubscribe.Any())
+                foreach (var symbolName in group.Symbols)
                 {
-                    var adapter = _feedHandler.GetAdapter(exchange, productType);
-                    if (adapter != null)
+                    var instrument = _instrumentRepository.FindBySymbol(symbolName, productType, exchange);
+                    if (instrument != null)
                     {
-                        await adapter.SubscribeAsync(instrumentsToSubscribe, cancellationToken);
-                        _logger.LogInformationWithCaller($"Processed to subscribe {totalSymbolsConfigured} symbols from exchange {exchange}-{productTypeName}");
+                        instrumentsByAdapter[adapterKey].Add(instrument);
                     }
-                }
-                else
-                {
-                    _logger.LogWarningWithCaller("No valid instruments to subscribe to. The system will not receive market data.");
+                    else
+                    {
+                        _logger.LogWarning("Instrument not found for {Exchange}/{ProductType}/{Symbol}", group.Exchange, group.ProductType, symbolName);
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to process subscription group: {@Group}", group);
+            }
         }
+
+        var subscribeTasks = new List<Task>();
+        foreach (var entry in instrumentsByAdapter)
+        {
+            var adapterKey = entry.Key;
+            var instrumentsToSubscribe = entry.Value;
+            var adapter = _feedHandler.GetAdapter(adapterKey.Item1, adapterKey.Item2);
+
+            if (adapter != null)
+            {
+                _logger.LogInformationWithCaller($"Requesting subscription of {instrumentsToSubscribe.Count} instruments on adapter {adapterKey}");
+                subscribeTasks.Add(adapter.SubscribeAsync(instrumentsToSubscribe, cancellationToken));
+            }
+            else
+            {
+                _logger.LogWarningWithCaller($"Adapter not found for {adapterKey}, cannot subscribe to {instrumentsToSubscribe.Count} instruments.");
+            }
+        }
+
+        await Task.WhenAll(subscribeTasks);
+        _logger.LogInformationWithCaller("All subscription requests have been submitted.");
     }
 
     private T ParseEnum<T>(string value) where T : struct, Enum
