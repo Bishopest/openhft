@@ -83,14 +83,14 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
     {
         try
         {
-            Interlocked.Increment(ref _distributedEventCount);
-            var marketEvent_copy = data.Event;
+            //Interlocked.Increment(ref _distributedEventCount);
+            var eventCopied = data.Event;
 
-            if (_subscriptions.TryGetValue(marketEvent_copy.InstrumentId, out var subscribers))
+            if (_subscriptions.TryGetValue(eventCopied.InstrumentId, out var subscribers))
             {
                 foreach (var kvp in subscribers)
                 {
-                    kvp.Value.Post(marketEvent_copy);
+                    kvp.Value.Post(eventCopied);
                 }
             }
         }
