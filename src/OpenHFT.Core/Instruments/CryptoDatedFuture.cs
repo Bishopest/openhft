@@ -31,5 +31,5 @@ public class CryptoDatedFuture : CryptoFuture
     }
 
     public override ProductType ProductType => ProductType.DatedFuture;
-    public override string ToString() => $"{Symbol}-{ExpirationDate:yyMMdd} on {Exchange}";
+    public override string ToString() => $"{Symbol}-{ExpirationDate:yyMMdd} on {SourceExchange}";
 }

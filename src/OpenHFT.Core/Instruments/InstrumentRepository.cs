@@ -82,7 +82,7 @@ public class InstrumentRepository : IInstrumentRepository
                 }
 
                 _instrumentsById[newInstrument.InstrumentId] = newInstrument;
-                _instrumentsByDetails[(newInstrument.Symbol.ToUpperInvariant(), newInstrument.ProductType, newInstrument.Exchange)] = newInstrument;
+                _instrumentsByDetails[(newInstrument.Symbol.ToUpperInvariant(), newInstrument.ProductType, newInstrument.SourceExchange)] = newInstrument;
             }
             catch (Exception ex)
             {

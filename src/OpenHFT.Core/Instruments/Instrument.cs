@@ -26,7 +26,7 @@ public abstract class Instrument
     /// <summary>
     /// The exchange where this instrument is traded.
     /// </summary>
-    public ExchangeEnum Exchange { get; }
+    public ExchangeEnum SourceExchange { get; }
 
     /// <summary>
     /// The asset being traded (e.g., BTC in BTC/USDT).
@@ -65,7 +65,7 @@ public abstract class Instrument
     {
         InstrumentId = instrumentId;
         Symbol = symbol;
-        Exchange = exchange;
+        SourceExchange = exchange;
         BaseCurrency = baseCurrency;
         QuoteCurrency = quoteCurrency;
         TickSize = tickSize;
@@ -73,5 +73,5 @@ public abstract class Instrument
         MinOrderSize = minOrderSize;
     }
 
-    public override string ToString() => $"{Symbol} on {Exchange}";
+    public override string ToString() => $"{Symbol} on {SourceExchange}";
 }

@@ -21,6 +21,6 @@ public class CryptoPerpetual : CryptoFuture
 
     public override ProductType ProductType => ProductType.PerpetualFuture;
 
-    public override string ToString() => $"{Symbol}-PERP on {Exchange}";
+    public override string ToString() => $"{Symbol}-PERP on {SourceExchange}";
 
 }
