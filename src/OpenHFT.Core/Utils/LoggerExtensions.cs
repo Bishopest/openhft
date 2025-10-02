@@ -9,11 +9,16 @@ public static class LoggerExtensions
         this ILogger logger,
         string message,
         [CallerMemberName] string memberName = "",
-        [CallerLineNumber] int sourceLineNumber = 0)
+        [CallerLineNumber] int sourceLineNumber = 0,
+        [CallerFilePath] string sourceFilePath = "")
     {
+        var className = Path.GetFileNameWithoutExtension(sourceFilePath);
         logger.LogInformation(
-            "[{MemberName}:{LineNumber}] {Message}",
-            memberName, sourceLineNumber, message
+            "[{ClassName}.{MemberName}:{LineNumber}] {Message}",
+            className,
+            memberName,
+            sourceLineNumber,
+            message
         );
     }
 
@@ -21,11 +26,16 @@ public static class LoggerExtensions
         this ILogger logger,
         string message,
         [CallerMemberName] string memberName = "",
-        [CallerLineNumber] int sourceLineNumber = 0)
+        [CallerLineNumber] int sourceLineNumber = 0,
+        [CallerFilePath] string sourceFilePath = "")
     {
-        logger.LogWarning(
-            "[{MemberName}:{LineNumber}] {Message}",
-            memberName, sourceLineNumber, message
+        var className = Path.GetFileNameWithoutExtension(sourceFilePath);
+        logger.LogInformation(
+            "[{ClassName}.{MemberName}:{LineNumber}] {Message}",
+            className, // 추출된 클래스 이름
+            memberName,
+            sourceLineNumber,
+            message
         );
     }
 
@@ -34,12 +44,17 @@ public static class LoggerExtensions
         Exception exception,
         string message,
         [CallerMemberName] string memberName = "",
-        [CallerLineNumber] int sourceLineNumber = 0)
+        [CallerLineNumber] int sourceLineNumber = 0,
+        [CallerFilePath] string sourceFilePath = "")
     {
+        var className = Path.GetFileNameWithoutExtension(sourceFilePath);
         logger.LogError(
             exception,
-            "[{MemberName}:{LineNumber}] {Message}",
-            memberName, sourceLineNumber, message
+            "[{ClassName}.{MemberName}:{LineNumber}] {Message}",
+            className,
+            memberName,
+            sourceLineNumber,
+            message
         );
     }
 }
