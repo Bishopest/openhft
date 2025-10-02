@@ -36,52 +36,6 @@ public class BinanceAdapter : BaseFeedAdapter
         yield return $"{normalizedSymbol}{TopicDepth}";
     }
 
-    // private async Task ProcessMessage(string message)
-    // {
-    //     try
-    //     {
-    //         using var document = JsonDocument.Parse(message);
-    //         var root = document.RootElement;
-
-    //         // Check if this is a subscription response
-    //         if (root.TryGetProperty("result", out _) || root.TryGetProperty("id", out _))
-    //         {
-    //             _logger.LogDebug("Received subscription response: {Message}", message);
-    //             return;
-    //         }
-
-    //         // Process depth update
-    //         if (root.TryGetProperty("stream", out var streamElement) &&
-    //             root.TryGetProperty("data", out var dataElement))
-    //         {
-    //             var stream = streamElement.GetString();
-    //             if (stream?.Contains("@depth") == true)
-    //             {
-    //                 await ProcessDepthUpdate(dataElement, stream);
-    //             }
-    //         }
-    //         else if (root.TryGetProperty("e", out var eventTypeElement))
-    //         {
-    //             // Direct depth update (single stream)
-    //             var eventType = eventTypeElement.GetString();
-    //             if (eventType == "depthUpdate")
-    //             {
-    //                 await ProcessDepthUpdate(root);
-    //             }
-    //         }
-
-    //     }
-    //     catch (FeedParseException fex)
-    //     {
-    //         _logger.LogErrorWithCaller(fex, "Error processing message: {Message}", fex.RawMessage);
-    //         Error?.Invoke(this, new FeedErrorEventArgs(fex, null));
-    //     }
-    //     catch (Exception ex)
-    //     {
-    //         _logger.LogErrorWithCaller(ex, "Error processing message: {Message}", message);
-    //     }
-    // }
-
     private void ProcessAggTrade(JsonElement data)
     {
         var symbol = data.GetProperty("s").GetString();
@@ -89,26 +43,35 @@ public class BinanceAdapter : BaseFeedAdapter
         var instrument = _instrumentRepository.FindBySymbol(symbol, ProductType, SourceExchange);
         if (instrument == null) return;
 
-        var price = data.GetProperty("p").GetDecimal();
-        var quantity = data.GetProperty("q").GetDecimal();
-        var tradeTime = data.GetProperty("T").GetInt64(); // Milliseconds
-        var isBuyerMaker = data.GetProperty("m").GetBoolean();
+        // Price and quantity are sent as strings in the aggTrade stream.
+        if (decimal.TryParse(data.GetProperty("p").GetString(), out var price) &&
+            decimal.TryParse(data.GetProperty("q").GetString(), out var quantity))
+        {
+            var tradeTime = data.GetProperty("T").GetInt64(); // Milliseconds
+            var isBuyerMaker = data.GetProperty("m").GetBoolean();
 
-        // If buyer is the maker, the aggressor was a seller. Otherwise, a buyer.
-        var side = isBuyerMaker ? Side.Sell : Side.Buy;
+            // If buyer is the maker, the aggressor was a seller. Otherwise, a buyer.
+            var side = isBuyerMaker ? Side.Sell : Side.Buy;
 
-        var marketDataEvent = new MarketDataEvent(
-            sequence: 0, // aggTrade doesn't have a clear sequence like depth updates
-            timestamp: tradeTime * 1000, // Convert ms to microseconds
-            side: side,
-            priceTicks: PriceUtils.ToTicks(price), // Assumes a PriceUtils helper
-            quantity: (long)(quantity * 100_000_000), // Convert to base units
-            kind: EventKind.Trade,
-            instrumentId: instrument.InstrumentId,
-            exchange: SourceExchange
-        );
+            var marketDataEvent = new MarketDataEvent(
+                sequence: 0, // aggTrade doesn't have a clear sequence like depth updates
+                timestamp: tradeTime * 1000, // Convert ms to microseconds
+                side: side,
+                priceTicks: PriceUtils.ToTicks(price), // Assumes a PriceUtils helper
+                quantity: (long)(quantity * 100_000_000), // Convert to base units
+                kind: EventKind.Trade,
+                instrumentId: instrument.InstrumentId,
+                exchange: SourceExchange
+            );
 
-        OnMarketDataReceived(marketDataEvent);
+            OnMarketDataReceived(marketDataEvent);
+        }
+        else
+        {
+            _logger.LogWarningWithCaller($"Failed to parse price or quantity for aggTrade on symbol {symbol}");
+            return;
+
+        }
     }
 
     private void ProcessBookTicker(JsonElement data)
