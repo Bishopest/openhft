@@ -93,10 +93,6 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
                     kvp.Value.Post(marketEvent_copy);
                 }
             }
-            else
-            {
-                _logger.LogWarningWithCaller($"Subscription symbol id: {marketEvent_copy.InstrumentId}) not found.");
-            }
         }
         catch (Exception ex)
         {
