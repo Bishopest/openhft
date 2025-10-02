@@ -44,38 +44,38 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
     public void Subscribe(IMarketDataConsumer consumer)
     {
         var innerSubscriptionDict = _subscriptions.GetOrAdd(
-            consumer.InstrumentId,
+            consumer.Instrument.InstrumentId,
             _ => new ConcurrentDictionary<string, IMarketDataConsumer>()
         );
 
         if (!innerSubscriptionDict.TryAdd(consumer.ConsumerName, consumer))
         {
-            _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.InstrumentId}) already exists");
+            _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Instrument.SourceExchange}, symbol id: {consumer.Instrument.InstrumentId}) already exists");
         }
         else
         {
             consumer.Start();
-            _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.InstrumentId}) subscribed and started successfully.");
+            _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Instrument.SourceExchange}, symbol id: {consumer.Instrument.InstrumentId}) subscribed and started successfully.");
         }
     }
 
     public void Unsubscribe(IMarketDataConsumer consumer)
     {
-        if (_subscriptions.TryGetValue(consumer.InstrumentId, out var innerSubscriptionDict))
+        if (_subscriptions.TryGetValue(consumer.Instrument.InstrumentId, out var innerSubscriptionDict))
         {
             if (innerSubscriptionDict.TryRemove(consumer.ConsumerName, out var removedConsumer))
             {
                 removedConsumer.Stop();
-                _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.InstrumentId}) unsubscribed and stopped successfully.");
+                _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Instrument.SourceExchange}, symbol id: {consumer.Instrument.InstrumentId}) unsubscribed and stopped successfully.");
             }
             else
             {
-                _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Exchange}, symbol id: {consumer.InstrumentId}) not found for unsubscription.");
+                _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Instrument.SourceExchange}, symbol id: {consumer.Instrument.InstrumentId}) not found for unsubscription.");
             }
         }
         else
         {
-            _logger.LogWarningWithCaller($"Subscription symbol id: {consumer.InstrumentId}) not found for unsubscription.");
+            _logger.LogWarningWithCaller($"Subscription symbol id: {consumer.Instrument.InstrumentId}) not found for unsubscription.");
         }
     }
 

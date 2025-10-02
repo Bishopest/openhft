@@ -1,4 +1,5 @@
 using System;
+using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
 
 namespace OpenHFT.Processing.Interfaces;
@@ -6,8 +7,7 @@ namespace OpenHFT.Processing.Interfaces;
 public interface IMarketDataConsumer
 {
     string ConsumerName { get; }
-    int InstrumentId { get; }
-    ExchangeEnum Exchange { get; }
+    Instrument Instrument { get; }
 
     /// <summary>
     /// Posts a market data event to the consumer's internal queue for processing.

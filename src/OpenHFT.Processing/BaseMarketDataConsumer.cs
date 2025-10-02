@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Processing.Interfaces;
@@ -10,8 +11,7 @@ namespace OpenHFT.Processing;
 public abstract class BaseMarketDataConsumer : IMarketDataConsumer
 {
     public abstract string ConsumerName { get; }
-    public abstract int InstrumentId { get; }
-    public abstract ExchangeEnum Exchange { get; }
+    public abstract Instrument Instrument { get; }
 
     protected readonly ILogger _logger;
     private readonly BlockingCollection<MarketDataEvent> _eventQueue;

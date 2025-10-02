@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Book.Models;
+using OpenHFT.Core.Instruments;
 
 namespace OpenHFT.Book.Core;
 
@@ -14,8 +15,7 @@ namespace OpenHFT.Book.Core;
 public class OrderBook
 {
     private readonly ILogger<OrderBook>? _logger;
-    private readonly string _symbol;
-    private readonly int _symbolId;
+    private readonly Instrument _instrument;
     private readonly BookSide _bids;
     private readonly BookSide _asks;
 
@@ -32,11 +32,10 @@ public class OrderBook
     private readonly bool _enableL3;
     private long _nextOrderId = 1;
 
-    public OrderBook(string symbol, ILogger<OrderBook>? logger = null, bool enableL3 = false)
+    public OrderBook(Instrument instrument, ILogger<OrderBook>? logger = null, bool enableL3 = false)
     {
-        _symbol = symbol;
-        _symbolId = SymbolUtils.GetSymbolId(symbol);
         _logger = logger;
+        _instrument = instrument;
         _enableL3 = enableL3;
 
         _bids = new BookSide(Side.Buy);
@@ -49,8 +48,9 @@ public class OrderBook
         _tradeCount = 0;
     }
 
-    public string Symbol => _symbol;
-    public int SymbolId => _symbolId;
+    public string Symbol => _instrument.Symbol;
+    public int InstrumentId => _instrument.InstrumentId;
+    public ExchangeEnum SourceExchange => _instrument.SourceExchange;
     public long LastSequence => _lastSequence;
     public long LastUpdateTimestamp => _lastUpdateTimestamp;
     public long UpdateCount => _updateCount;
@@ -63,19 +63,17 @@ public class OrderBook
     public bool ApplyEvent(in MarketDataEvent mdEvent)
     {
         // Validate symbol
-        if (mdEvent.InstrumentId != _symbolId)
+        if (mdEvent.InstrumentId != InstrumentId)
         {
-            _logger?.LogWarning("Symbol mismatch: expected {ExpectedSymbol}, got {ActualSymbolId}",
-                _symbol, mdEvent.InstrumentId);
+            _logger?.LogWarningWithCaller($"Symbol mismatch: expected {Symbol}, got {mdEvent.InstrumentId}");
             return false;
         }
 
         // Check sequence order (basic gap detection)
         if (_lastSequence > 0 && mdEvent.Sequence <= _lastSequence)
         {
-            _logger?.LogWarning("Out of order sequence for {Symbol}: current={Current}, received={Received}",
-                _symbol, _lastSequence, mdEvent.Sequence);
-            // Still process the event, but log the issue
+            _logger?.LogWarningWithCaller($"Out of order sequence for {Symbol}: current={_lastSequence}, received={mdEvent.Sequence}");
+            return false;
         }
 
         // Update book state
@@ -119,11 +117,7 @@ public class OrderBook
     private void ProcessTrade(in MarketDataEvent mdEvent)
     {
         _tradeCount++;
-
-        // In a real implementation, we might update the book based on trade
-        // For now, just log the trade
-        _logger?.LogDebug("Trade: {Symbol} {Side} {Price}@{Quantity}",
-            _symbol, mdEvent.Side, mdEvent.PriceTicks, mdEvent.Quantity);
+        _logger?.LogDebug("Trade: {Symbol} {Side} {Price}@{Quantity}", Symbol, mdEvent.Side, mdEvent.PriceTicks, mdEvent.Quantity);
     }
 
     private void ProcessSnapshot(in MarketDataEvent mdEvent)
@@ -131,8 +125,7 @@ public class OrderBook
         // Snapshot processing would typically involve clearing the book
         // and rebuilding from snapshot data
         _snapshotSequence = mdEvent.Sequence;
-        _logger?.LogInformation("Processed snapshot for {Symbol} at sequence {Sequence}",
-            _symbol, mdEvent.Sequence);
+        _logger?.LogInformation("Processed snapshot for {Symbol} at sequence {Sequence}", Symbol, mdEvent.Sequence);
     }
 
     /// <summary>
@@ -247,7 +240,7 @@ public class OrderBook
 
         return new BookSnapshot
         {
-            Symbol = _symbol,
+            Symbol = _instrument.Symbol,
             Timestamp = _lastUpdateTimestamp,
             Sequence = _lastSequence,
             Bids = bidLevels,
@@ -267,7 +260,7 @@ public class OrderBook
             // Check if book is crossed
             if (IsCrossed())
             {
-                _logger?.LogError("Book is crossed for {Symbol}", _symbol);
+                _logger?.LogWarningWithCaller($"Book is crossed for {Symbol}");
                 return false;
             }
 
@@ -276,8 +269,7 @@ public class OrderBook
             {
                 if (level.TotalQuantity < 0)
                 {
-                    _logger?.LogError("Negative quantity in bids for {Symbol}: {Price}@{Quantity}",
-                        _symbol, level.PriceTicks, level.TotalQuantity);
+                    _logger?.LogWarningWithCaller($"Negative quantity in bids for {Symbol}: {level.PriceTicks}@{level.TotalQuantity}");
                     return false;
                 }
             }
@@ -286,8 +278,7 @@ public class OrderBook
             {
                 if (level.TotalQuantity < 0)
                 {
-                    _logger?.LogError("Negative quantity in asks for {Symbol}: {Price}@{Quantity}",
-                        _symbol, level.PriceTicks, level.TotalQuantity);
+                    _logger?.LogWarningWithCaller($"Negative quantity in asks for {Symbol}: {level.PriceTicks}@{level.TotalQuantity}");
                     return false;
                 }
             }
@@ -296,7 +287,7 @@ public class OrderBook
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Error validating book integrity for {Symbol}", _symbol);
+            _logger?.LogErrorWithCaller(ex, $"Error validating book integrity for {Symbol}");
             return false;
         }
     }
@@ -305,7 +296,7 @@ public class OrderBook
     {
         var (bidPrice, bidQty) = GetBestBid();
         var (askPrice, askQty) = GetBestAsk();
-        return $"{_symbol}: {bidPrice}@{bidQty} | {askPrice}@{askQty} (Spread: {GetSpreadTicks()})";
+        return $"{Symbol}: {bidPrice}@{bidQty} | {askPrice}@{askQty} (Spread: {GetSpreadTicks()})";
     }
 }
 
