@@ -1,12 +1,5 @@
 {
-    
-  
   "subscriptions": [
-    {
-      "exchange": "binance",
-      "product-type": "spot",
-      "symbols": [ "BTCUSDT", "ETHUSDT" ]
-    },
     {
       "exchange": "binance",
       "product-type": "perpetualfuture",

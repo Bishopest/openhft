@@ -39,7 +39,6 @@ var feedHandler = new FeedHandler(
     disruptor
 );
 
-
 var distributor = new MarketDataDistributor(
     disruptor,
     loggerFactory.CreateLogger<MarketDataDistributor>()
@@ -75,6 +74,7 @@ catch (Exception ex)
     return;
 }
 
+
 // MarketDataDistributor 시작
 await distributor.StartAsync(cts.Token);
 
@@ -97,7 +97,10 @@ feedMonitor.OnAlert += OnFeedAlert;
 // FeedHandler를 시작하여 모든 어댑터 연결 시작
 await feedHandler.StartAsync(cts.Token);
 
-await SubscribeToInstrumentsFromConfig(config, feedHandler, instrumentRepository, cts.Token);
+//await SubscribeToInstrumentsFromConfig(config, feedHandler, instrumentRepository, cts.Token);
+var marketDataManager = new MarketDataManager(loggerFactory.CreateLogger<MarketDataManager>(), distributor, instrumentRepository, config);
+var subscriptionManager = new SubscriptionManager(loggerFactory.CreateLogger<SubscriptionManager>(), feedHandler, instrumentRepository, config);
+await subscriptionManager.InitializeSubscriptionsAsync();
 
 // 5초마다 통계 출력 타이머 시작
 statisticsTimer = new Timer(PrintStatistics, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
@@ -232,25 +235,6 @@ void CreateAndAddAdaptersFromConfig(SubscriptionConfig config,
         {
             feedHandler.AddAdapter(newAdapter);
             staticLogger.LogInformation($"Created and added adapter for {exchange}/{productType}.");
-        }
-    }
-}
-
-async Task SubscribeToInstrumentsFromConfig(SubscriptionConfig config, IFeedHandler feedHandler, IInstrumentRepository instrumentRepository, CancellationToken cancellationToken)
-{
-    foreach (var group in config.Subscriptions)
-    {
-        if (!Enum.TryParse<ExchangeEnum>(group.Exchange, true, out var exchange) ||
-            !Enum.TryParse<ProductType>(group.ProductType, true, out var productType))
-        {
-            continue; // 이미 로그는 CreateAndAddAdaptersFromConfig에서 찍었으므로 생략
-        }
-
-        var adapter = feedHandler.GetAdapter(exchange, productType);
-        if (adapter != null && group.Symbols.Any())
-        {
-            var instruments = group.Symbols.Select(s => instrumentRepository.FindBySymbol(s, productType, exchange)).Where(i => i != null);
-            await adapter.SubscribeAsync(instruments!, cancellationToken);
         }
     }
 }
