@@ -15,6 +15,7 @@ using OpenHFT.Core.Instruments;
 using OpenHFT.Feed.Adapters;
 using System.Net.WebSockets;
 using OpenHFT.Core.Interfaces;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace OpenHFT.Tests.Processing;
 
@@ -32,19 +33,33 @@ public class MarketDataDistributorTests
     private TestConsumer _ethConsumer = null!;
 
     private ILogger<MarketDataDistributor> _logger = null!;
+    private string _testDirectory;
+    private InstrumentRepository _repository;
 
     [SetUp]
     public void Setup()
     {
+        _testDirectory = Path.Combine(Path.GetTempPath(), "InstrumentRepositoryTests", Guid.NewGuid().ToString());
+        Directory.CreateDirectory(_testDirectory);
+        _repository = new InstrumentRepository(new NullLogger<InstrumentRepository>());
+        var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
+BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10
+BINANCE,ETHUSDT,Spot,ETH,USDT,0.01,0.0001,1,10
+BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001
+BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
+
+        var filePath = CreateTestCsvFile(csvContent);
+        _repository.LoadFromCsv(filePath);
+
         // --- 1. 로깅 팩토리 생성 (모든 컴포넌트가 공유) ---
         var loggerFactory = LoggerFactory.Create(builder => { });
         _logger = loggerFactory.CreateLogger<MarketDataDistributor>();
 
         // --- 2. 테스트용 Consumer(옵저버) 생성 ---
-        var btc = SymbolUtils.GetSymbolId("BTCUSDT");
-        var eth = SymbolUtils.GetSymbolId("ETHUSDT");
-        _btcConsumer = new TestConsumer(_logger, btc, ExchangeEnum.BINANCE, "BTC_Consumer", new[] { "BTCUSDT@depth" });
-        _ethConsumer = new TestConsumer(_logger, eth, ExchangeEnum.BINANCE, "ETH_Consumer", new[] { "ETHUSDT@depth" });
+        var btc = _repository.FindBySymbol("BTCUSDT", ProductType.Spot, ExchangeEnum.BINANCE);
+        var eth = _repository.FindBySymbol("ETHUSDT", ProductType.Spot, ExchangeEnum.BINANCE);
+        _btcConsumer = new TestConsumer(_logger, btc, "BTC_Consumer", new[] { "BTCUSDT@depth" });
+        _ethConsumer = new TestConsumer(_logger, eth, "ETH_Consumer", new[] { "ETHUSDT@depth" });
         var allConsumers = new List<IMarketDataConsumer> { _btcConsumer, _ethConsumer };
 
         // --- 3. Disruptor 인스턴스 생성 ---
@@ -88,6 +103,17 @@ public class MarketDataDistributorTests
     {
         // 테스트가 끝난 후 Disruptor를 안전하게 종료
         _disruptor?.Shutdown(TimeSpan.FromSeconds(1));
+        if (Directory.Exists(_testDirectory))
+        {
+            Directory.Delete(_testDirectory, true);
+        }
+    }
+
+    private string CreateTestCsvFile(string content)
+    {
+        var filePath = Path.Combine(_testDirectory, "instruments.csv");
+        File.WriteAllText(filePath, content);
+        return filePath;
     }
 
     [Test]
@@ -129,17 +155,14 @@ public class MarketDataDistributorTests
 public class TestConsumer : BaseMarketDataConsumer
 {
     public override string ConsumerName { get; }
-    public override int InstrumentId { get; }
-    public override ExchangeEnum Exchange { get; }
+    public override Instrument Instrument { get; }
     private readonly IEnumerable<string> _subscriptionKeys;
     public List<MarketDataEvent> ReceivedEvents { get; } = new();
 
-    public TestConsumer(ILogger logger, int instrumentId, ExchangeEnum exchange, string consumerName, IEnumerable<string> subscriptionKeys) : base(logger)
+    public TestConsumer(ILogger logger, Instrument instrument, string consumerName, IEnumerable<string> subscriptionKeys) : base(logger)
     {
-
         ConsumerName = consumerName;
-        Exchange = exchange;
-        InstrumentId = instrumentId;
+        Instrument = instrument;
         _subscriptionKeys = subscriptionKeys;
     }
 
