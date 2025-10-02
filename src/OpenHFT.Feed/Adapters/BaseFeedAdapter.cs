@@ -80,7 +80,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
             if (!IsConnected && _receiveTask == null) return;
         }
 
-        _logger.LogInformation("Disconnecting from {Exchange} WebSocket...", SourceExchange);
+        _logger.LogInformationWithCaller($"Disconnecting from {SourceExchange}_{ProductType} WebSocket...");
 
         if (_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
         {
@@ -115,9 +115,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         }
 
         CleanupConnection();
-
-        OnConnectionStateChanged(false, "Disconnected by request");
-        _logger.LogInformation("Successfully disconnected from {Exchange} WebSocket.", SourceExchange);
+        _logger.LogInformationWithCaller($"Successfully disconnected from {SourceExchange} WebSocket.");
     }
 
     public async Task SubscribeAsync(IEnumerable<Instrument> symbols, CancellationToken cancellationToken = default)
@@ -139,10 +137,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
         if (symbolsToSubscribe.Any())
         {
-            _logger.LogInformation("Subscribing to {Count} new symbols on {Exchange}: {Symbols}",
-                symbolsToSubscribe.Count, SourceExchange, string.Join(", ", symbolsToSubscribe.Select(s => s.Symbol)));
-
-            // 실제 구독 메시지 전송은 하위 클래스에 위임
+            _logger.LogInformationWithCaller($"Subscribing to {symbolsToSubscribe.Count} new symbols on {SourceExchange}: {string.Join(", ", symbolsToSubscribe.Select(s => s.Symbol))}");
             await DoSubscribeAsync(symbolsToSubscribe, cancellationToken);
         }
     }
@@ -166,9 +161,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
         if (symbolsToUnsubscribe.Any())
         {
-            _logger.LogInformation("Unsubscribing from {Count} symbols on {Exchange}: {Symbols}",
-               symbolsToUnsubscribe.Count, SourceExchange, string.Join(", ", symbolsToUnsubscribe.Select(k => k.Symbol)));
-
+            _logger.LogInformationWithCaller($"Unsubscribing from {symbolsToUnsubscribe.Count} symbols on {SourceExchange}: {string.Join(", ", symbolsToUnsubscribe.Select(k => k.Symbol))}");
             await DoUnsubscribeAsync(symbolsToUnsubscribe, cancellationToken);
         }
     }
@@ -195,19 +188,19 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         {
             try
             {
-                CleanupConnection(suppressEvents: true);
+                CleanupConnection();
 
                 _webSocket = new ClientWebSocket();
                 ConfigureWebSocket(_webSocket);
 
                 var baseUrl = GetBaseUrl();
-                _logger.LogInformation("Connecting to {Url} (Attempt {Attempt})", baseUrl, retryAttempt + 1);
+                _logger.LogInformationWithCaller($"Connecting to {baseUrl} (Attempt {retryAttempt + 1})");
 
                 await _webSocket.ConnectAsync(new Uri(baseUrl), cancellationToken);
 
                 if (_webSocket.State == WebSocketState.Open)
                 {
-                    _logger.LogInformation("Successfully connected to {Exchange} WebSocket.", SourceExchange);
+                    _logger.LogInformationWithCaller($"Successfully connected to {SourceExchange} WebSocket.");
                     OnConnectionStateChanged(true, "Connected Successfully");
                     _receiveTask = Task.Run(() => ReceiveLoop(cancellationToken), cancellationToken);
                     return;
@@ -216,8 +209,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
             catch (Exception ex) when (retryAttempt < _retryDelays.Length)
             {
                 var delay = _retryDelays[retryAttempt];
-                _logger.LogWarning(ex, "Connection attempt {Attempt} for {Exchange} failed. Retrying in {Delay}s...",
-                    retryAttempt + 1, SourceExchange, delay.TotalSeconds);
+                _logger.LogErrorWithCaller(ex, $"Connection attempt {retryAttempt + 1} for {SourceExchange} failed. Retrying in {delay.TotalSeconds}s...");
                 await Task.Delay(delay, cancellationToken);
                 retryAttempt++;
             }
@@ -260,17 +252,17 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("{Exchange} ReceiveLoop was cancelled.", SourceExchange);
+            _logger.LogInformationWithCaller($"{SourceExchange} ReceiveLoop was cancelled.");
         }
         catch (WebSocketException ex)
         {
-            _logger.LogWarning(ex, "{Exchange} WebSocket connection closed unexpectedly. Reason: {Message}. Attempting to reconnect...", SourceExchange, ex.Message);
+            _logger.LogErrorWithCaller(ex, $"{SourceExchange} WebSocket connection closed unexpectedly. Reason: {ex.Message}. Attempting to reconnect...");
             OnConnectionStateChanged(false, "Connection Lost");
             _ = Task.Run(() => ConnectWithRetryAsync(_cancellationTokenSource?.Token ?? CancellationToken.None));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled exception in {Exchange} ReceiveLoop.", SourceExchange);
+            _logger.LogErrorWithCaller(ex, $"Unhandled exception in {SourceExchange} ReceiveLoop.");
             OnError(new FeedErrorEventArgs(new FeedReceiveException(SourceExchange, "Unhandled exception in receive loop", ex), null));
         }
     }
@@ -340,7 +332,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         MarketDataReceived?.Invoke(this, e);
     }
 
-    private void CleanupConnection(bool suppressEvents = false)
+    private void CleanupConnection()
     {
         lock (_connectionLock)
         {
@@ -366,10 +358,6 @@ public abstract class BaseFeedAdapter : IFeedAdapter
                 _cancellationTokenSource.Dispose();
                 _cancellationTokenSource = null;
             }
-        }
-        if (!suppressEvents && IsConnected)
-        {
-            OnConnectionStateChanged(false, "Connection cleaned up");
         }
 
         _cancellationTokenSource?.Dispose();
