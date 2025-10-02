@@ -5,17 +5,12 @@
     {
       "exchange": "binance",
       "product-type": "spot",
-      "symbols": [ "BTCUSDT" ]
-    },
-    {
-      "exchange": "binance",
-      "product-type": "perp",
       "symbols": [ "BTCUSDT", "ETHUSDT" ]
     },
     {
-      "exchange": "bybit",
-      "product-type": "perp",
-      "symbols": [ "BTCUSDT" ]
+      "exchange": "binance",
+      "product-type": "perpetualfuture",
+      "symbols": [ "BTCUSDT", "ETHUSDT" ]
     }
   ],
   "data-folder": "/Users/jskim/workspace/openhft/data"
