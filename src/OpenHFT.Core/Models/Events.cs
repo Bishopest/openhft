@@ -9,6 +9,7 @@ namespace OpenHFT.Core.Models;
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public readonly struct MarketDataEvent
 {
+    public readonly long PrevSequence;  // Previous sequence number from feed
     public readonly long Sequence;      // Sequence number from feed
     public readonly long Timestamp;     // Monotonic timestamp in microseconds
     public readonly Side Side;          // Bid/Ask
@@ -19,7 +20,7 @@ public readonly struct MarketDataEvent
     public readonly ExchangeEnum SourceExchange;
 
     public MarketDataEvent(long sequence, long timestamp, Side side, long priceTicks,
-                          long quantity, EventKind kind, int instrumentId, ExchangeEnum exchange)
+                          long quantity, EventKind kind, int instrumentId, ExchangeEnum exchange, long prevSequence = 0)
     {
         Sequence = sequence;
         Timestamp = timestamp;
@@ -29,6 +30,7 @@ public readonly struct MarketDataEvent
         Kind = kind;
         InstrumentId = instrumentId;
         SourceExchange = exchange;
+        PrevSequence = prevSequence;
     }
 
     public override string ToString() =>

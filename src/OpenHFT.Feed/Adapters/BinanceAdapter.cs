@@ -40,7 +40,7 @@ public class BinanceAdapter : BaseFeedAdapter
     {
         var symbol = data.GetProperty("s").GetString();
         if (symbol == null) return;
-        var instrument = _instrumentRepository.FindBySymbol(symbol, ProductType, SourceExchange);
+        var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
         if (instrument == null) return;
 
         // Price and quantity are sent as strings in the aggTrade stream.
@@ -79,11 +79,10 @@ public class BinanceAdapter : BaseFeedAdapter
         var symbol = data.GetProperty("s").GetString();
         // if (symbol == null || !SymbolToInstrumentMap.TryGetValue(symbol, out var instrument)) return;
         if (symbol == null) return;
-        var instrument = _instrumentRepository.FindBySymbol(symbol, ProductType, SourceExchange);
+        var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
         if (instrument == null) return;
 
 
-        var updateId = data.GetProperty("u").GetInt64();
         var eventTime = data.GetProperty("E").GetInt64() * 1000; // Convert ms to microseconds
 
         // Process Best Bid
@@ -91,7 +90,7 @@ public class BinanceAdapter : BaseFeedAdapter
             decimal.TryParse(data.GetProperty("B").GetString(), out var bidQty) && bidQty > 0)
         {
             var bidEvent = new MarketDataEvent(
-                sequence: updateId,
+                sequence: 0,
                 timestamp: eventTime,
                 side: Side.Buy,
                 priceTicks: PriceUtils.ToTicks(bidPrice),
@@ -108,7 +107,7 @@ public class BinanceAdapter : BaseFeedAdapter
             decimal.TryParse(data.GetProperty("A").GetString(), out var askQty) && askQty > 0)
         {
             var askEvent = new MarketDataEvent(
-                sequence: updateId,
+                sequence: 0,
                 timestamp: eventTime,
                 side: Side.Sell,
                 priceTicks: PriceUtils.ToTicks(askPrice),
@@ -125,11 +124,13 @@ public class BinanceAdapter : BaseFeedAdapter
     {
         var symbol = data.GetProperty("s").GetString();
         if (symbol == null) return;
-        var instrument = _instrumentRepository.FindBySymbol(symbol, ProductType, SourceExchange);
+        var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
         if (instrument == null) return;
 
         var timestamp = data.GetProperty("E").GetInt64() * 1000; // Event time in microseconds
         var finalUpdateId = data.GetProperty("u").GetInt64();
+        var prevUpdateId = data.GetProperty("pu").GetInt64();
+
 
         // Here you should check sequence continuity using 'pu' and 'U'/'u' as per Binance docs.
         // For simplicity, this example just processes the updates.
@@ -150,7 +151,8 @@ public class BinanceAdapter : BaseFeedAdapter
                         quantity: (long)(quantity * 100_000_000),
                         kind: quantity == 0 ? EventKind.Delete : EventKind.Update,
                         instrumentId: instrument.InstrumentId,
-                        exchange: SourceExchange
+                        exchange: SourceExchange,
+                        prevSequence: prevUpdateId
                     ));
                 }
             }
@@ -255,7 +257,7 @@ public class BinanceAdapter : BaseFeedAdapter
             id = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         });
 
-        _logger.LogInformation("Subscribing to {StreamCount} streams on {Exchange}", allStreams.Length, Exchange.Decode(SourceExchange));
+        _logger.LogInformationWithCaller($"Subscribing to {allStreams.Length} streams on {Exchange.Decode(SourceExchange)}");
         return SendMessageAsync(subscribeMessage, cancellationToken);
     }
 
@@ -277,7 +279,7 @@ public class BinanceAdapter : BaseFeedAdapter
             id = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         });
 
-        _logger.LogInformation("Unsubscribing from {StreamCount} streams on {Exchange}", allStreams.Length, Exchange.Decode(SourceExchange));
+        _logger.LogInformationWithCaller($"Unsubscribing from {allStreams.Length} streams on {Exchange.Decode(SourceExchange)}");
         return SendMessageAsync(unsubscribeMessage, cancellationToken);
     }
 

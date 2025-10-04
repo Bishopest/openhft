@@ -13,6 +13,7 @@ using OpenHFT.Processing.Interfaces;
 namespace OpenHFT.Feed;
 
 public record FeedAlert(ExchangeEnum SourceExchange, AlertLevel Level, string Message);
+public record DepthSequence(long ts, long seq);
 public enum AlertLevel { Info, Warning, Error, Critical }
 
 public class FeedMonitor : BaseMarketDataConsumer
@@ -23,7 +24,7 @@ public class FeedMonitor : BaseMarketDataConsumer
     private readonly ILogger<FeedMonitor> _logger;
     private readonly SubscriptionConfig _config;
     private readonly ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, FeedStatistics>> _statistics = new();
-    private readonly ConcurrentDictionary<(ExchangeEnum Exchange, ProductType Type, int InstrumentId), long> _lastSequenceNumbers = new();
+    private readonly ConcurrentDictionary<int, DepthSequence> _lastSequenceNumbers = new();
 
     public override string ConsumerName => "FeedMonitor";
 
@@ -87,26 +88,31 @@ public class FeedMonitor : BaseMarketDataConsumer
         _ => new FeedStatistics());
 
         // 2. updates stat
-        stats.RecordMessageProcessed();
+        stats.RecordMessageReceived();
 
         // 3. validate sequence
-        if (data.Sequence > 0 && exchange == ExchangeEnum.BINANCE)
+        if (data.Sequence > 0 && data.PrevSequence > 0 && exchange == ExchangeEnum.BINANCE)
         {
-            var key = (exchange, productType, data.InstrumentId);
-            var currentSequence = data.Sequence;
-
-            if (_lastSequenceNumbers.TryGetValue(key, out var lastSequence))
+            if (!_lastSequenceNumbers.TryGetValue(data.InstrumentId, out var lastSequence))
             {
-                if (currentSequence != lastSequence + 1)
+                lastSequence = new DepthSequence(data.Timestamp, data.Sequence);
+                _lastSequenceNumbers[data.InstrumentId] = lastSequence;
+            }
+            else
+            {
+                if (data.Timestamp != lastSequence.ts)
                 {
-                    _logger.LogWarningWithCaller($"Sequence gap detected for {exchange}/{productType}/{data.InstrumentId}: expected {lastSequence + 1}, received {currentSequence}");
-                    stats.RecordSequenceGap();
-                    OnAlert?.Invoke(this, new FeedAlert(exchange, AlertLevel.Error,
-                        $"Sequence gap detected for {exchange}/{productType}/{data.InstrumentId}. Expected {lastSequence + 1}, received {currentSequence}."));
+                    if (data.PrevSequence != lastSequence.seq)
+                    {
+                        _logger.LogWarningWithCaller($"Sequence gap detected for {exchange}/{productType}/{data.InstrumentId}: expected {lastSequence.seq}, received {data.PrevSequence}");
+                        stats.RecordSequenceGap();
+                        OnAlert?.Invoke(this, new FeedAlert(exchange, AlertLevel.Error,
+                            $"Sequence gap detected for {exchange}/{productType}/{data.InstrumentId}. Expected {lastSequence.seq}, received {data.PrevSequence}."));
+                    }
+
+                    _lastSequenceNumbers[data.InstrumentId] = new DepthSequence(data.Timestamp, data.Sequence);
                 }
             }
-
-            _lastSequenceNumbers[key] = currentSequence;
         }
 
         // 3. latency calculation
@@ -130,7 +136,7 @@ public class FeedMonitor : BaseMarketDataConsumer
         if (adapter == null) return;
 
         var exchange = adapter.SourceExchange;
-        var productType = adapter.ProductType;
+        var productType = adapter.ProdType;
 
         var innerDict = _statistics.GetOrAdd(exchange,
             _ => new ConcurrentDictionary<ProductType, FeedStatistics>());
