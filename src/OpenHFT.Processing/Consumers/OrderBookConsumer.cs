@@ -23,7 +23,7 @@ public class OrderBookConsumer : BaseMarketDataConsumer
 
     public override string ConsumerName => $"OrderBookConsumer-{_instrument.Symbol}-{_instrument.ProductType}-{_instrument.SourceExchange}";
 
-    public override Instrument Instrument => _instrument;
+    public override IReadOnlyCollection<Instrument> Instruments => new List<Instrument> { _instrument };
 
     private readonly ConcurrentDictionary<string, EventHandler<OrderBook>> _subscribers = new();
 

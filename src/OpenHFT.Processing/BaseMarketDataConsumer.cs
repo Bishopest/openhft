@@ -11,7 +11,7 @@ namespace OpenHFT.Processing;
 public abstract class BaseMarketDataConsumer : IMarketDataConsumer
 {
     public abstract string ConsumerName { get; }
-    public abstract Instrument Instrument { get; }
+    public abstract IReadOnlyCollection<Instrument> Instruments { get; }
 
     protected readonly ILogger _logger;
     private readonly BlockingCollection<MarketDataEvent> _eventQueue;

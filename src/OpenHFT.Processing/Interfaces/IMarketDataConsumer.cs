@@ -7,7 +7,7 @@ namespace OpenHFT.Processing.Interfaces;
 public interface IMarketDataConsumer
 {
     string ConsumerName { get; }
-    Instrument Instrument { get; }
+    IReadOnlyCollection<Instrument> Instruments { get; }
 
     /// <summary>
     /// Posts a market data event to the consumer's internal queue for processing.

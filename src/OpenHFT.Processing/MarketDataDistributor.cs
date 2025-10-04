@@ -43,39 +43,46 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
     // Subscription management
     public void Subscribe(IMarketDataConsumer consumer)
     {
-        var innerSubscriptionDict = _subscriptions.GetOrAdd(
-            consumer.Instrument.InstrumentId,
-            _ => new ConcurrentDictionary<string, IMarketDataConsumer>()
-        );
+        foreach (var instrument in consumer.Instruments)
+        {
+            var innerSubscriptionDict = _subscriptions.GetOrAdd(
+                instrument.InstrumentId,
+                _ => new ConcurrentDictionary<string, IMarketDataConsumer>()
+            );
 
-        if (!innerSubscriptionDict.TryAdd(consumer.ConsumerName, consumer))
-        {
-            _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Instrument.SourceExchange}, symbol id: {consumer.Instrument.InstrumentId}) already exists");
-        }
-        else
-        {
-            consumer.Start();
-            _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Instrument.SourceExchange}, symbol id: {consumer.Instrument.InstrumentId}) subscribed and started successfully.");
+            if (!innerSubscriptionDict.TryAdd(consumer.ConsumerName, consumer))
+            {
+                _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {instrument.SourceExchange}, symbol id: {instrument.InstrumentId}) already exists");
+            }
+            else
+            {
+                consumer.Start();
+                _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {instrument.SourceExchange}, symbol id: {instrument.InstrumentId}) subscribed and started successfully.");
+            }
         }
     }
 
     public void Unsubscribe(IMarketDataConsumer consumer)
     {
-        if (_subscriptions.TryGetValue(consumer.Instrument.InstrumentId, out var innerSubscriptionDict))
+        foreach (var instrument in consumer.Instruments)
         {
-            if (innerSubscriptionDict.TryRemove(consumer.ConsumerName, out var removedConsumer))
+            if (_subscriptions.TryGetValue(instrument.InstrumentId, out var innerSubscriptionDict))
             {
-                removedConsumer.Stop();
-                _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Instrument.SourceExchange}, symbol id: {consumer.Instrument.InstrumentId}) unsubscribed and stopped successfully.");
+                if (innerSubscriptionDict.TryRemove(consumer.ConsumerName, out var removedConsumer))
+                {
+                    removedConsumer.Stop();
+                    _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {instrument.SourceExchange}, symbol id: {instrument.InstrumentId}) unsubscribed and stopped successfully.");
+                }
+                else
+                {
+                    _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {instrument.SourceExchange}, symbol id: {instrument.InstrumentId}) not found for unsubscription.");
+                }
             }
             else
             {
-                _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {consumer.Instrument.SourceExchange}, symbol id: {consumer.Instrument.InstrumentId}) not found for unsubscription.");
+                _logger.LogWarningWithCaller($"Subscription symbol id: {instrument.InstrumentId}) not found for unsubscription.");
             }
-        }
-        else
-        {
-            _logger.LogWarningWithCaller($"Subscription symbol id: {consumer.Instrument.InstrumentId}) not found for unsubscription.");
+
         }
     }
 

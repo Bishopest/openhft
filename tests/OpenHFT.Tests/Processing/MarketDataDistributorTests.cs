@@ -155,14 +155,14 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
 public class TestConsumer : BaseMarketDataConsumer
 {
     public override string ConsumerName { get; }
-    public override Instrument Instrument { get; }
+    public override IReadOnlyCollection<Instrument> Instruments { get; }
     private readonly IEnumerable<string> _subscriptionKeys;
     public List<MarketDataEvent> ReceivedEvents { get; } = new();
 
     public TestConsumer(ILogger logger, Instrument instrument, string consumerName, IEnumerable<string> subscriptionKeys) : base(logger)
     {
         ConsumerName = consumerName;
-        Instrument = instrument;
+        Instruments = new List<Instrument> { instrument };
         _subscriptionKeys = subscriptionKeys;
     }
 
