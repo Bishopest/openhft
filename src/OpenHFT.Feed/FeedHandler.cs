@@ -82,12 +82,12 @@ public class FeedHandler : IFeedHandler
     );
 
         // 2. 내부 딕셔너리에 ProducerType 키와 함께 어댑터를 추가합니다.
-        if (innerDict.TryAdd(adapter.ProductType, adapter)) // assumes adapter has ProducerType property
+        if (innerDict.TryAdd(adapter.ProdType, adapter)) // assumes adapter has ProducerType property
         {
             adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
             adapter.Error += OnFeedError;
             adapter.MarketDataReceived += OnMarketDataReceived;
-            _logger.LogInformationWithCaller($"Adapter for {Exchange.Decode(adapter.SourceExchange)} ({adapter.ProductType}) added Feedhandler");
+            _logger.LogInformationWithCaller($"Adapter for {Exchange.Decode(adapter.SourceExchange)} ({adapter.ProdType}) added Feedhandler");
         }
     }
 

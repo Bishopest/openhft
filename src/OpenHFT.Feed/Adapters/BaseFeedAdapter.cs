@@ -39,13 +39,13 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     public event EventHandler<FeedErrorEventArgs>? Error;
     public event EventHandler<MarketDataEvent>? MarketDataReceived;
 
-    public ProductType ProductType { get; }
+    public ProductType ProdType { get; }
 
     protected BaseFeedAdapter(ILogger logger, ProductType type, IInstrumentRepository instrumentRepository)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _instrumentRepository = instrumentRepository;
-        ProductType = type;
+        ProdType = type;
     }
 
     #region Public Methods (IFeedAdapter Implementation)
@@ -80,7 +80,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
             if (!IsConnected && _receiveTask == null) return;
         }
 
-        _logger.LogInformationWithCaller($"Disconnecting from {SourceExchange}_{ProductType} WebSocket...");
+        _logger.LogInformationWithCaller($"Disconnecting from {SourceExchange}_{ProdType} WebSocket...");
 
         if (_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
         {
