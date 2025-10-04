@@ -30,7 +30,7 @@ public static class LoggerExtensions
         [CallerFilePath] string sourceFilePath = "")
     {
         var className = Path.GetFileNameWithoutExtension(sourceFilePath);
-        logger.LogInformation(
+        logger.LogWarning(
             "[{ClassName}.{MemberName}:{LineNumber}] {Message}",
             className, // 추출된 클래스 이름
             memberName,
@@ -58,4 +58,3 @@ public static class LoggerExtensions
         );
     }
 }
-
