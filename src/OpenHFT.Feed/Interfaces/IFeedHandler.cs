@@ -41,7 +41,5 @@ public interface IFeedHandler : IDisposable
     /// </summary>
     FeedHandlerStatistics Statistics { get; }
 
-    event EventHandler<MarketDataEvent> MarketDataReceived;
-
     event EventHandler<ConnectionStateChangedEventArgs> AdapterConnectionStateChanged;
 }

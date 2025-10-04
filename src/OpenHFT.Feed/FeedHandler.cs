@@ -16,7 +16,6 @@ public class FeedHandler : IFeedHandler
     private readonly ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, BaseFeedAdapter>> _adapters;
     private readonly RingBuffer<MarketDataEventWrapper> _ringBuffer;
 
-    public event EventHandler<MarketDataEvent>? MarketDataReceived;
     public event EventHandler<ConnectionStateChangedEventArgs>? AdapterConnectionStateChanged;
 
     public FeedHandlerStatistics Statistics { get; } = new();
