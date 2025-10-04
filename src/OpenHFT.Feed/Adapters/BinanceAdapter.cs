@@ -19,7 +19,7 @@ public class BinanceAdapter : BaseFeedAdapter
 {
     private const string TopicAggTrade = "@aggTrade";
     private const string TopicBookTicker = "@bookTicker";
-    private const string TopicDepth = "@depth@100ms";
+    private const string TopicDepth = "@depth20@100ms";
     private const string DefaultBaseUrl = "wss://fstream.binance.com/stream";
 
     public override ExchangeEnum SourceExchange => ExchangeEnum.BINANCE;
