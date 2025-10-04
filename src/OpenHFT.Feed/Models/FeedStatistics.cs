@@ -4,7 +4,7 @@ using OpenHFT.Core.Collections;
 namespace OpenHFT.Feed.Interfaces;
 
 /// <summary>
-/// Statistics for individual feed adapters
+/// Statistics for individual feed adapters(matching with product-type)
 /// </summary>
 public class FeedStatistics
 {

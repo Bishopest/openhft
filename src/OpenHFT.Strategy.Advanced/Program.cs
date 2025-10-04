@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Strategy.Advanced;
@@ -9,8 +5,8 @@ using OpenHFT.Strategy.Advanced.Arbitrage;
 using OpenHFT.Strategy.Advanced.MarketMaking;
 using OpenHFT.Strategy.Advanced.Momentum;
 using OpenHFT.Core.Models;
-using OpenHFT.Book.Models;
 using OpenHFT.Book.Core;
+using OpenHFT.Core.Instruments;
 
 namespace OpenHFT.Strategy.Advanced;
 
@@ -221,9 +217,28 @@ public class Program
     {
         return new List<OrderBook>
         {
-            new OrderBook("BTCUSDT"), // Symbol ID 1
-            new OrderBook("ETHUSDT"), // Symbol ID 2
-            new OrderBook("BTCETH")   // Symbol ID 3
+            new OrderBook(new CryptoPerpetual(
+                instrumentId: 1001,
+                symbol: "BTCUSDT",
+                exchange: ExchangeEnum.BINANCE,
+                baseCurrency: Currency.BTC,
+                quoteCurrency: Currency.USDT,
+                tickSize: 0.1m,
+                lotSize: 0.001m,
+                multiplier: 1m,
+                minOrderSize: 0.001m
+            )),
+            new OrderBook(new CryptoPerpetual(
+                instrumentId: 1002,
+                symbol: "ETHUSDT",
+                exchange: ExchangeEnum.BINANCE,
+                baseCurrency: Currency.ETH,
+                quoteCurrency: Currency.USDT,
+                tickSize: 0.01m,
+                lotSize: 0.01m,
+                multiplier: 1m,
+                minOrderSize: 0.01m
+            ))
         };
     }
 

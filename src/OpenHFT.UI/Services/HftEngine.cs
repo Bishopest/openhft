@@ -7,6 +7,8 @@ using OpenHFT.Book.Core;
 using OpenHFT.Strategy.Interfaces;
 using OpenHFT.Strategy.Advanced;
 using OpenHFT.UI.Hubs;
+using OpenHFT.Core.Interfaces;
+using OpenHFT.Core.Instruments;
 
 namespace OpenHFT.UI.Services;
 
@@ -19,6 +21,7 @@ public class HftEngine : BackgroundService
     private readonly ILogger<HftEngine> _logger;
     private readonly IConfiguration _configuration;
     private readonly IFeedHandler _feedHandler;
+    private readonly IInstrumentRepository _repository;
     private readonly IStrategyEngine _strategyEngine;
     private readonly IAdvancedStrategyManager _advancedStrategyManager;
     private readonly IHubContext<TradingHub> _hubContext;
@@ -41,11 +44,13 @@ public class HftEngine : BackgroundService
         IFeedHandler feedHandler,
         IStrategyEngine strategyEngine,
         IAdvancedStrategyManager advancedStrategyManager,
-        IHubContext<TradingHub> hubContext)
+        IHubContext<TradingHub> hubContext,
+        IInstrumentRepository repository)
     {
         _logger = logger;
         _configuration = configuration;
         _feedHandler = feedHandler;
+        _repository = repository;
         _strategyEngine = strategyEngine;
         _advancedStrategyManager = advancedStrategyManager;
         _hubContext = hubContext;
@@ -100,7 +105,12 @@ public class HftEngine : BackgroundService
         var symbols = _configuration.GetSection("Engine:Symbols").Get<string[]>() ?? Array.Empty<string>();
         foreach (var symbol in symbols)
         {
-            _orderBooks[symbol] = new OrderBook(symbol, null);
+            var instrument = _repository.FindBySymbol(symbol, ProductType.PerpetualFuture, ExchangeEnum.BINANCE);
+            if (instrument == null)
+            {
+                continue;
+            }
+            _orderBooks[symbol] = new OrderBook(instrument, null);
             _logger.LogInformation("Created order book for {Symbol}", symbol);
         }
 

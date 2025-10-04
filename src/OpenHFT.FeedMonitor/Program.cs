@@ -44,9 +44,6 @@ var distributor = new MarketDataDistributor(
     loggerFactory.CreateLogger<MarketDataDistributor>()
 );
 
-var feedMonitor = new FeedMonitor(feedHandler, loggerFactory.CreateLogger<FeedMonitor>());
-Timer? statisticsTimer = null;
-
 // CancellationTokenSource
 var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (sender, e) =>
@@ -74,6 +71,8 @@ catch (Exception ex)
     return;
 }
 
+var feedMonitor = new FeedMonitor(feedHandler, distributor, loggerFactory.CreateLogger<FeedMonitor>(), config, instrumentRepository);
+Timer? statisticsTimer = null;
 
 // MarketDataDistributor 시작
 await distributor.StartAsync(cts.Token);
@@ -128,7 +127,7 @@ staticLogger.LogInformation("Feed Monitor stopped.");
 
 // --- 로컬 함수들 ---
 
-void OnFeedAlert(FeedAlert alert)
+void OnFeedAlert(object? sender, FeedAlert alert)
 {
     // FeedMonitor에서 발생한 알림을 로그로 출력
     var logLevel = alert.Level switch

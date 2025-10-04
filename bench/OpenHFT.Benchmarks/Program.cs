@@ -8,6 +8,7 @@ using OpenHFT.Core.Collections;
 using OpenHFT.Book.Core;
 using System.Threading.Channels;
 using Disruptor.Processing;
+using OpenHFT.Core.Instruments;
 
 namespace OpenHFT.Benchmarks;
 
@@ -112,7 +113,17 @@ public class OrderBookBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        _orderBook = new OrderBook("BTCUSDT");
+        _orderBook = new OrderBook(new CryptoPerpetual(
+                instrumentId: 1001,
+                symbol: "BTCUSDT",
+                exchange: ExchangeEnum.BINANCE,
+                baseCurrency: Currency.BTC,
+                quoteCurrency: Currency.USDT,
+                tickSize: 0.1m,
+                lotSize: 0.001m,
+                multiplier: 1m,
+                minOrderSize: 0.001m
+        ));
         _symbolId = SymbolUtils.GetSymbolId("BTCUSDT");
 
         // Pre-generate events to avoid allocation during benchmark
