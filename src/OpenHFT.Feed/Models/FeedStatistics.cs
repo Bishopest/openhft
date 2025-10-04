@@ -47,10 +47,15 @@ public class FeedStatistics
         LastConnectionTime = DateTimeOffset.UtcNow;
     }
 
+    public void RecordMessageReceived()
+    {
+        Interlocked.Increment(ref _messagesReceived);
+        LastMessageTime = DateTimeOffset.UtcNow;
+    }
+
     public void RecordMessageProcessed()
     {
         Interlocked.Increment(ref _messagesProcessed);
-        LastMessageTime = DateTimeOffset.UtcNow;
     }
     public void RecordMessageDropped() => Interlocked.Increment(ref _messagesDropped);
     public void RecordSequenceGap() => Interlocked.Increment(ref _sequenceGaps);
