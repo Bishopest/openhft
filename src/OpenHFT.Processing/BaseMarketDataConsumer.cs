@@ -30,7 +30,11 @@ public abstract class BaseMarketDataConsumer : IMarketDataConsumer
         _logger.LogInformationWithCaller($"Starting consumer: {ConsumerName}");
         _cancellationTokenSource = new CancellationTokenSource();
         _processingTask = Task.Factory.StartNew(
-            () => ProcessEventQueue(_cancellationTokenSource.Token),
+            () =>
+            {
+                Thread.CurrentThread.Name = $"Consumer: {ConsumerName}";
+                ProcessEventQueue(_cancellationTokenSource.Token);
+            },
             _cancellationTokenSource.Token,
             TaskCreationOptions.LongRunning, // Hint to the scheduler that this is a dedicated thread
             TaskScheduler.Default);
