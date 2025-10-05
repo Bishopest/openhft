@@ -3,7 +3,7 @@
     {
       "exchange": "binance",
       "product-type": "perpetualfuture",
-      "symbols": [ "BTCUSDT", "ETHUSDT" ]
+      "symbols": [ "BTCUSDT"]
     }
   ],
   "data-folder": "/Users/jskim/workspace/openhft/data"

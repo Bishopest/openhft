@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Reflection;
+using System.Net.Http;
 using System.Text;
 using Disruptor;
 using Disruptor.Dsl;
@@ -15,6 +16,7 @@ using OpenHFT.Feed.Interfaces;
 using OpenHFT.Feed.Models;
 using OpenHFT.Processing;
 using Serilog;
+using OpenHFT.Gateway.ApiClient;
 
 // --- 1. logger ---
 Log.Logger = new LoggerConfiguration()
@@ -28,6 +30,7 @@ Log.Logger = new LoggerConfiguration()
 
 var loggerFactory = new LoggerFactory().AddSerilog(Log.Logger);
 var staticLogger = loggerFactory.CreateLogger<Program>();
+TimeSync.Initialize(loggerFactory.CreateLogger(nameof(TimeSync)));
 
 // --- 2. object creation ---
 var instrumentRepository = new InstrumentRepository(loggerFactory.CreateLogger<InstrumentRepository>());
@@ -74,6 +77,7 @@ catch (Exception ex)
 
 var feedMonitor = new FeedMonitor(feedHandler, distributor, loggerFactory.CreateLogger<FeedMonitor>(), config, instrumentRepository);
 Timer? statisticsTimer = null;
+Timer? timeSyncTimer = null;
 
 // MarketDataDistributor 시작
 await distributor.StartAsync(cts.Token);
@@ -101,8 +105,12 @@ await feedHandler.StartAsync(cts.Token);
 var marketDataManager = new MarketDataManager(loggerFactory.CreateLogger<MarketDataManager>(), distributor, instrumentRepository, config);
 var subscriptionManager = new SubscriptionManager(loggerFactory.CreateLogger<SubscriptionManager>(), feedHandler, instrumentRepository, config);
 await subscriptionManager.InitializeSubscriptionsAsync();
+await SyncTimeWithBinance();
 
-// 5초마다 통계 출력 타이머 시작
+// Start timers
+// Periodically sync time with Binance server to adjust for clock drift.
+timeSyncTimer = new Timer(_ => SyncTimeWithBinance().Wait(), null, TimeSpan.FromHours(1), TimeSpan.FromHours(1));
+// Print statistics every 5 seconds.
 statisticsTimer = new Timer(PrintStatistics, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
 
 staticLogger.LogInformation("Feed Monitor started successfully. Press Ctrl+C to exit.");
@@ -120,6 +128,7 @@ catch (TaskCanceledException)
 // --- 4. 애플리케이션 종료 처리 ---
 staticLogger.LogInformation("Feed Monitor stopping...");
 statisticsTimer?.Change(Timeout.Infinite, 0);
+timeSyncTimer?.Change(Timeout.Infinite, 0);
 feedMonitor.OnAlert -= OnFeedAlert;
 await feedHandler.StopAsync(CancellationToken.None); // 종료 시에는 새 토큰 사용
 await distributor.StopAsync(CancellationToken.None);
@@ -127,6 +136,24 @@ staticLogger.LogInformation("Feed Monitor stopped.");
 
 
 // --- 로컬 함수들 ---
+async Task SyncTimeWithBinance()
+{
+    staticLogger.LogInformation("Attempting to synchronize time with Binance server...");
+    try
+    {
+        // We only need one type of client to get the time. PerpetualFuture is a safe bet.
+        using var httpClient = new HttpClient();
+        var apiClient = new BinanceRestApiClient(loggerFactory.CreateLogger<BinanceRestApiClient>(), instrumentRepository, httpClient, ProductType.PerpetualFuture);
+        var serverTimeResponse = await apiClient.GetServerTimeAsync(cts.Token);
+
+        TimeSync.UpdateTimeOffset(serverTimeResponse.ServerTime);
+    }
+    catch (Exception ex)
+    {
+        staticLogger.LogError(ex, "Failed to synchronize time with Binance server. Latency calculations may be inaccurate.");
+    }
+}
+
 
 void OnFeedAlert(object? sender, FeedAlert alert)
 {

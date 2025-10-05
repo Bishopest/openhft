@@ -10,7 +10,6 @@ using OpenHFT.Feed.Exceptions;
 using OpenHFT.Feed.Interfaces;
 using OpenHFT.Feed.Models;
 using OpenHFT.Processing;
-using OpenHFT.Processing.Interfaces;
 
 namespace OpenHFT.Feed;
 
@@ -124,10 +123,12 @@ public class FeedMonitor : BaseMarketDataConsumer
         }
 
         // 3. latency calculation
-        var latency = (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - data.Timestamp) / 1000.0;
+        // Calculate latency in milliseconds. data.Timestamp is in milliseconds from the exchange.
+        // GetSyncedTimestampMicros provides a local timestamp adjusted by the server time offset.
+        var latency = (TimeSync.GetSyncedTimestampMicros() / 1000.0) - data.Timestamp;
         if (latency > 0)
         {
-            stats.AddE2ELatency(latency);
+            stats.AddE2ELatency(latency); // latency is already in milliseconds
         }
 
         // 4. alaert emergency

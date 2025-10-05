@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace OpenHFT.Core.Utils;
 
@@ -53,6 +54,52 @@ public static class TimestampUtils
     public static long ElapsedMicros(long startTimestamp, long endTimestamp)
     {
         return endTimestamp - startTimestamp;
+    }
+}
+
+/// <summary>
+/// Manages time synchronization with an external server to ensure accurate latency measurements.
+/// This class calculates the offset between the local clock and the server clock.
+/// </summary>
+public static class TimeSync
+{
+    // The offset between the server's clock and the local UTC clock, in microseconds.
+    // Calculated as: server_time_micros - local_utc_time_micros
+    private static long _timeOffsetMicros = 0;
+    private static ILogger? _logger;
+
+    public static void Initialize(ILogger logger)
+    {
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Updates the time offset based on the server's time and the current local UTC time.
+    /// This should be called periodically to account for clock drift.
+    /// </summary>
+    /// <param name="serverTimeMillis">The server time in Unix milliseconds.</param>
+    public static void UpdateTimeOffset(long serverTimeMillis)
+    {
+        var localTimeMillis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var newOffsetMillis = serverTimeMillis - localTimeMillis;
+
+        // Store the offset in microseconds for internal use.
+        Interlocked.Exchange(ref _timeOffsetMicros, newOffsetMillis * 1000);
+
+        _logger?.LogInformationWithCaller($"Time synchronized with server. Wall clock offset: {newOffsetMillis} ms");
+    }
+
+    /// <summary>
+    /// Gets the current UTC timestamp, adjusted by the server time offset, in microseconds.
+    /// This provides a timestamp that is synchronized with the server's clock.
+    /// </summary>
+    /// <returns>A synchronized UTC timestamp in microseconds since the Unix epoch.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long GetSyncedTimestampMicros()
+    {
+        // Get current local UTC time in microseconds and apply the offset.
+        long localUtcMicros = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000;
+        return localUtcMicros + Interlocked.Read(ref _timeOffsetMicros);
     }
 }
 
