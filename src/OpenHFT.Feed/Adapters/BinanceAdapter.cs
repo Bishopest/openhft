@@ -58,7 +58,7 @@ public class BinanceAdapter : BaseFeedAdapter
 
             var marketDataEvent = new MarketDataEvent(
                 sequence: 0, // aggTrade doesn't have a clear sequence like depth updates
-                timestamp: tradeTime * 1000, // Convert ms to microseconds
+                timestamp: tradeTime,
                 side: side,
                 priceTicks: PriceUtils.ToTicks(price), // Assumes a PriceUtils helper
                 quantity: (long)(quantity * 100_000_000), // Convert to base units
@@ -92,7 +92,7 @@ public class BinanceAdapter : BaseFeedAdapter
             OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Invalid instrument(symbol: {symbol}) in bookticker message", null, null, BinanceTopic.BookTicker.TopicId), null));
             return;
         }
-        var eventTime = data.GetProperty("E").GetInt64() * 1000; // Convert ms to microseconds
+        var eventTime = data.GetProperty("E").GetInt64();
 
         // Process Best Bid
         if (decimal.TryParse(data.GetProperty("b").GetString(), out var bidPrice) &&
@@ -158,7 +158,7 @@ public class BinanceAdapter : BaseFeedAdapter
             return;
         }
 
-        var timestamp = data.GetProperty("E").GetInt64() * 1000; // Event time in microseconds
+        var timestamp = data.GetProperty("E").GetInt64();
         var finalUpdateId = data.GetProperty("u").GetInt64();
         var prevUpdateId = data.GetProperty("pu").GetInt64();
 
