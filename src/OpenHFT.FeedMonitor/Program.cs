@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Reflection;
+using System.Text;
 using Disruptor;
 using Disruptor.Dsl;
 using Microsoft.Extensions.Logging;
@@ -11,9 +12,9 @@ using OpenHFT.Core.Utils;
 using OpenHFT.Feed;
 using OpenHFT.Feed.Adapters;
 using OpenHFT.Feed.Interfaces;
+using OpenHFT.Feed.Models;
 using OpenHFT.Processing;
 using Serilog;
-using System.Text;
 
 // --- 1. logger ---
 Log.Logger = new LoggerConfiguration()
@@ -145,7 +146,7 @@ void PrintStatistics(object? state)
 {
     // 리플렉션을 사용해 FeedMonitor의 비공개 통계 데이터에 접근
     var statisticsField = typeof(FeedMonitor).GetField("_statistics", BindingFlags.NonPublic | BindingFlags.Instance);
-    if (statisticsField?.GetValue(feedMonitor) is not ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, FeedStatistics>> statsDict)
+    if (statisticsField?.GetValue(feedMonitor) is not ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, ConcurrentDictionary<int, FeedStatistics>>> statsDict)
     {
         return;
     }
@@ -160,13 +161,13 @@ void PrintStatistics(object? state)
     // logger.LogInformation("Feed Statistics Update:\n{Statistics}", sb.ToString());
 }
 
-void BuildStatisticsString(StringBuilder sb, ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, FeedStatistics>> statsDict)
+void BuildStatisticsString(StringBuilder sb, ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, ConcurrentDictionary<int, FeedStatistics>>> statsDict)
 {
     sb.AppendLine("\n--- Feed Statistics ---");
     sb.AppendLine($"Timestamp: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff} UTC");
-    sb.AppendLine("-------------------------------------------------------------------------------------------------");
-    sb.AppendLine("| Exchange         | Product Type     | Msgs/sec | Avg Latency(ms) | P95 Latency(ms) | Gaps | Reconnects |");
-    sb.AppendLine("-------------------------------------------------------------------------------------------------");
+    sb.AppendLine("---------------------------------------------------------------------------------------------------------------------------------");
+    sb.AppendLine("| Exchange         | Product Type     | Topic            | Msgs/sec | Avg Latency(ms) | P95 Latency(ms) | Gaps | Drop(%)  | Reconnects |");
+    sb.AppendLine("---------------------------------------------------------------------------------------------------------------------------------");
 
 
     if (statsDict.IsEmpty)
@@ -179,18 +180,25 @@ void BuildStatisticsString(StringBuilder sb, ConcurrentDictionary<ExchangeEnum, 
         {
             foreach (var productPair in exchangePair.Value.OrderBy(p => p.Key))
             {
-                var stats = productPair.Value;
-                sb.Append($"| {exchangePair.Key,-16} | {productPair.Key,-16} ");
-                sb.Append($"| {stats.MessagesPerSecond,-8:F0} ");
-                sb.Append($"| {stats.AvgE2ELatency,-15:F2} ");
-                sb.Append($"| {stats.GetLatencyPercentile(0.95),-15:F2} ");
-                sb.Append($"| {stats.SequenceGaps,-4} ");
-                sb.Append($"| {stats.ReconnectCount,-10} |");
-                sb.AppendLine();
+                foreach (var topicPair in productPair.Value.OrderBy(p => p.Key))
+                {
+                    var topicId = topicPair.Key;
+                    var stats = topicPair.Value;
+                    var topicName = TopicRegistry.TryGetTopic(topicId, out var topic) ? topic.GetTopicName() : $"Unknown({topicId})";
+
+                    sb.Append($"| {exchangePair.Key,-16} | {productPair.Key,-16} | {topicName,-16} ");
+                    sb.Append($"| {stats.MessagesPerSecond,-8:F0} ");
+                    sb.Append($"| {stats.AvgE2ELatency,-15:F2} ");
+                    sb.Append($"| {stats.GetLatencyPercentile(0.95),-15:F2} ");
+                    sb.Append($"| {stats.SequenceGaps,-4} ");
+                    sb.Append($"| {stats.DropRate,-8:P2} ");
+                    sb.Append($"| {stats.ReconnectCount,-10} |");
+                    sb.AppendLine();
+                }
             }
         }
     }
-    sb.AppendLine("-------------------------------------------------------------------------------------------------");
+    sb.AppendLine("---------------------------------------------------------------------------------------------------------------------------------");
 }
 
 void CreateAndAddAdaptersFromConfig(SubscriptionConfig config,

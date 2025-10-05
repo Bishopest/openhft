@@ -34,9 +34,17 @@ public class BinanceAdapter : BaseFeedAdapter
     private void ProcessAggTrade(JsonElement data)
     {
         var symbol = data.GetProperty("s").GetString();
-        if (symbol == null) return;
+        if (symbol == null)
+        {
+            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "Invalid symbol in aggTrade message", null, null, BinanceTopic.AggTrade.TopicId), null));
+            return;
+        }
         var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
-        if (instrument == null) return;
+        if (instrument == null)
+        {
+            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Invalid instrument(symbol: {symbol}) in aggTrade message", null, null, BinanceTopic.AggTrade.TopicId), null));
+            return;
+        }
 
         // Price and quantity are sent as strings in the aggTrade stream.
         if (decimal.TryParse(data.GetProperty("p").GetString(), out var price) &&
@@ -56,7 +64,8 @@ public class BinanceAdapter : BaseFeedAdapter
                 quantity: (long)(quantity * 100_000_000), // Convert to base units
                 kind: EventKind.Trade,
                 instrumentId: instrument.InstrumentId,
-                exchange: SourceExchange
+                exchange: SourceExchange,
+                topicId: BinanceTopic.AggTrade.TopicId
             );
 
             OnMarketDataReceived(marketDataEvent);
@@ -64,20 +73,25 @@ public class BinanceAdapter : BaseFeedAdapter
         else
         {
             _logger.LogWarningWithCaller($"Failed to parse price or quantity for aggTrade on symbol {symbol}");
+            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Failed to parse price or quantity for aggTrade on symbol {symbol}", null, null, BinanceTopic.AggTrade.TopicId), null));
             return;
-
         }
     }
 
     private void ProcessBookTicker(JsonElement data)
     {
         var symbol = data.GetProperty("s").GetString();
-        // if (symbol == null || !SymbolToInstrumentMap.TryGetValue(symbol, out var instrument)) return;
-        if (symbol == null) return;
+        if (symbol == null)
+        {
+            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "Invalid symbol in bookticker message", null, null, BinanceTopic.BookTicker.TopicId), null));
+            return;
+        }
         var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
-        if (instrument == null) return;
-
-
+        if (instrument == null)
+        {
+            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Invalid instrument(symbol: {symbol}) in bookticker message", null, null, BinanceTopic.BookTicker.TopicId), null));
+            return;
+        }
         var eventTime = data.GetProperty("E").GetInt64() * 1000; // Convert ms to microseconds
 
         // Process Best Bid
@@ -92,9 +106,16 @@ public class BinanceAdapter : BaseFeedAdapter
                 quantity: (long)(bidQty * 100_000_000),
                 kind: EventKind.Update,
                 instrumentId: instrument.InstrumentId,
-                exchange: SourceExchange
+                exchange: SourceExchange,
+                topicId: BinanceTopic.BookTicker.TopicId
             );
             OnMarketDataReceived(bidEvent);
+        }
+        else
+        {
+            _logger.LogWarningWithCaller($"Failed to parse price or quantity for bid bookticker on symbol {symbol}");
+            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Failed to parse price or quantity for bid bookticker on symbol {symbol}", null, null, BinanceTopic.BookTicker.TopicId), null));
+            return;
         }
 
         // Process Best Ask
@@ -109,23 +130,37 @@ public class BinanceAdapter : BaseFeedAdapter
                 quantity: (long)(askQty * 100_000_000),
                 kind: EventKind.Update,
                 instrumentId: instrument.InstrumentId,
-                exchange: SourceExchange
+                exchange: SourceExchange,
+                topicId: BinanceTopic.BookTicker.TopicId
             );
             OnMarketDataReceived(askEvent);
+        }
+        else
+        {
+            _logger.LogWarningWithCaller($"Failed to parse price or quantity for ask bookticker on symbol {symbol}");
+            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Failed to parse price or quantity for ask bookticker on symbol {symbol}", null, null, BinanceTopic.BookTicker.TopicId), null));
+            return;
         }
     }
 
     private void ProcessDepthUpdate(JsonElement data)
     {
         var symbol = data.GetProperty("s").GetString();
-        if (symbol == null) return;
+        if (symbol == null)
+        {
+            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "Invalid symbol in depth message", null, null, BinanceTopic.DepthUpdate.TopicId), null));
+            return;
+        }
         var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
-        if (instrument == null) return;
+        if (instrument == null)
+        {
+            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Invalid instrument(symbol: {symbol}) in depth message", null, null, BinanceTopic.DepthUpdate.TopicId), null));
+            return;
+        }
 
         var timestamp = data.GetProperty("E").GetInt64() * 1000; // Event time in microseconds
         var finalUpdateId = data.GetProperty("u").GetInt64();
         var prevUpdateId = data.GetProperty("pu").GetInt64();
-
 
         // Here you should check sequence continuity using 'pu' and 'U'/'u' as per Binance docs.
         // For simplicity, this example just processes the updates.
@@ -147,8 +182,15 @@ public class BinanceAdapter : BaseFeedAdapter
                         kind: quantity == 0 ? EventKind.Delete : EventKind.Update,
                         instrumentId: instrument.InstrumentId,
                         exchange: SourceExchange,
-                        prevSequence: prevUpdateId
+                        prevSequence: prevUpdateId,
+                        topicId: BinanceTopic.DepthUpdate.TopicId
                     ));
+                }
+                else
+                {
+                    _logger.LogWarningWithCaller($"Failed to parse price or quantity for bid depth on symbol {symbol}");
+                    OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Failed to parse price or quantity for bid depth on symbol {symbol}", null, null, BinanceTopic.DepthUpdate.TopicId), null));
+                    return;
                 }
             }
         }
@@ -169,8 +211,16 @@ public class BinanceAdapter : BaseFeedAdapter
                         quantity: (long)(quantity * 100_000_000),
                         kind: quantity == 0 ? EventKind.Delete : EventKind.Update,
                         instrumentId: instrument.InstrumentId,
-                        exchange: SourceExchange
+                        exchange: SourceExchange,
+                        prevSequence: prevUpdateId,
+                        topicId: BinanceTopic.DepthUpdate.TopicId
                     ));
+                }
+                else
+                {
+                    _logger.LogWarningWithCaller($"Failed to parse price or quantity for ask depth on symbol {symbol}");
+                    OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Failed to parse price or quantity for ask depth on symbol {symbol}", null, null, BinanceTopic.DepthUpdate.TopicId), null));
+                    return;
                 }
             }
         }
@@ -220,12 +270,12 @@ public class BinanceAdapter : BaseFeedAdapter
         catch (JsonException jex)
         {
             // Handle parsing errors
-            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "JSON parsing failed.", GetRawMessage(messageStream), jex), null));
+            OnError(new FeedErrorEventArgs(new FeedReceiveException(SourceExchange, "JSON parsing failed.", jex), null));
         }
         catch (Exception ex)
         {
             // Handle other processing errors
-            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "Failed to process message.", GetRawMessage(messageStream), ex), null));
+            OnError(new FeedErrorEventArgs(new FeedReceiveException(SourceExchange, "Failed to process message.", ex), null));
         }
     }
 

@@ -6,7 +6,9 @@ using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Adapters;
+using OpenHFT.Feed.Exceptions;
 using OpenHFT.Feed.Interfaces;
+using OpenHFT.Feed.Models;
 using OpenHFT.Processing;
 using OpenHFT.Processing.Interfaces;
 
@@ -23,7 +25,7 @@ public class FeedMonitor : BaseMarketDataConsumer
     private readonly MarketDataDistributor _distributor;
     private readonly ILogger<FeedMonitor> _logger;
     private readonly SubscriptionConfig _config;
-    private readonly ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, FeedStatistics>> _statistics = new();
+    private readonly ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, ConcurrentDictionary<int, FeedStatistics>>> _statistics = new();
     private readonly ConcurrentDictionary<int, DepthSequence> _lastSequenceNumbers = new();
 
     public override string ConsumerName => "FeedMonitor";
@@ -44,6 +46,7 @@ public class FeedMonitor : BaseMarketDataConsumer
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _feedHandler.AdapterConnectionStateChanged += OnConnectionStateChanged;
+        _feedHandler.FeedError += OnFeedError;
 
         foreach (var group in _config.Subscriptions)
         {
@@ -81,37 +84,41 @@ public class FeedMonitor : BaseMarketDataConsumer
         var exchange = instrument.SourceExchange;
         var productType = instrument.ProductType;
 
+        if (data.TopicId == 0) return; // Ignore events without a topic ID
+
         // 1. create stat object
-        var innerDict = _statistics.GetOrAdd(exchange,
-        _ => new ConcurrentDictionary<ProductType, FeedStatistics>());
-        var stats = innerDict.GetOrAdd(productType,
-        _ => new FeedStatistics());
+        var productDict = _statistics.GetOrAdd(exchange, _ => new ConcurrentDictionary<ProductType, ConcurrentDictionary<int, FeedStatistics>>());
+        var topicDict = productDict.GetOrAdd(productType, _ => new ConcurrentDictionary<int, FeedStatistics>());
+        var stats = topicDict.GetOrAdd(data.TopicId, _ => new FeedStatistics());
 
         // 2. updates stat
         stats.RecordMessageReceived();
         stats.RecordMessageProcessed();
 
-        // 3. validate sequence
-        if (data.Sequence > 0 && data.PrevSequence > 0 && exchange == ExchangeEnum.BINANCE)
+        // 3. validate sequence (only for DepthUpdate topic)
+        if (TopicRegistry.TryGetTopic(data.TopicId, out var topic) && topic == BinanceTopic.DepthUpdate)
         {
-            if (!_lastSequenceNumbers.TryGetValue(data.InstrumentId, out var lastSequence))
+            if (data.Sequence > 0 && data.PrevSequence > 0)
             {
-                lastSequence = new DepthSequence(data.Timestamp, data.Sequence);
-                _lastSequenceNumbers[data.InstrumentId] = lastSequence;
-            }
-            else
-            {
-                if (data.Timestamp != lastSequence.ts)
+                if (!_lastSequenceNumbers.TryGetValue(data.InstrumentId, out var lastSequence))
                 {
-                    if (data.PrevSequence != lastSequence.seq)
+                    lastSequence = new DepthSequence(data.Timestamp, data.Sequence);
+                    _lastSequenceNumbers[data.InstrumentId] = lastSequence;
+                }
+                else
+                {
+                    if (data.Timestamp != lastSequence.ts)
                     {
-                        _logger.LogWarningWithCaller($"Sequence gap detected for {exchange}/{productType}/{data.InstrumentId}: expected {lastSequence.seq}, received {data.PrevSequence}");
-                        stats.RecordSequenceGap();
-                        OnAlert?.Invoke(this, new FeedAlert(exchange, AlertLevel.Error,
-                            $"Sequence gap detected for {exchange}/{productType}/{data.InstrumentId}. Expected {lastSequence.seq}, received {data.PrevSequence}."));
-                    }
+                        if (data.PrevSequence != lastSequence.seq)
+                        {
+                            _logger.LogWarningWithCaller($"Sequence gap detected for {exchange}/{productType}/{instrument.Symbol}: expected {lastSequence.seq}, received {data.PrevSequence}");
+                            stats.RecordSequenceGap();
+                            OnAlert?.Invoke(this, new FeedAlert(exchange, AlertLevel.Error,
+                                $"Sequence gap detected for {exchange}/{productType}/{instrument.Symbol}. Expected {lastSequence.seq}, received {data.PrevSequence}."));
+                        }
 
-                    _lastSequenceNumbers[data.InstrumentId] = new DepthSequence(data.Timestamp, data.Sequence);
+                        _lastSequenceNumbers[data.InstrumentId] = new DepthSequence(data.Timestamp, data.Sequence);
+                    }
                 }
             }
         }
@@ -139,15 +146,17 @@ public class FeedMonitor : BaseMarketDataConsumer
         var exchange = adapter.SourceExchange;
         var productType = adapter.ProdType;
 
-        var innerDict = _statistics.GetOrAdd(exchange,
-            _ => new ConcurrentDictionary<ProductType, FeedStatistics>());
-
-        var stats = innerDict.GetOrAdd(productType,
-            _ => new FeedStatistics());
-
         if (e.IsConnected)
         {
-            stats.RecordReconnect();
+            // Increment reconnect count for all topics under this adapter's (Exchange, ProductType)
+            if (_statistics.TryGetValue(exchange, out var productDict) &&
+                productDict.TryGetValue(productType, out var topicDict))
+            {
+                foreach (var stat in topicDict.Values)
+                {
+                    stat.RecordReconnect();
+                }
+            }
             OnAlert?.Invoke(this, new FeedAlert(exchange, AlertLevel.Info,
                $"Adapter connected successfully: {exchange}/{productType}"));
         }
@@ -166,12 +175,20 @@ public class FeedMonitor : BaseMarketDataConsumer
         var exchange = adapter.SourceExchange;
         var productType = adapter.ProdType;
 
-        var innerDict = _statistics.GetOrAdd(exchange,
-            _ => new ConcurrentDictionary<ProductType, FeedStatistics>());
+        // This is a generic error. We can't attribute it to a specific topic.
+        // For now, we'll log it. A more sophisticated error reporting might be needed.
+        _logger.LogErrorWithCaller(e.Exception, $"Feed error received for {exchange}/{productType}. Context: {e.Context}");
 
-        var stats = innerDict.GetOrAdd(productType,
-            _ => new FeedStatistics());
+        var feedParseException = e.Exception as FeedParseException;
+        if (feedParseException == null) return;
 
-        stats.RecordMessageDropped();
+        if (_statistics.TryGetValue(exchange, out var productDict)
+        && productDict.TryGetValue(productType, out var topicDict))
+        {
+            foreach (var kvp in topicDict)
+            {
+                kvp.Value.RecordMessageDropped();
+            }
+        }
     }
 }

@@ -18,9 +18,10 @@ public readonly struct MarketDataEvent
     public readonly EventKind Kind;     // Add/Update/Delete/Trade
     public readonly int InstrumentId;       // Internal symbol identifier
     public readonly ExchangeEnum SourceExchange;
+    public readonly int TopicId;        // Identifier for the source topic (e.g., AggTrade, DepthUpdate)
 
     public MarketDataEvent(long sequence, long timestamp, Side side, long priceTicks,
-                          long quantity, EventKind kind, int instrumentId, ExchangeEnum exchange, long prevSequence = 0)
+                          long quantity, EventKind kind, int instrumentId, ExchangeEnum exchange, long prevSequence = 0, int topicId = 0)
     {
         Sequence = sequence;
         Timestamp = timestamp;
@@ -31,6 +32,7 @@ public readonly struct MarketDataEvent
         InstrumentId = instrumentId;
         SourceExchange = exchange;
         PrevSequence = prevSequence;
+        TopicId = topicId;
     }
 
     public override string ToString() =>
