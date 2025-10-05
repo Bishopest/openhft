@@ -8,6 +8,7 @@ using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Exceptions;
 using OpenHFT.Feed.Interfaces;
+using OpenHFT.Feed.Models;
 
 namespace OpenHFT.Feed.Adapters;
 
@@ -17,9 +18,6 @@ namespace OpenHFT.Feed.Adapters;
 /// </summary>
 public class BinanceAdapter : BaseFeedAdapter
 {
-    private const string TopicAggTrade = "@aggTrade";
-    private const string TopicBookTicker = "@bookTicker";
-    private const string TopicDepth = "@depth20@100ms";
     private const string DefaultBaseUrl = "wss://fstream.binance.com/stream";
 
     public override ExchangeEnum SourceExchange => ExchangeEnum.BINANCE;
@@ -28,12 +26,9 @@ public class BinanceAdapter : BaseFeedAdapter
     {
     }
 
-    private IEnumerable<string> GetDefaultStreamsForSymbol(string symbol)
+    private static IEnumerable<string> GetDefaultStreamsForSymbol(string symbol)
     {
-        var normalizedSymbol = symbol.ToLowerInvariant();
-        yield return $"{normalizedSymbol}{TopicAggTrade}";
-        yield return $"{normalizedSymbol}{TopicBookTicker}";
-        yield return $"{normalizedSymbol}{TopicDepth}";
+        return BinanceTopic.GetAll().Select(topic => topic.GetStreamName(symbol));
     }
 
     private void ProcessAggTrade(JsonElement data)
@@ -203,20 +198,22 @@ public class BinanceAdapter : BaseFeedAdapter
             if (root.TryGetProperty("stream", out var streamElement) &&
                 root.TryGetProperty("data", out var dataElement))
             {
-                var streamName = streamElement.GetString() ?? string.Empty;
-                var eventType = dataElement.TryGetProperty("e", out var et) ? et.GetString() : null;
-
-                switch (eventType)
+                if (dataElement.TryGetProperty("e", out var eventTypeElement) &&
+                    eventTypeElement.GetString() is { } eventTypeString &&
+                    TopicRegistry.TryGetTopic(eventTypeString, out var topic))
                 {
-                    case "aggTrade":
+                    if (topic == BinanceTopic.AggTrade)
+                    {
                         ProcessAggTrade(dataElement);
-                        break;
-                    case "bookTicker":
+                    }
+                    else if (topic == BinanceTopic.BookTicker)
+                    {
                         ProcessBookTicker(dataElement);
-                        break;
-                    case "depthUpdate":
+                    }
+                    else if (topic == BinanceTopic.DepthUpdate)
+                    {
                         ProcessDepthUpdate(dataElement);
-                        break;
+                    }
                 }
             }
         }
@@ -242,7 +239,7 @@ public class BinanceAdapter : BaseFeedAdapter
     protected override Task DoSubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
     {
         var allStreams = insts
-            .SelectMany(inst => GetDefaultStreamsForSymbol(inst.Symbol))
+            .SelectMany(inst => GetDefaultStreamsForSymbol(inst.Symbol)) // Now uses the new static method
             .ToArray();
 
         if (!allStreams.Any())
@@ -264,7 +261,7 @@ public class BinanceAdapter : BaseFeedAdapter
     protected override Task DoUnsubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
     {
         var allStreams = insts
-            .SelectMany(inst => GetDefaultStreamsForSymbol(inst.Symbol))
+            .SelectMany(inst => GetDefaultStreamsForSymbol(inst.Symbol)) // Now uses the new static method
             .ToArray();
 
         if (!allStreams.Any())
@@ -286,6 +283,6 @@ public class BinanceAdapter : BaseFeedAdapter
     protected override void ConfigureWebsocket(ClientWebSocket websocket)
     {
         websocket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
-        websocket.Options.SetBuffer(8192, 8192); // 8KB buffersthrow new NotImplementedException();
+        websocket.Options.SetBuffer(8192, 8192); // 8KB buffers
     }
 }
