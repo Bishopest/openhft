@@ -183,12 +183,10 @@ public class FeedMonitor : BaseMarketDataConsumer
         if (feedParseException == null) return;
 
         if (_statistics.TryGetValue(exchange, out var productDict)
-        && productDict.TryGetValue(productType, out var topicDict))
+        && productDict.TryGetValue(productType, out var topicDict)
+        && topicDict.TryGetValue(feedParseException.TopicId, out var stats))
         {
-            foreach (var kvp in topicDict)
-            {
-                kvp.Value.RecordMessageDropped();
-            }
+            stats.RecordMessageDropped();
         }
     }
 }
