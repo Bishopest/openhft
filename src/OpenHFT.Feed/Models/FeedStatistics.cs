@@ -57,7 +57,11 @@ public class FeedStatistics
     {
         Interlocked.Increment(ref _messagesProcessed);
     }
-    public void RecordMessageDropped() => Interlocked.Increment(ref _messagesDropped);
+    public void RecordMessageDropped()
+    {
+        Interlocked.Increment(ref _messagesDropped);
+        Interlocked.Decrement(ref _messagesProcessed);
+    }
     public void RecordSequenceGap() => Interlocked.Increment(ref _sequenceGaps);
     public void AddE2ELatency(double e2eLatencyMs)
     {

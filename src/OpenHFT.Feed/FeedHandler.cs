@@ -6,6 +6,7 @@ using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Adapters;
+using OpenHFT.Feed.Exceptions;
 using OpenHFT.Feed.Interfaces;
 
 namespace OpenHFT.Feed;
@@ -15,7 +16,7 @@ public class FeedHandler : IFeedHandler
     private readonly ILogger<FeedHandler> _logger;
     private readonly ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, BaseFeedAdapter>> _adapters;
     private readonly RingBuffer<MarketDataEventWrapper> _ringBuffer;
-
+    public event EventHandler<FeedErrorEventArgs>? FeedError;
     public event EventHandler<ConnectionStateChangedEventArgs>? AdapterConnectionStateChanged;
 
     public FeedHandlerStatistics Statistics { get; } = new();
@@ -140,7 +141,10 @@ public class FeedHandler : IFeedHandler
 
     private void OnAdapterConnectionStateChanged(object? sender, ConnectionStateChangedEventArgs e)
     {
-        var adapter = sender as IFeedAdapter;
+        var adapter = sender as BaseFeedAdapter;
+        if (adapter == null) return;
+
+        AdapterConnectionStateChanged?.Invoke(adapter, e);
 
         _logger.LogInformationWithCaller($"Adapter({adapter?.SourceExchange}) connection state changed: {e.IsConnected} - {e.Reason}");
 
@@ -161,6 +165,7 @@ public class FeedHandler : IFeedHandler
     private void OnFeedError(object? sender, FeedErrorEventArgs e)
     {
         _logger.LogErrorWithCaller(e.Exception, $"Adapter error: {e.Context}");
+        FeedError?.Invoke(sender, e);
     }
 
     private void OnMarketDataReceived(object? sender, MarketDataEvent marketDataEvent)

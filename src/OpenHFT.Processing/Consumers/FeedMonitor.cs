@@ -89,6 +89,7 @@ public class FeedMonitor : BaseMarketDataConsumer
 
         // 2. updates stat
         stats.RecordMessageReceived();
+        stats.RecordMessageProcessed();
 
         // 3. validate sequence
         if (data.Sequence > 0 && data.PrevSequence > 0 && exchange == ExchangeEnum.BINANCE)
@@ -155,5 +156,22 @@ public class FeedMonitor : BaseMarketDataConsumer
             OnAlert?.Invoke(this, new FeedAlert(e.SourceExchange, AlertLevel.Error,
                $"Adapter disconnected ({productType}). Reason: {e.Reason}"));
         }
+    }
+
+    private void OnFeedError(object? sender, FeedErrorEventArgs e)
+    {
+        var adapter = sender as BaseFeedAdapter;
+        if (adapter == null) return;
+
+        var exchange = adapter.SourceExchange;
+        var productType = adapter.ProdType;
+
+        var innerDict = _statistics.GetOrAdd(exchange,
+            _ => new ConcurrentDictionary<ProductType, FeedStatistics>());
+
+        var stats = innerDict.GetOrAdd(productType,
+            _ => new FeedStatistics());
+
+        stats.RecordMessageDropped();
     }
 }

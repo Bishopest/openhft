@@ -42,4 +42,6 @@ public interface IFeedHandler : IDisposable
     FeedHandlerStatistics Statistics { get; }
 
     event EventHandler<ConnectionStateChangedEventArgs> AdapterConnectionStateChanged;
+
+    event EventHandler<FeedErrorEventArgs> FeedError;
 }
