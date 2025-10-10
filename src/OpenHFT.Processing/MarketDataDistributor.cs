@@ -15,7 +15,9 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
     private readonly Disruptor<MarketDataEventWrapper> _disruptor;
     private readonly ILogger<MarketDataDistributor> _logger;
     // key = InstrumentID, key inside = Topic id
-    private readonly ConcurrentDictionary<int, ConcurrentDictionary<int, IMarketDataConsumer>> _subscriptions = new();
+    private readonly ConcurrentDictionary<int, ConcurrentDictionary<int, BaseMarketDataConsumer>> _subscriptions = new();
+    // key = TopicId, value = Consumer. For system-wide topics not tied to a specific instrument.
+    private readonly ConcurrentDictionary<int, BaseMarketDataConsumer> _systemTopicSubscriptions = new();
     private long _distributedEventCount;
 
     public MarketDataDistributor(Disruptor<MarketDataEventWrapper> disruptor, ILogger<MarketDataDistributor> logger)
@@ -44,11 +46,26 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
     // Subscription management
     public void Subscribe(BaseMarketDataConsumer consumer)
     {
+        // Handle system topics separately. They are not tied to specific instruments.
+        if (consumer.Topic is SystemTopic)
+        {
+            if (_systemTopicSubscriptions.TryAdd(consumer.Topic.TopicId, consumer))
+            {
+                consumer.Start();
+                _logger.LogInformationWithCaller($"System subscriber(name: {consumer.ConsumerName}, topic id: {consumer.Topic.TopicId}) subscribed and started successfully.");
+            }
+            else
+            {
+                _logger.LogWarningWithCaller($"System subscriber(name: {consumer.ConsumerName}, topic id: {consumer.Topic.TopicId}) already exists.");
+            }
+            return;
+        }
+
         foreach (var instrument in consumer.Instruments)
         {
             var innerSubscriptionDict = _subscriptions.GetOrAdd(
                 instrument.InstrumentId,
-                _ => new ConcurrentDictionary<int, IMarketDataConsumer>()
+                _ => new ConcurrentDictionary<int, BaseMarketDataConsumer>()
             );
 
             if (!innerSubscriptionDict.TryAdd(consumer.Topic.TopicId, consumer))
@@ -65,6 +82,21 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
 
     public void Unsubscribe(BaseMarketDataConsumer consumer)
     {
+        // Handle system topics
+        if (consumer.Topic is SystemTopic)
+        {
+            if (_systemTopicSubscriptions.TryRemove(consumer.Topic.TopicId, out var removedConsumer))
+            {
+                removedConsumer.Stop();
+                _logger.LogInformationWithCaller($"System subscriber(name: {consumer.ConsumerName}, topic id: {consumer.Topic.TopicId}) unsubscribed and stopped successfully.");
+            }
+            else
+            {
+                _logger.LogWarningWithCaller($"System subscriber(name: {consumer.ConsumerName}, topic id: {consumer.Topic.TopicId}) not found for unsubscription.");
+            }
+            return;
+        }
+
         foreach (var instrument in consumer.Instruments)
         {
             if (_subscriptions.TryGetValue(instrument.InstrumentId, out var innerSubscriptionDict))
@@ -93,14 +125,23 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
         {
             //Interlocked.Increment(ref _distributedEventCount);
             var eventCopied = data.Event;
-            if (TopicRegistry.TryGetTopic(eventCopied.TopicId, out var topic))
-            {
-                _logger.LogInformationWithCaller($"[{topic.EventTypeString}] {eventCopied}");
-            }
+            // if (TopicRegistry.TryGetTopic(eventCopied.TopicId, out var topic))
+            // {
+            //     _logger.LogInformationWithCaller($"[{topic.EventTypeString}] {eventCopied}");
+            // }
 
+            // 1. Post to the specific consumer for the instrument and topic.
             if (_subscriptions.TryGetValue(eventCopied.InstrumentId, out var subscribers) && subscribers.TryGetValue(eventCopied.TopicId, out var consumer))
             {
                 consumer.Post(eventCopied);
+            }
+
+            // 2. Also, post to all system topic consumers.
+            // This allows consumers like FeedMonitor to see all events regardless of instrument.
+            // The check `!_systemTopicSubscriptions.IsEmpty` is a quick optimization.
+            if (!_systemTopicSubscriptions.IsEmpty)
+            {
+                foreach (var systemConsumer in _systemTopicSubscriptions.Values) systemConsumer.Post(eventCopied);
             }
         }
         catch (Exception ex)

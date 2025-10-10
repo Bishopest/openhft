@@ -28,8 +28,7 @@ public class FeedMonitor : BaseMarketDataConsumer
 
     public override string ConsumerName => "FeedMonitor";
 
-    private List<Instrument> _instruments = new List<Instrument>();
-    public override IReadOnlyCollection<Instrument> Instruments => _instruments;
+    public override IReadOnlyCollection<Instrument> Instruments => Array.Empty<Instrument>();
     public event EventHandler<FeedAlert>? OnAlert;
     public FeedMonitor(IFeedHandler feedHandler, MarketDataDistributor distributor, ILogger<FeedMonitor> logger, SubscriptionConfig config, IInstrumentRepository repository) : base(logger, SystemTopic.FeedMonitor)
     {
@@ -44,26 +43,6 @@ public class FeedMonitor : BaseMarketDataConsumer
         _feedHandler.AdapterConnectionStateChanged += OnConnectionStateChanged;
         _feedHandler.FeedError += OnFeedError;
 
-        foreach (var group in _config.Subscriptions)
-        {
-            if (!Enum.TryParse<ExchangeEnum>(group.Exchange, true, out var exchange) ||
-                !Enum.TryParse<ProductType>(group.ProductType, true, out var productType))
-            {
-                continue;
-            }
-
-            foreach (var symbol in group.Symbols)
-            {
-                var instrument = _repository.FindBySymbol(symbol, productType, exchange);
-                if (instrument == null)
-                {
-                    _logger.LogWarningWithCaller($"Could not find symbol {symbol} prod-type {productType} on exchange {exchange}.");
-                    continue;
-                }
-
-                _instruments.Add(instrument);
-            }
-        }
         _distributor.Subscribe(this);
         _logger.LogInformationWithCaller("Feed Monitor started and subscribed to FeedHandler events.");
         return Task.CompletedTask;
