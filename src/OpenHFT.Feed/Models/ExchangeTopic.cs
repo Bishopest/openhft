@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using OpenHFT.Core.Models;
 
 namespace OpenHFT.Feed.Models;
 
@@ -20,6 +21,7 @@ public abstract class ExchangeTopic
     /// The string value that appears in the 'e' or 'type' field of an incoming JSON message.
     /// </summary>
     public string EventTypeString { get; }
+    public abstract ExchangeEnum Exchange { get; }
 
     protected ExchangeTopic(string eventTypeString)
     {
@@ -38,6 +40,39 @@ public abstract class ExchangeTopic
     /// Returns the simple name of the topic (e.g., AggTrade, BookTicker).
     /// </summary>
     public abstract string GetTopicName();
+}
+
+/// <summary>
+/// Represents a system-level topic that is not tied to a specific exchange.
+/// </summary>
+public class SystemTopic : ExchangeTopic
+{
+    private readonly string _topicName;
+
+    // A system topic's EventTypeString is its unique identifier.
+    private SystemTopic(string eventTypeString, string topicName) : base(eventTypeString)
+    {
+        _topicName = topicName;
+    }
+
+    // NEW: System topics belong to a "None" or "System" exchange category.
+    public override ExchangeEnum Exchange => ExchangeEnum.Undefined; // Assuming ExchangeEnum has a 'NONE' member
+
+    // System topics don't typically have per-symbol stream names.
+    public override string GetStreamName(string symbol) => EventTypeString;
+
+    public override string GetTopicName() => _topicName;
+
+    // NEW: Define common system topics here.
+    public static SystemTopic FeedMonitor { get; } = new("system.feed.monitor", "FeedMonitor");
+
+    public static IEnumerable<SystemTopic> GetAll()
+    {
+        return typeof(SystemTopic)
+            .GetProperties(BindingFlags.Public | BindingFlags.Static)
+            .Where(p => p.PropertyType == typeof(SystemTopic))
+            .Select(p => (SystemTopic)p.GetValue(null)!);
+    }
 }
 
 /// <summary>
@@ -61,6 +96,8 @@ public class BinanceTopic : ExchangeTopic
     public static BinanceTopic AggTrade { get; } = new("aggTrade", "@aggTrade", "AggTrade");
     public static BinanceTopic BookTicker { get; } = new("bookTicker", "@bookTicker", "BookTicker");
     public static BinanceTopic DepthUpdate { get; } = new("depthUpdate", "@depth20@100ms", "DepthUpdate");
+
+    public override ExchangeEnum Exchange => ExchangeEnum.BINANCE;
 
     /// <summary>
     /// Gets all defined topics for this exchange using reflection.
