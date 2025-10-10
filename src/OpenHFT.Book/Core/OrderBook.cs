@@ -70,7 +70,7 @@ public class OrderBook
         }
 
         // Check sequence order (basic gap detection)
-        if (_lastSequence > 0 && mdEvent.Sequence <= _lastSequence)
+        if (_lastSequence > 0 && mdEvent.Sequence < _lastSequence)
         {
             _logger?.LogWarningWithCaller($"Out of order sequence for {Symbol}: current={_lastSequence}, received={mdEvent.Sequence}");
             return false;
