@@ -16,6 +16,8 @@ public class MarketDataManager
     private readonly MarketDataDistributor _distributor;
     private readonly IInstrumentRepository _repository;
     private readonly ConcurrentDictionary<int, OrderBookConsumer> _consumers = new();
+    private readonly ConcurrentDictionary<int, BestOrderBookConsumer> _bestOrderBookConsumers = new();
+
 
     public MarketDataManager(
         ILogger<MarketDataManager> logger,
@@ -50,7 +52,7 @@ public class MarketDataManager
                     continue;
                 }
 
-                Install(instrument, "initialize", null);
+                Install(instrument);
             }
         }
     }
@@ -61,33 +63,33 @@ public class MarketDataManager
     /// </summary>
     /// <param name="instrument">The instrument to subscribe to.</param>
     /// <param name="consumerName">A unique name for this specific consumer/callback.</param>
-    /// <param name="callback">The event handler to be called on order book updates.</param>
-    public void Install(Instrument instrument, string consumerName, EventHandler<OrderBook>? callback)
+    public void Install(Instrument instrument)
     {
-        if (string.IsNullOrWhiteSpace(consumerName))
-        {
-            throw new ArgumentException("Consumer name cannot be null or empty.", nameof(consumerName));
-        }
-
         // Atomically get or create the OrderBookConsumer for this instrument.
-        var consumer = _consumers.GetOrAdd(instrument.InstrumentId, (id) =>
+        var orderBookConsumer = _consumers.GetOrAdd(instrument.InstrumentId, (id) =>
         {
             _logger.LogInformationWithCaller($"First subscriber for {instrument.Symbol} ({id}). Creating new OrderBookConsumer and requesting data feed.");
 
-            var newConsumer = new OrderBookConsumer(instrument, _logger);
+            var obConsumer = new OrderBookConsumer(instrument, _logger);
 
             // 1. Register the new consumer to receive raw market data.
-            _distributor.Subscribe(newConsumer);
-            return newConsumer;
+            _distributor.Subscribe(obConsumer);
+            return obConsumer;
         });
 
-        // 3. Add the named subscriber to the (possibly new) consumer.
-        if (callback != null)
+        // Atomically get or create the BestOrderBookConsumer for this instrument.
+        var bestOrderBookconsumer = _bestOrderBookConsumers.GetOrAdd(instrument.InstrumentId, (id) =>
         {
-            consumer.AddSubscriber(consumerName, callback);
-        }
+            _logger.LogInformationWithCaller($"First subscriber for {instrument.Symbol} ({id}). Creating new BestOrderBookConsumer and requesting data feed.");
 
-        _logger.LogInformationWithCaller($"Callback '{consumerName}' successfully installed for {instrument.Symbol}.");
+            var bobConsumer = new BestOrderBookConsumer(instrument, _logger);
+
+            // 1. Register the new consumer to receive raw market data.
+            _distributor.Subscribe(bobConsumer);
+            return bobConsumer;
+        });
+
+        _logger.LogInformationWithCaller($"market data consumer successfully installed for {instrument.Symbol}.");
     }
 
     /// <summary>
@@ -106,7 +108,7 @@ public class MarketDataManager
         if (_consumers.TryGetValue(instrument.InstrumentId, out var consumer))
         {
             consumer.RemoveSubscriber(consumerName);
-            _logger.LogInformationWithCaller($"Callback '{consumerName}' successfully uninstalled for InstrumentId {instrument.InstrumentId}.");
+            _logger.LogInformationWithCaller($"consumer '{consumerName}' successfully uninstalled for InstrumentId {instrument.InstrumentId}.");
         }
         else
         {
