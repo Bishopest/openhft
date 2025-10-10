@@ -16,6 +16,7 @@ using OpenHFT.Feed.Adapters;
 using System.Net.WebSockets;
 using OpenHFT.Core.Interfaces;
 using Microsoft.Extensions.Logging.Abstractions;
+using OpenHFT.Feed.Models;
 
 namespace OpenHFT.Tests.Processing;
 
@@ -31,6 +32,7 @@ public class MarketDataDistributorTests
     // 테스트 결과를 확인할 테스트용 Consumer들
     private TestConsumer _btcConsumer = null!;
     private TestConsumer _ethConsumer = null!;
+    private ExchangeTopic _testTopic = null;
 
     private ILogger<MarketDataDistributor> _logger = null!;
     private string _testDirectory;
@@ -58,9 +60,10 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         // --- 2. 테스트용 Consumer(옵저버) 생성 ---
         var btc = _repository.FindBySymbol("BTCUSDT", ProductType.Spot, ExchangeEnum.BINANCE);
         var eth = _repository.FindBySymbol("ETHUSDT", ProductType.Spot, ExchangeEnum.BINANCE);
-        _btcConsumer = new TestConsumer(_logger, btc, "BTC_Consumer", new[] { "BTCUSDT@depth" });
-        _ethConsumer = new TestConsumer(_logger, eth, "ETH_Consumer", new[] { "ETHUSDT@depth" });
-        var allConsumers = new List<IMarketDataConsumer> { _btcConsumer, _ethConsumer };
+        _testTopic = BinanceTopic.AggTrade;
+        _btcConsumer = new TestConsumer(_logger, btc, "BTC_Consumer", _testTopic);
+        _ethConsumer = new TestConsumer(_logger, eth, "ETH_Consumer", _testTopic);
+        var allConsumers = new List<BaseMarketDataConsumer> { _btcConsumer, _ethConsumer };
 
         // --- 3. Disruptor 인스턴스 생성 ---
         _disruptor = new Disruptor<MarketDataEventWrapper>(
@@ -127,9 +130,10 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         var btcSymbolId = SymbolUtils.GetSymbolId("BTCUSDT");
         var ethSymbolId = SymbolUtils.GetSymbolId("ETHUSDT");
         var exchange = ExchangeEnum.BINANCE;
+
         // 테스트용 이벤트 생성
-        var btcEvent = new MarketDataEvent(1, 1, Side.Buy, 50000, 100, EventKind.Update, btcSymbolId, exchange);
-        var ethEvent = new MarketDataEvent(2, 2, Side.Sell, 3000, 200, EventKind.Update, ethSymbolId, exchange);
+        var btcEvent = new MarketDataEvent(1, 1, Side.Buy, 50000, 100, EventKind.Update, btcSymbolId, exchange, 0, _testTopic.TopicId);
+        var ethEvent = new MarketDataEvent(2, 2, Side.Sell, 3000, 200, EventKind.Update, ethSymbolId, exchange, 0, _testTopic.TopicId);
 
         // --- Act ---
         // Mock 어댑터에서 이벤트를 '발생'시킴.
@@ -159,17 +163,16 @@ public class TestConsumer : BaseMarketDataConsumer
     private readonly IEnumerable<string> _subscriptionKeys;
     public List<MarketDataEvent> ReceivedEvents { get; } = new();
 
-    public TestConsumer(ILogger logger, Instrument instrument, string consumerName, IEnumerable<string> subscriptionKeys) : base(logger)
+    private ExchangeTopic? _topic = null;
+    public override ExchangeTopic Topic => _topic;
+
+    public TestConsumer(ILogger logger, Instrument instrument, string consumerName, ExchangeTopic topic) : base(logger)
     {
         ConsumerName = consumerName;
         Instruments = new List<Instrument> { instrument };
-        _subscriptionKeys = subscriptionKeys;
+        _topic = topic;
     }
 
-    public IEnumerable<string> GetSubscriptions()
-    {
-        return _subscriptionKeys;
-    }
 
     public Task OnMarketData(MarketDataEvent marketEvent)
     {

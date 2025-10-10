@@ -22,7 +22,6 @@ public class FeedMonitor : BaseMarketDataConsumer
     private readonly IFeedHandler _feedHandler;
     private readonly IInstrumentRepository _repository;
     private readonly MarketDataDistributor _distributor;
-    private readonly ILogger<FeedMonitor> _logger;
     private readonly SubscriptionConfig _config;
     private readonly ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, ConcurrentDictionary<int, FeedStatistics>>> _statistics = new();
     private readonly ConcurrentDictionary<int, DepthSequence> _lastSequenceNumbers = new();
@@ -32,13 +31,14 @@ public class FeedMonitor : BaseMarketDataConsumer
     private List<Instrument> _instruments = new List<Instrument>();
     public override IReadOnlyCollection<Instrument> Instruments => _instruments;
 
+    public override ExchangeTopic Topic => SystemTopic.FeedMonitor;
+
     public event EventHandler<FeedAlert>? OnAlert;
     public FeedMonitor(IFeedHandler feedHandler, MarketDataDistributor distributor, ILogger<FeedMonitor> logger, SubscriptionConfig config, IInstrumentRepository repository) : base(logger)
     {
         _feedHandler = feedHandler;
         _repository = repository;
         _distributor = distributor;
-        _logger = logger;
         _config = config;
     }
 

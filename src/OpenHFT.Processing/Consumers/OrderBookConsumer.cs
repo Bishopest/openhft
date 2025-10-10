@@ -6,6 +6,7 @@ using OpenHFT.Book.Core;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
+using OpenHFT.Feed.Models;
 
 namespace OpenHFT.Processing.Consumers;
 
@@ -24,6 +25,8 @@ public class OrderBookConsumer : BaseMarketDataConsumer
     public override string ConsumerName => $"OrderBookConsumer-{_instrument.Symbol}-{_instrument.ProductType}-{_instrument.SourceExchange}";
 
     public override IReadOnlyCollection<Instrument> Instruments => new List<Instrument> { _instrument };
+
+    public override ExchangeTopic Topic => BinanceTopic.DepthUpdate;
 
     private readonly ConcurrentDictionary<string, EventHandler<OrderBook>> _subscribers = new();
 

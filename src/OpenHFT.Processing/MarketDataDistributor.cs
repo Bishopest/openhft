@@ -6,6 +6,7 @@ using OpenHFT.Core.Utils;
 using Disruptor.Dsl;
 using System.Collections.Concurrent;
 using OpenHFT.Core.Interfaces;
+using OpenHFT.Feed.Models;
 
 namespace OpenHFT.Processing;
 
@@ -13,8 +14,8 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
 {
     private readonly Disruptor<MarketDataEventWrapper> _disruptor;
     private readonly ILogger<MarketDataDistributor> _logger;
-    // key = InstrumentID
-    private readonly ConcurrentDictionary<int, ConcurrentDictionary<string, IMarketDataConsumer>> _subscriptions = new();
+    // key = InstrumentID, key inside = Topic id
+    private readonly ConcurrentDictionary<int, ConcurrentDictionary<int, IMarketDataConsumer>> _subscriptions = new();
     private long _distributedEventCount;
 
     public MarketDataDistributor(Disruptor<MarketDataEventWrapper> disruptor, ILogger<MarketDataDistributor> logger)
@@ -41,41 +42,41 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
     }
 
     // Subscription management
-    public void Subscribe(IMarketDataConsumer consumer)
+    public void Subscribe(BaseMarketDataConsumer consumer)
     {
         foreach (var instrument in consumer.Instruments)
         {
             var innerSubscriptionDict = _subscriptions.GetOrAdd(
                 instrument.InstrumentId,
-                _ => new ConcurrentDictionary<string, IMarketDataConsumer>()
+                _ => new ConcurrentDictionary<int, IMarketDataConsumer>()
             );
 
-            if (!innerSubscriptionDict.TryAdd(consumer.ConsumerName, consumer))
+            if (!innerSubscriptionDict.TryAdd(consumer.Topic.TopicId, consumer))
             {
-                _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {instrument.SourceExchange}, symbol id: {instrument.InstrumentId}) already exists");
+                _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {instrument.SourceExchange}, symbol id: {instrument.InstrumentId}, topic id: {consumer.Topic.TopicId}) already exists");
             }
             else
             {
                 consumer.Start();
-                _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {instrument.SourceExchange}, symbol id: {instrument.InstrumentId}) subscribed and started successfully.");
+                _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {instrument.SourceExchange}, symbol id: {instrument.InstrumentId}, topic id: {consumer.Topic.TopicId})) subscribed and started successfully.");
             }
         }
     }
 
-    public void Unsubscribe(IMarketDataConsumer consumer)
+    public void Unsubscribe(BaseMarketDataConsumer consumer)
     {
         foreach (var instrument in consumer.Instruments)
         {
             if (_subscriptions.TryGetValue(instrument.InstrumentId, out var innerSubscriptionDict))
             {
-                if (innerSubscriptionDict.TryRemove(consumer.ConsumerName, out var removedConsumer))
+                if (innerSubscriptionDict.TryRemove(consumer.Topic.TopicId, out var removedConsumer))
                 {
                     removedConsumer.Stop();
-                    _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {instrument.SourceExchange}, symbol id: {instrument.InstrumentId}) unsubscribed and stopped successfully.");
+                    _logger.LogInformationWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {instrument.SourceExchange}, symbol id: {instrument.InstrumentId}, topic id: {consumer.Topic.TopicId})) unsubscribed and stopped successfully.");
                 }
                 else
                 {
-                    _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {instrument.SourceExchange}, symbol id: {instrument.InstrumentId}) not found for unsubscription.");
+                    _logger.LogWarningWithCaller($"Subscriber(name: {consumer.ConsumerName}, exchange: {instrument.SourceExchange}, symbol id: {instrument.InstrumentId}, topic id: {consumer.Topic.TopicId})) not found for unsubscription.");
                 }
             }
             else
@@ -92,13 +93,14 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
         {
             //Interlocked.Increment(ref _distributedEventCount);
             var eventCopied = data.Event;
-
-            if (_subscriptions.TryGetValue(eventCopied.InstrumentId, out var subscribers))
+            if (TopicRegistry.TryGetTopic(eventCopied.TopicId, out var topic))
             {
-                foreach (var kvp in subscribers)
-                {
-                    kvp.Value.Post(eventCopied);
-                }
+                _logger.LogInformationWithCaller($"[{topic.EventTypeString}] {eventCopied}");
+            }
+
+            if (_subscriptions.TryGetValue(eventCopied.InstrumentId, out var subscribers) && subscribers.TryGetValue(eventCopied.TopicId, out var consumer))
+            {
+                consumer.Post(eventCopied);
             }
         }
         catch (Exception ex)
