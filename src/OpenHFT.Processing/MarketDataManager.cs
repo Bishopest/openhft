@@ -62,7 +62,7 @@ public class MarketDataManager
     /// Installs a named callback for a specific instrument.
     /// If it's the first subscription for the instrument, it creates the necessary consumer and data feed connection.
     /// </summary>
-    /// <param name="instrument">The instrument to subscribe to.</param>
+    /// <param name="instrument">The instrument to install consumers for.</param>
     /// <param name="consumerName">A unique name for this specific consumer/callback.</param>
     public void Install(Instrument instrument)
     {
@@ -93,28 +93,71 @@ public class MarketDataManager
         _logger.LogInformationWithCaller($"market data consumer successfully installed for {instrument.Symbol}.");
     }
 
-    /// <summary>
-    /// Uninstalls a named callback for a specific instrument.
-    /// </summary>
-    /// <param name="instrument"="The instrument to unsubscribe from.</param>
-    /// <param name="consumerName">The unique name of the consumer/callback to remove.</param>
-    public void Uninstall(Instrument instrument, string consumerName)
+    public void SubscribeOrderBook(Instrument instrument, string subscriberName, EventHandler<OrderBook> callback)
     {
-        if (string.IsNullOrWhiteSpace(consumerName))
-        {
-            _logger.LogWarningWithCaller($"Attempted to uninstall a consumer with a null or empty name for {instrument.Symbol}");
-            return;
-        }
-
         if (_consumers.TryGetValue(instrument.InstrumentId, out var consumer))
         {
-            consumer.RemoveSubscriber(consumerName);
-            _logger.LogInformationWithCaller($"consumer '{consumerName}' successfully uninstalled for InstrumentId {instrument.InstrumentId}.");
+            consumer.AddSubscriber(subscriberName, callback);
         }
         else
         {
-            _logger.LogInformationWithCaller($"Cannot uninstall: No OrderBookConsumer found for InstrumentId {instrument.InstrumentId}.");
+            _logger.LogWarningWithCaller($"No OrderBookConsumer found for {instrument.Symbol}. Cannot subscribe '{subscriberName}'. Please ensure Install() is called first.");
         }
+    }
+
+    public void UnsubscribeOrderBook(Instrument instrument, string subscriberName)
+    {
+        if (_consumers.TryGetValue(instrument.InstrumentId, out var consumer))
+        {
+            consumer.RemoveSubscriber(subscriberName);
+        }
+        else
+        {
+            _logger.LogWarningWithCaller($"No OrderBookConsumer found for {instrument.Symbol}. Cannot unsubscribe '{subscriberName}'.");
+        }
+    }
+
+    public void SubscribeBestOrderBook(Instrument instrument, string subscriberName, EventHandler<BestOrderBook> callback)
+    {
+        if (_bestOrderBookConsumers.TryGetValue(instrument.InstrumentId, out var consumer))
+        {
+            consumer.AddSubscriber(subscriberName, callback);
+        }
+        else
+        {
+            _logger.LogWarningWithCaller($"No BestOrderBookConsumer found for {instrument.Symbol}. Cannot subscribe '{subscriberName}'. Please ensure Install() is called first.");
+        }
+    }
+
+    public void UnsubscribeBestOrderBook(Instrument instrument, string subscriberName)
+    {
+        if (_bestOrderBookConsumers.TryGetValue(instrument.InstrumentId, out var consumer))
+        {
+            consumer.RemoveSubscriber(subscriberName);
+        }
+        else
+        {
+            _logger.LogWarningWithCaller($"No BestOrderBookConsumer found for {instrument.Symbol}. Cannot unsubscribe '{subscriberName}'.");
+        }
+    }
+
+    /// <summary>
+    /// Uninstalls a named callback for a specific instrument.
+    /// This is now a legacy method. Use UnsubscribeOrderBook or UnsubscribeBestOrderBook instead.
+    /// </summary>
+    /// <param name="instrument">The instrument to unsubscribe from.</param>
+    /// <param name="subscriberName">The unique name of the subscriber/callback to remove.</param>
+    [Obsolete("Use UnsubscribeOrderBook or UnsubscribeBestOrderBook for clarity.")]
+    public void Uninstall(Instrument instrument, string subscriberName)
+    {
+        if (string.IsNullOrWhiteSpace(subscriberName))
+        {
+            _logger.LogWarningWithCaller($"Attempted to uninstall a subscriber with a null or empty name for {instrument.Symbol}");
+            return;
+        }
+
+        UnsubscribeOrderBook(instrument, subscriberName);
+        UnsubscribeBestOrderBook(instrument, subscriberName);
     }
 
     private ExchangeTopic GetTopicForConsumer<TConsumer>(Instrument instrument) where TConsumer : BaseMarketDataConsumer

@@ -17,6 +17,7 @@ using OpenHFT.Feed.Models;
 using OpenHFT.Processing;
 using Serilog;
 using OpenHFT.Gateway.ApiClient;
+using OpenHFT.Book.Core;
 
 // --- 1. logger ---
 Log.Logger = new LoggerConfiguration()
@@ -104,6 +105,9 @@ await feedHandler.StartAsync(cts.Token);
 //await SubscribeToInstrumentsFromConfig(config, feedHandler, instrumentRepository, cts.Token);
 var marketDataManager = new MarketDataManager(loggerFactory.CreateLogger<MarketDataManager>(), distributor, instrumentRepository, config);
 var subscriptionManager = new SubscriptionManager(loggerFactory.CreateLogger<SubscriptionManager>(), feedHandler, instrumentRepository, config);
+
+SubscribeToMidPriceLogging(marketDataManager, config, instrumentRepository);
+
 await subscriptionManager.InitializeSubscriptionsAsync();
 await SyncTimeWithBinance();
 
@@ -227,6 +231,74 @@ void BuildStatisticsString(StringBuilder sb, ConcurrentDictionary<ExchangeEnum, 
     }
     sb.AppendLine("---------------------------------------------------------------------------------------------------------------------------------");
 }
+
+void SubscribeToMidPriceLogging(MarketDataManager manager, SubscriptionConfig subConfig, IInstrumentRepository repo)
+{
+    var lastOrderBookMidPrices = new ConcurrentDictionary<int, long>();
+    var lastBestOrderBookMidPrices = new ConcurrentDictionary<int, long>();
+
+    void OnOrderBookUpdate(object? sender, OrderBook book)
+    {
+        var newMidPrice = book.GetMidPriceTicks();
+        if (newMidPrice == 0) return;
+
+        var lastMidPrice = lastOrderBookMidPrices.GetOrAdd(book.InstrumentId, newMidPrice);
+
+        if (newMidPrice != lastMidPrice)
+        {
+            if (lastOrderBookMidPrices.TryUpdate(book.InstrumentId, newMidPrice, lastMidPrice))
+            {
+                staticLogger.LogInformationWithCaller($"[OrderBook] {book.Symbol} Mid-Price changed: {lastMidPrice} -> {newMidPrice}");
+                staticLogger.LogInformationWithCaller($"{book.ToTerminalString()}");
+            }
+        }
+    }
+
+    void OnBestOrderBookUpdate(object? sender, BestOrderBook book)
+    {
+        var newMidPrice = book.GetMidPriceTicks();
+        if (newMidPrice == 0) return;
+
+        var lastMidPrice = lastBestOrderBookMidPrices.GetOrAdd(book.InstrumentId, newMidPrice);
+
+        if (newMidPrice != lastMidPrice)
+        {
+            if (lastBestOrderBookMidPrices.TryUpdate(book.InstrumentId, newMidPrice, lastMidPrice))
+            {
+                staticLogger.LogInformationWithCaller($"[BestOrderBook] {book.Symbol} Mid-Price changed: {lastMidPrice} -> {newMidPrice}");
+                staticLogger.LogInformationWithCaller($"{book.ToTerminalString()}");
+            }
+        }
+    }
+
+    staticLogger.LogInformation("Setting up mid-price change logging for all configured instruments...");
+    foreach (var group in subConfig.Subscriptions)
+    {
+        if (!Enum.TryParse<ExchangeEnum>(group.Exchange, true, out var exchange))
+        {
+            staticLogger.LogWarning($"Unknown exchange '{group.Exchange}' in config.json. Skipping.");
+            continue;
+        }
+
+        if (!Enum.TryParse<ProductType>(group.ProductType, true, out var productType))
+        {
+            staticLogger.LogWarning($"Unknown product-type '{group.ProductType}' for exchange '{group.Exchange}' in config.json. Skipping.");
+            continue;
+        }
+
+        foreach (var symbol in group.Symbols)
+        {
+            var inst = repo.FindBySymbol(symbol, productType, exchange);
+            if (inst != null)
+            {
+                manager.SubscribeOrderBook(inst, "GlobalMidPriceLogger", OnOrderBookUpdate);
+                manager.SubscribeBestOrderBook(inst, "GlobalMidPriceLogger", OnBestOrderBookUpdate);
+            }
+        }
+
+    }
+}
+
 
 void CreateAndAddAdaptersFromConfig(SubscriptionConfig config,
                                     ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, BaseFeedAdapter>> adapters,

@@ -4,6 +4,7 @@ using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Book.Models;
 using OpenHFT.Core.Instruments;
+using System.Text;
 
 namespace OpenHFT.Book.Core;
 
@@ -297,6 +298,63 @@ public class OrderBook
         var (bidPrice, bidQty) = GetBestBid();
         var (askPrice, askQty) = GetBestAsk();
         return $"{Symbol}: {bidPrice}@{bidQty} | {askPrice}@{askQty} (Spread: {GetSpreadTicks()})";
+    }
+
+    /// <summary>
+    /// Returns a string representation of the order book for terminal logging.
+    /// </summary>
+    /// <param name="levels">The number of price levels to display on each side.</param>
+    /// <returns>A formatted string representing the order book state.</returns>
+    public string ToTerminalString(int levels = 5)
+    {
+        var sb = new StringBuilder();
+        var bids = GetTopLevels(Side.Buy, levels).ToArray();
+        var asks = GetTopLevels(Side.Sell, levels).ToArray();
+
+        var spread = GetSpreadTicks() / 100.0m;
+
+        const int sizeWidth = 10;
+        const int priceWidth = 10;
+        const int spreadWidth = 8;
+
+        sb.AppendLine(new string('-', 2 * (sizeWidth + priceWidth) + spreadWidth + 7));
+        sb.Append($"| {"BID SIZE".PadLeft(sizeWidth)} ");
+        sb.Append($"| {"BID PRICE".PadLeft(priceWidth)} ");
+        sb.Append($"| {"SPREAD".PadLeft(spreadWidth)} ");
+        sb.Append($"| {"ASK PRICE".PadRight(priceWidth)} ");
+        sb.AppendLine($"| {"ASK SIZE".PadRight(sizeWidth)} |");
+        sb.AppendLine(new string('-', 2 * (sizeWidth + priceWidth) + spreadWidth + 7));
+
+        for (int i = 0; i < levels; i++)
+        {
+            var bid = i < bids.Length ? bids[i] : null;
+            var ask = i < asks.Length ? asks[i] : null;
+
+            // Assuming price ticks are convertible to decimal by dividing by 100.
+            var bidPrice = bid != null ? (bid.PriceTicks / 100.0m).ToString("F2") : "";
+            var bidSize = bid != null ? bid.TotalQuantity.ToString("N0") : "";
+
+            var askPrice = ask != null ? (ask.PriceTicks / 100.0m).ToString("F2") : "";
+            var askSize = ask != null ? ask.TotalQuantity.ToString("N0") : "";
+
+            string spreadStr = "";
+            if (i == 0 && spread > 0)
+            {
+                spreadStr = $"[{spread:F2}]";
+            }
+
+            sb.Append($"| {bidSize.PadLeft(sizeWidth)} ");
+            sb.Append($"| {bidPrice.PadLeft(priceWidth)} ");
+            sb.Append($"| {spreadStr.PadLeft(spreadWidth)} ");
+            sb.Append($"| {askPrice.PadRight(priceWidth)} ");
+            sb.Append($"| {askSize.PadRight(sizeWidth)} |");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine(new string('-', 2 * (sizeWidth + priceWidth) + spreadWidth + 7));
+        sb.AppendLine($"Symbol: {Symbol}, Last Update: {DateTimeOffset.FromUnixTimeMilliseconds(LastUpdateTimestamp):HH:mm:ss.fff}, Seq: {LastSequence}");
+
+        return sb.ToString();
     }
 }
 

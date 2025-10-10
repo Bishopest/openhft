@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
@@ -121,5 +122,51 @@ public class BestOrderBook
         _bestAskQuantity = 0;
         _lastUpdateTimestamp = 0;
         _updateCount = 0;
+    }
+
+    /// <summary>
+    /// Returns a string representation of the top of the book for terminal logging.
+    /// </summary>
+    /// <returns>A formatted string representing the L1 order book state.</returns>
+    public string ToTerminalString()
+    {
+        var sb = new StringBuilder();
+        var (bidPriceTicks, bidQty) = GetBestBid();
+        var (askPriceTicks, askQty) = GetBestAsk();
+
+        // Assuming price ticks are convertible to decimal by dividing by 100.
+        var bidPrice = bidPriceTicks / 100.0m;
+        var askPrice = askPriceTicks / 100.0m;
+        var spread = (bidPrice > 0 && askPrice > 0) ? askPrice - bidPrice : 0m;
+
+        var bidSizeStr = bidQty > 0 ? bidQty.ToString("N0") : " - ";
+        var bidPriceStr = bidPrice > 0 ? bidPrice.ToString("F2") : " - ";
+        var askPriceStr = askPrice > 0 ? askPrice.ToString("F2") : " - ";
+        var askSizeStr = askQty > 0 ? askQty.ToString("N0") : " - ";
+        var spreadStr = spread > 0 ? $"[{spread:F2}]" : "";
+
+        const int sizeWidth = 10;
+        const int priceWidth = 10;
+        const int spreadWidth = 8;
+
+        sb.AppendLine(new string('-', 2 * (sizeWidth + priceWidth) + spreadWidth + 7));
+        sb.Append($"| {"BID SIZE".PadLeft(sizeWidth)} ");
+        sb.Append($"| {"BID PRICE".PadLeft(priceWidth)} ");
+        sb.Append($"| {"SPREAD".PadLeft(spreadWidth)} ");
+        sb.Append($"| {"ASK PRICE".PadRight(priceWidth)} ");
+        sb.AppendLine($"| {"ASK SIZE".PadRight(sizeWidth)} |");
+        sb.AppendLine(new string('-', 2 * (sizeWidth + priceWidth) + spreadWidth + 7));
+
+        sb.Append($"| {bidSizeStr.PadLeft(sizeWidth)} ");
+        sb.Append($"| {bidPriceStr.PadLeft(priceWidth)} ");
+        sb.Append($"| {spreadStr.PadLeft(spreadWidth)} ");
+        sb.Append($"| {askPriceStr.PadRight(priceWidth)} ");
+        sb.Append($"| {askSizeStr.PadRight(sizeWidth)} |");
+        sb.AppendLine();
+
+        sb.AppendLine(new string('-', 2 * (sizeWidth + priceWidth) + spreadWidth + 7));
+        sb.AppendLine($"Symbol: {Symbol}, Last Update: {DateTimeOffset.FromUnixTimeMilliseconds(LastUpdateTimestamp):HH:mm:ss.fff}");
+
+        return sb.ToString();
     }
 }
