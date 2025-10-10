@@ -138,7 +138,7 @@ staticLogger.LogInformation("Feed Monitor stopped.");
 // --- 로컬 함수들 ---
 async Task SyncTimeWithBinance()
 {
-    staticLogger.LogInformation("Attempting to synchronize time with Binance server...");
+    staticLogger.LogInformationWithCaller("Attempting to synchronize time with Binance server...");
     try
     {
         // We only need one type of client to get the time. PerpetualFuture is a safe bet.
