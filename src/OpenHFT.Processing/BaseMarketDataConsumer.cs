@@ -13,18 +13,22 @@ public abstract class BaseMarketDataConsumer : IMarketDataConsumer
 {
     public abstract string ConsumerName { get; }
     public abstract IReadOnlyCollection<Instrument> Instruments { get; }
-    public abstract ExchangeTopic Topic { get; }
+    protected readonly ExchangeTopic _topic;
 
     protected readonly ILogger _logger;
     private readonly BlockingCollection<MarketDataEvent> _eventQueue;
     private Task? _processingTask;
     private CancellationTokenSource? _cancellationTokenSource;
 
-    protected BaseMarketDataConsumer(ILogger logger, int queueCapacity = 1024)
+    public ExchangeTopic Topic => _topic;
+
+
+    protected BaseMarketDataConsumer(ILogger logger, ExchangeTopic topic, int queueCapacity = 1024)
     {
         _logger = logger;
         // Bounded capacity acts as a back-pressure mechanism.
         _eventQueue = new BlockingCollection<MarketDataEvent>(queueCapacity);
+        _topic = topic;
     }
 
     public void Start()

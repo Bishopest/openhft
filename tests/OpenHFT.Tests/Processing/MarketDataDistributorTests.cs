@@ -164,9 +164,7 @@ public class TestConsumer : BaseMarketDataConsumer
     public List<MarketDataEvent> ReceivedEvents { get; } = new();
 
     private ExchangeTopic? _topic = null;
-    public override ExchangeTopic Topic => _topic;
-
-    public TestConsumer(ILogger logger, Instrument instrument, string consumerName, ExchangeTopic topic) : base(logger)
+    public TestConsumer(ILogger logger, Instrument instrument, string consumerName, ExchangeTopic topic) : base(logger, topic)
     {
         ConsumerName = consumerName;
         Instruments = new List<Instrument> { instrument };

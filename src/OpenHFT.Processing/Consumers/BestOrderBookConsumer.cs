@@ -21,11 +21,9 @@ public class BestOrderBookConsumer : BaseMarketDataConsumer
 
     public override IReadOnlyCollection<Instrument> Instruments => new List<Instrument> { _instrument };
 
-    public override ExchangeTopic Topic => BinanceTopic.BookTicker;
-
     private readonly ConcurrentDictionary<string, EventHandler<BestOrderBook>> _subscribers = new();
 
-    public BestOrderBookConsumer(Instrument instrument, ILogger logger) : base(logger)
+    public BestOrderBookConsumer(Instrument instrument, ILogger logger, ExchangeTopic topic) : base(logger, topic)
     {
         _instrument = instrument;
         _bestOrderBook = new BestOrderBook(instrument);

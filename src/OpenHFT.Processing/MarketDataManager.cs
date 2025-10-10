@@ -6,6 +6,7 @@ using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
+using OpenHFT.Feed.Models;
 using OpenHFT.Processing.Consumers;
 
 namespace OpenHFT.Processing;
@@ -70,7 +71,7 @@ public class MarketDataManager
         {
             _logger.LogInformationWithCaller($"First subscriber for {instrument.Symbol} ({id}). Creating new OrderBookConsumer and requesting data feed.");
 
-            var obConsumer = new OrderBookConsumer(instrument, _logger);
+            var obConsumer = new OrderBookConsumer(instrument, _logger, GetTopicForConsumer<OrderBookConsumer>(instrument));
 
             // 1. Register the new consumer to receive raw market data.
             _distributor.Subscribe(obConsumer);
@@ -78,13 +79,13 @@ public class MarketDataManager
         });
 
         // Atomically get or create the BestOrderBookConsumer for this instrument.
-        var bestOrderBookconsumer = _bestOrderBookConsumers.GetOrAdd(instrument.InstrumentId, (id) =>
+        var bestOrderBookConsumer = _bestOrderBookConsumers.GetOrAdd(instrument.InstrumentId, (id) =>
         {
             _logger.LogInformationWithCaller($"First subscriber for {instrument.Symbol} ({id}). Creating new BestOrderBookConsumer and requesting data feed.");
 
-            var bobConsumer = new BestOrderBookConsumer(instrument, _logger);
+            var bobConsumer = new BestOrderBookConsumer(instrument, _logger, GetTopicForConsumer<BestOrderBookConsumer>(instrument));
 
-            // 1. Register the new consumer to receive raw market data.
+            // Register the new consumer to receive raw market data.
             _distributor.Subscribe(bobConsumer);
             return bobConsumer;
         });
@@ -114,5 +115,26 @@ public class MarketDataManager
         {
             _logger.LogInformationWithCaller($"Cannot uninstall: No OrderBookConsumer found for InstrumentId {instrument.InstrumentId}.");
         }
+    }
+
+    private ExchangeTopic GetTopicForConsumer<TConsumer>(Instrument instrument) where TConsumer : BaseMarketDataConsumer
+    {
+        switch (instrument.SourceExchange)
+        {
+            case ExchangeEnum.BINANCE:
+                if (typeof(TConsumer) == typeof(OrderBookConsumer))
+                {
+                    return BinanceTopic.DepthUpdate;
+                }
+                if (typeof(TConsumer) == typeof(BestOrderBookConsumer))
+                {
+                    return BinanceTopic.BookTicker;
+                }
+                break;
+                // 다른 거래소에 대한 case를 여기에 추가할 수 있습니다.
+                // case ExchangeEnum.BYBIT: ...
+        }
+
+        throw new NotSupportedException($"No topic mapping found for consumer '{typeof(TConsumer).Name}' on exchange '{instrument.SourceExchange}'.");
     }
 }

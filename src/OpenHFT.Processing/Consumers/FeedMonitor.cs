@@ -30,11 +30,8 @@ public class FeedMonitor : BaseMarketDataConsumer
 
     private List<Instrument> _instruments = new List<Instrument>();
     public override IReadOnlyCollection<Instrument> Instruments => _instruments;
-
-    public override ExchangeTopic Topic => SystemTopic.FeedMonitor;
-
     public event EventHandler<FeedAlert>? OnAlert;
-    public FeedMonitor(IFeedHandler feedHandler, MarketDataDistributor distributor, ILogger<FeedMonitor> logger, SubscriptionConfig config, IInstrumentRepository repository) : base(logger)
+    public FeedMonitor(IFeedHandler feedHandler, MarketDataDistributor distributor, ILogger<FeedMonitor> logger, SubscriptionConfig config, IInstrumentRepository repository) : base(logger, SystemTopic.FeedMonitor)
     {
         _feedHandler = feedHandler;
         _repository = repository;
