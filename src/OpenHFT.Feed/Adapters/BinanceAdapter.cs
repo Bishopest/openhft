@@ -53,19 +53,19 @@ public class BinanceAdapter : BaseFeedAdapter
             var tradeTime = data.GetProperty("T").GetInt64(); // Milliseconds
             var isBuyerMaker = data.GetProperty("m").GetBoolean();
 
-            // If buyer is the maker, the aggressor was a seller. Otherwise, a buyer.
-            var side = isBuyerMaker ? Side.Sell : Side.Buy;
-
+            var updatesArray = new PriceLevelEntryArray();
+            var tradeEntry = new PriceLevelEntry(side: isBuyerMaker ? Side.Sell : Side.Buy, priceTicks: PriceUtils.ToTicks(price), quantity: (long)(quantity * 100_000_000));
+            updatesArray[0] = tradeEntry;
             var marketDataEvent = new MarketDataEvent(
                 sequence: 0, // aggTrade doesn't have a clear sequence like depth updates
                 timestamp: tradeTime,
-                side: side,
-                priceTicks: PriceUtils.ToTicks(price), // Assumes a PriceUtils helper
-                quantity: (long)(quantity * 100_000_000), // Convert to base units
                 kind: EventKind.Trade,
                 instrumentId: instrument.InstrumentId,
                 exchange: SourceExchange,
-                topicId: BinanceTopic.AggTrade.TopicId
+                prevSequence: 0,
+                topicId: BinanceTopic.AggTrade.TopicId,
+                updateCount: 1,
+                updates: updatesArray
             );
 
             OnMarketDataReceived(marketDataEvent);
@@ -93,23 +93,14 @@ public class BinanceAdapter : BaseFeedAdapter
             return;
         }
         var eventTime = data.GetProperty("E").GetInt64();
+        var updatesArray = new PriceLevelEntryArray();
 
         // Process Best Bid
         if (decimal.TryParse(data.GetProperty("b").GetString(), out var bidPrice) &&
             decimal.TryParse(data.GetProperty("B").GetString(), out var bidQty) && bidQty > 0)
         {
-            var bidEvent = new MarketDataEvent(
-                sequence: 0,
-                timestamp: eventTime,
-                side: Side.Buy,
-                priceTicks: PriceUtils.ToTicks(bidPrice),
-                quantity: (long)(bidQty * 100_000_000),
-                kind: EventKind.Update,
-                instrumentId: instrument.InstrumentId,
-                exchange: SourceExchange,
-                topicId: BinanceTopic.BookTicker.TopicId
-            );
-            OnMarketDataReceived(bidEvent);
+            var tradeEntry = new PriceLevelEntry(side: Side.Buy, priceTicks: PriceUtils.ToTicks(bidPrice), quantity: (long)(bidQty * 100_000_000));
+            updatesArray[0] = tradeEntry;
         }
         else
         {
@@ -122,18 +113,8 @@ public class BinanceAdapter : BaseFeedAdapter
         if (decimal.TryParse(data.GetProperty("a").GetString(), out var askPrice) &&
             decimal.TryParse(data.GetProperty("A").GetString(), out var askQty) && askQty > 0)
         {
-            var askEvent = new MarketDataEvent(
-                sequence: 0,
-                timestamp: eventTime,
-                side: Side.Sell,
-                priceTicks: PriceUtils.ToTicks(askPrice),
-                quantity: (long)(askQty * 100_000_000),
-                kind: EventKind.Update,
-                instrumentId: instrument.InstrumentId,
-                exchange: SourceExchange,
-                topicId: BinanceTopic.BookTicker.TopicId
-            );
-            OnMarketDataReceived(askEvent);
+            var tradeEntry = new PriceLevelEntry(side: Side.Sell, priceTicks: PriceUtils.ToTicks(askPrice), quantity: (long)(askQty * 100_000_000));
+            updatesArray[1] = tradeEntry;
         }
         else
         {
@@ -141,6 +122,18 @@ public class BinanceAdapter : BaseFeedAdapter
             OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Failed to parse price or quantity for ask bookticker on symbol {symbol}", null, null, BinanceTopic.BookTicker.TopicId), null));
             return;
         }
+
+        var bookTickerEvent = new MarketDataEvent(
+                sequence: 0,
+                timestamp: eventTime,
+                kind: EventKind.Snapshot,
+                instrumentId: instrument.InstrumentId,
+                exchange: SourceExchange,
+                topicId: BinanceTopic.BookTicker.TopicId,
+                updateCount: 2,
+                updates: updatesArray
+            );
+        OnMarketDataReceived(bookTickerEvent);
     }
 
     private void ProcessDepthUpdate(JsonElement data)
@@ -161,10 +154,11 @@ public class BinanceAdapter : BaseFeedAdapter
         var timestamp = data.GetProperty("E").GetInt64();
         var finalUpdateId = data.GetProperty("u").GetInt64();
         var prevUpdateId = data.GetProperty("pu").GetInt64();
-
+        var updatesArray = new PriceLevelEntryArray();
         // Here you should check sequence continuity using 'pu' and 'U'/'u' as per Binance docs.
         // For simplicity, this example just processes the updates.
 
+        int i = 0;
         // Process bids
         if (data.TryGetProperty("b", out var bidsElement))
         {
@@ -173,18 +167,9 @@ public class BinanceAdapter : BaseFeedAdapter
                 if (decimal.TryParse(bid[0].GetString(), out var price) &&
                     decimal.TryParse(bid[1].GetString(), out var quantity))
                 {
-                    OnMarketDataReceived(new MarketDataEvent(
-                        sequence: finalUpdateId,
-                        timestamp: timestamp,
-                        side: Side.Buy,
-                        priceTicks: PriceUtils.ToTicks(price),
-                        quantity: (long)(quantity * 100_000_000),
-                        kind: quantity == 0 ? EventKind.Delete : EventKind.Update,
-                        instrumentId: instrument.InstrumentId,
-                        exchange: SourceExchange,
-                        prevSequence: prevUpdateId,
-                        topicId: BinanceTopic.DepthUpdate.TopicId
-                    ));
+                    var tradeEntry = new PriceLevelEntry(side: Side.Buy, priceTicks: PriceUtils.ToTicks(price), quantity: (long)(quantity * 100_000_000));
+                    updatesArray[i] = tradeEntry;
+                    i++;
                 }
                 else
                 {
@@ -203,18 +188,9 @@ public class BinanceAdapter : BaseFeedAdapter
                 if (decimal.TryParse(ask[0].GetString(), out var price) &&
                     decimal.TryParse(ask[1].GetString(), out var quantity))
                 {
-                    OnMarketDataReceived(new MarketDataEvent(
-                        sequence: finalUpdateId,
-                        timestamp: timestamp,
-                        side: Side.Sell,
-                        priceTicks: PriceUtils.ToTicks(price),
-                        quantity: (long)(quantity * 100_000_000),
-                        kind: quantity == 0 ? EventKind.Delete : EventKind.Update,
-                        instrumentId: instrument.InstrumentId,
-                        exchange: SourceExchange,
-                        prevSequence: prevUpdateId,
-                        topicId: BinanceTopic.DepthUpdate.TopicId
-                    ));
+                    var tradeEntry = new PriceLevelEntry(side: Side.Sell, priceTicks: PriceUtils.ToTicks(price), quantity: (long)(quantity * 100_000_000));
+                    updatesArray[i] = tradeEntry;
+                    i++;
                 }
                 else
                 {
@@ -224,6 +200,18 @@ public class BinanceAdapter : BaseFeedAdapter
                 }
             }
         }
+
+        OnMarketDataReceived(new MarketDataEvent(
+                        sequence: finalUpdateId,
+                        timestamp: timestamp,
+                        kind: EventKind.Snapshot,
+                        instrumentId: instrument.InstrumentId,
+                        exchange: SourceExchange,
+                        prevSequence: prevUpdateId,
+                        topicId: BinanceTopic.DepthUpdate.TopicId,
+                        updateCount: i,
+                        updates: updatesArray
+                    ));
     }
 
     protected override string GetBaseUrl()

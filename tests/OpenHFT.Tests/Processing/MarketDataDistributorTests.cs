@@ -132,8 +132,13 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         var exchange = ExchangeEnum.BINANCE;
 
         // 테스트용 이벤트 생성
-        var btcEvent = new MarketDataEvent(1, 1, Side.Buy, 50000, 100, EventKind.Update, btcSymbolId, exchange, 0, _testTopic.TopicId);
-        var ethEvent = new MarketDataEvent(2, 2, Side.Sell, 3000, 200, EventKind.Update, ethSymbolId, exchange, 0, _testTopic.TopicId);
+        var btcUpdates = new PriceLevelEntryArray();
+        var ethUpdates = new PriceLevelEntryArray();
+        btcUpdates[0] = new PriceLevelEntry(Side.Buy, 50000, 100);
+        ethUpdates[0] = new PriceLevelEntry(Side.Sell, 3000, 200);
+
+        var btcEvent = new MarketDataEvent(1, 1, EventKind.Update, btcSymbolId, exchange, 0, _testTopic.TopicId, 1, btcUpdates);
+        var ethEvent = new MarketDataEvent(2, 2, EventKind.Update, ethSymbolId, exchange, 0, _testTopic.TopicId, 1, ethUpdates);
 
         // --- Act ---
         // Mock 어댑터에서 이벤트를 '발생'시킴.

@@ -123,7 +123,7 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
     {
         try
         {
-            //Interlocked.Increment(ref _distributedEventCount);
+            Interlocked.Increment(ref _distributedEventCount);
             var eventCopied = data.Event;
             // if (TopicRegistry.TryGetTopic(eventCopied.TopicId, out var topic))
             // {

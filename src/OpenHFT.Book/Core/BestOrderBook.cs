@@ -54,20 +54,31 @@ public class BestOrderBook
             return;
         }
 
+        if (mdEvent.UpdateCount != 2)
+        {
+            _logger?.LogWarningWithCaller($"Invalid update count. Expected: 2, Got: {mdEvent.UpdateCount}");
+            return;
+        }
+
         _lastUpdateTimestamp = mdEvent.Timestamp;
         _updateCount++;
 
-        if (mdEvent.Side == Side.Buy)
+        // The event contains a batch of updates. We need to find the best bid and ask from it.
+        // For a bookTicker feed, this will typically be just one bid and one ask.
+        for (int i = 0; i < mdEvent.UpdateCount; i++)
         {
-            // Update Best Bid
-            _bestBidPrice = mdEvent.PriceTicks;
-            _bestBidQuantity = mdEvent.Quantity;
-        }
-        else // Side.Sell
-        {
-            // Update Best Ask
-            _bestAskPrice = mdEvent.PriceTicks;
-            _bestAskQuantity = mdEvent.Quantity;
+            var update = mdEvent.Updates[i];
+
+            if (update.Side == Side.Buy)
+            {
+                _bestBidPrice = update.PriceTicks;
+                _bestBidQuantity = update.Quantity;
+            }
+            else // Side.Sell
+            {
+                _bestAskPrice = update.PriceTicks;
+                _bestAskQuantity = update.Quantity;
+            }
         }
     }
 

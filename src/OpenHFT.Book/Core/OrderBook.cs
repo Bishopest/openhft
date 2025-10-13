@@ -83,27 +83,36 @@ public class OrderBook
         _updateCount++;
 
         // Apply the event based on its kind
+        // The new MarketDataEvent is a batch, so we loop through the updates.
         switch (mdEvent.Kind)
         {
-            case EventKind.Add:
-            case EventKind.Update:
-                UpdateLevel(mdEvent.Side, mdEvent.PriceTicks, mdEvent.Quantity, mdEvent.Sequence, mdEvent.Timestamp);
-                return true;
-
-            case EventKind.Delete:
-                UpdateLevel(mdEvent.Side, mdEvent.PriceTicks, 0, mdEvent.Sequence, mdEvent.Timestamp);
-                return true;
-
             case EventKind.Trade:
-                ProcessTrade(mdEvent);
+                ProcessTrade(in mdEvent);
                 return true;
 
             case EventKind.Snapshot:
-                ProcessSnapshot(mdEvent);
+                ProcessSnapshot(in mdEvent);
+                return true;
+
+            // DepthUpdate, Add, Update, Delete are all handled as incremental updates.
+            case EventKind.Add:
+            case EventKind.Update:
+                for (int i = 0; i < mdEvent.UpdateCount; i++)
+                {
+                    var update = mdEvent.Updates[i];
+                    UpdateLevel(update.Side, update.PriceTicks, update.Quantity, mdEvent.Sequence, mdEvent.Timestamp);
+                }
+                return true;
+            case EventKind.Delete:
+                for (int i = 0; i < mdEvent.UpdateCount; i++)
+                {
+                    var update = mdEvent.Updates[i];
+                    UpdateLevel(update.Side, update.PriceTicks, 0, mdEvent.Sequence, mdEvent.Timestamp);
+                }
                 return true;
 
             default:
-                _logger?.LogWarning("Unknown event kind: {Kind}", mdEvent.Kind);
+                _logger?.LogWarningWithCaller($"Unknown event kind: {mdEvent.Kind}");
                 return false;
         }
     }
@@ -118,15 +127,32 @@ public class OrderBook
     private void ProcessTrade(in MarketDataEvent mdEvent)
     {
         _tradeCount++;
-        _logger?.LogDebug("Trade: {Symbol} {Side} {Price}@{Quantity}", Symbol, mdEvent.Side, mdEvent.PriceTicks, mdEvent.Quantity);
+        // A trade event contains the trade details in its 'Updates' array.
+        for (int i = 0; i < mdEvent.UpdateCount; i++)
+        {
+            var trade = mdEvent.Updates[i];
+            _logger?.LogDebug("Trade: {Symbol} {Side} {Price}@{Quantity}", Symbol, trade.Side, trade.PriceTicks, trade.Quantity);
+            // Here you could also implement logic to match trades against the book,
+            // reducing liquidity at the traded price level.
+        }
     }
 
     private void ProcessSnapshot(in MarketDataEvent mdEvent)
     {
-        // Snapshot processing would typically involve clearing the book
-        // and rebuilding from snapshot data
+        // 1. Clear the existing book side before applying the snapshot.
+        _asks.Clear();
+        _bids.Clear();
+
+        // 2. Set the sequence number for the snapshot.
         _snapshotSequence = mdEvent.Sequence;
-        _logger?.LogInformation("Processed snapshot for {Symbol} at sequence {Sequence}", Symbol, mdEvent.Sequence);
+
+        // 3. Rebuild the book from the price levels in the snapshot.
+        for (int i = 0; i < mdEvent.UpdateCount; i++)
+        {
+            var level = mdEvent.Updates[i];
+            UpdateLevel(level.Side, level.PriceTicks, level.Quantity, mdEvent.Sequence, mdEvent.Timestamp);
+        }
+        _logger?.LogInformationWithCaller($"Processed snapshot for {Symbol} with {mdEvent.UpdateCount} levels at sequence {mdEvent.Sequence}");
     }
 
     /// <summary>

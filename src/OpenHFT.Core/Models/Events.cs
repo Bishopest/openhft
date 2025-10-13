@@ -1,6 +1,37 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace OpenHFT.Core.Models;
+
+/// <summary>
+/// A single price level entry containing side, price, and quantity.
+/// Used within the inline array for GC-free batch updates.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly struct PriceLevelEntry
+{
+    public readonly Side Side;
+    public readonly long PriceTicks;
+    public readonly long Quantity;
+
+    public PriceLevelEntry(Side side, long priceTicks, long quantity)
+    {
+        Side = side;
+        PriceTicks = priceTicks;
+        Quantity = quantity;
+    }
+}
+
+/// <summary>
+/// Defines an inline array of 40 PriceLevelEntry structs.
+/// This prevents heap allocation inside the MarketDataEvent struct.
+/// </summary>
+[InlineArray(40)] // 최대 40개 레벨 업데이트를 가정
+public struct PriceLevelEntryArray
+{
+    // C# 컴파일러가 이 구조체의 메모리 레이아웃을 PriceLevelEntry 40개 분량으로 처리합니다.
+    private PriceLevelEntry _element0;
+}
 
 /// <summary>
 /// High-performance market data event with minimal allocations
@@ -12,31 +43,32 @@ public readonly struct MarketDataEvent
     public readonly long PrevSequence;  // Previous sequence number from feed
     public readonly long Sequence;      // Sequence number from feed
     public readonly long Timestamp;     // Monotonic timestamp in microseconds
-    public readonly Side Side;          // Bid/Ask
-    public readonly long PriceTicks;    // Price in ticks (e.g., *10000 for 4 decimal places)
-    public readonly long Quantity;      // Quantity in minimum units
     public readonly EventKind Kind;     // Add/Update/Delete/Trade
     public readonly int InstrumentId;       // Internal symbol identifier
     public readonly ExchangeEnum SourceExchange;
     public readonly int TopicId;        // Identifier for the source topic (e.g., AggTrade, DepthUpdate)
+    public readonly int UpdateCount;
+    public readonly PriceLevelEntryArray Updates;
 
-    public MarketDataEvent(long sequence, long timestamp, Side side, long priceTicks,
-                          long quantity, EventKind kind, int instrumentId, ExchangeEnum exchange, long prevSequence = 0, int topicId = 0)
+    public MarketDataEvent(long sequence, long timestamp, EventKind kind, int instrumentId, ExchangeEnum exchange,
+                          long prevSequence = 0, int topicId = 0, int updateCount = 0, PriceLevelEntryArray updates = default)
     {
         Sequence = sequence;
         Timestamp = timestamp;
-        Side = side;
-        PriceTicks = priceTicks;
-        Quantity = quantity;
         Kind = kind;
         InstrumentId = instrumentId;
         SourceExchange = exchange;
         PrevSequence = prevSequence;
         TopicId = topicId;
+        UpdateCount = updateCount;
+        Updates = updates;
     }
 
-    public override string ToString() =>
-        $"MD[{Sequence}] {Kind} {Side} {PriceTicks}@{Quantity} @{Timestamp}μs";
+    public override string ToString()
+    {
+        var firstUpdate = Updates[0];
+        return $"MD[{Sequence}] Batch({UpdateCount}) {Kind} {firstUpdate.Side} {firstUpdate.PriceTicks}@{firstUpdate.Quantity} @{Timestamp}μs";
+    }
 }
 
 /// <summary>
