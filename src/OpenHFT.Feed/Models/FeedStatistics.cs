@@ -1,5 +1,4 @@
 using System.Threading.Channels;
-using OpenHFT.Core.Collections;
 
 namespace OpenHFT.Feed.Interfaces;
 
@@ -16,7 +15,11 @@ public class FeedStatistics
     private long _sequenceGaps;
 
     // --- latency collection ---
-    private readonly CircularBuffer<double> _e2eLatencies;
+    // GC-Free를 위해 CircularBuffer 대신 직접 배열과 인덱스를 관리합니다.
+    private readonly double[] _e2eLatencies;
+    private int _latencyIndex;
+    private int _latencyCount;
+    private readonly object _latencyLock = new();
 
     // --- time attribute ---
     public DateTimeOffset StartTime { get; }
@@ -30,7 +33,24 @@ public class FeedStatistics
     public long ReconnectCount => Interlocked.Read(ref _reconnectCount);
     public long SequenceGaps => Interlocked.Read(ref _sequenceGaps);
     public TimeSpan ConnectionUptime => DateTimeOffset.UtcNow - LastConnectionTime;
-    public double AvgE2ELatency => _e2eLatencies.Average;
+    public double AvgE2ELatency
+    {
+        get
+        {
+            lock (_latencyLock)
+            {
+                if (_latencyCount == 0) return 0.0;
+
+                double sum = 0;
+                // 버퍼가 꽉 차지 않았을 경우, 실제 저장된 만큼만 계산합니다.
+                for (int i = 0; i < _latencyCount; i++)
+                {
+                    sum += _e2eLatencies[i];
+                }
+                return sum / _latencyCount;
+            }
+        }
+    }
     public double MessagesPerSecond => MessagesReceived / (DateTimeOffset.UtcNow - StartTime).TotalSeconds;
     public double DropRate => MessagesReceived > 0 ? (double)MessagesDropped / MessagesReceived : 0;
 
@@ -38,7 +58,7 @@ public class FeedStatistics
     {
         StartTime = DateTimeOffset.UtcNow;
         LastConnectionTime = DateTimeOffset.UtcNow;
-        _e2eLatencies = new CircularBuffer<double>(latencyWindowSize);
+        _e2eLatencies = new double[latencyWindowSize];
     }
 
     public void RecordReconnect()
@@ -65,7 +85,15 @@ public class FeedStatistics
     public void RecordSequenceGap() => Interlocked.Increment(ref _sequenceGaps);
     public void AddE2ELatency(double e2eLatencyMs)
     {
-        _e2eLatencies.Add(e2eLatencyMs);
+        lock (_latencyLock)
+        {
+            _e2eLatencies[_latencyIndex] = e2eLatencyMs;
+            _latencyIndex = (_latencyIndex + 1) % _e2eLatencies.Length;
+            if (_latencyCount < _e2eLatencies.Length)
+            {
+                _latencyCount++;
+            }
+        }
     }
 
     /// <summary>
@@ -80,17 +108,22 @@ public class FeedStatistics
             throw new ArgumentOutOfRangeException(nameof(percentile), "Percentile must be between 0.0 and 1.0.");
         }
 
-        var latenciesSnapshot = _e2eLatencies.ToArray();
+        // ToArray() 호출로 인한 힙 할당을 피하기 위해 스택에 임시 배열을 만듭니다.
+        // Span<T>를 사용하여 힙 할당 없이 배열의 일부를 다룰 수 있습니다.
+        Span<double> tempSpan = stackalloc double[_latencyCount];
 
-        if (latenciesSnapshot.Length == 0)
+        lock (_latencyLock)
         {
-            return 0.0;
+            if (_latencyCount == 0) return 0.0;
+
+            // _e2eLatencies의 유효한 데이터만 스택의 tempSpan으로 복사합니다.
+            new Span<double>(_e2eLatencies, 0, _latencyCount).CopyTo(tempSpan);
         }
 
-        Array.Sort(latenciesSnapshot);
+        tempSpan.Sort();
 
-        int index = (int)Math.Ceiling(percentile * latenciesSnapshot.Length) - 1;
-        return latenciesSnapshot[Math.Max(0, index)];
+        int index = (int)Math.Ceiling(percentile * _latencyCount) - 1;
+        return tempSpan[Math.Max(0, index)];
     }
 }
 
