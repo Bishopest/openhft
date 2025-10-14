@@ -323,4 +323,16 @@ public class BinanceAdapter : BaseFeedAdapter
         websocket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
         websocket.Options.SetBuffer(8192, 8192); // 8KB buffers
     }
+
+    protected override string? GetPingMessage()
+    {
+        // Not used for Binance.
+        return null;
+    }
+
+    protected override bool IsPongMessage(MemoryStream messageStream)
+    {
+        // Not used for Binance.
+        return false;
+    }
 }

@@ -17,6 +17,8 @@ public class BitmexAdapter : BaseFeedAdapter
 
     public override ExchangeEnum SourceExchange => ExchangeEnum.BITMEX;
 
+    protected override bool IsHeartbeatEnabled => true;
+
     public BitmexAdapter(ILogger<BitmexAdapter> logger, ProductType type, IInstrumentRepository instrumentRepository) : base(logger, type, instrumentRepository)
     {
     }
@@ -320,5 +322,31 @@ public class BitmexAdapter : BaseFeedAdapter
             // Handle other processing errors
             OnError(new FeedErrorEventArgs(new FeedReceiveException(SourceExchange, "Failed to process message.", ex), null));
         }
+    }
+
+    protected override string? GetPingMessage()
+    {
+        return "ping";
+    }
+
+    protected override bool IsPongMessage(MemoryStream messageStream)
+    {
+        if (messageStream.Length != 4)
+        {
+            return false;
+        }
+
+        var originalPosition = messageStream.Position;
+        Span<byte> buffer = stackalloc byte[4];
+        var bytesRead = messageStream.Read(buffer);
+        messageStream.Position = originalPosition; // IMPORTANT: Reset stream position
+
+        if (bytesRead < 4)
+        {
+            return false;
+        }
+
+        // Compare byte-by-byte for "pong"
+        return buffer[0] == 'p' && buffer[1] == 'o' && buffer[2] == 'n' && buffer[3] == 'g';
     }
 }
