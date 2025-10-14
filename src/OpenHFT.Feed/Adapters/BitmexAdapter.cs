@@ -193,7 +193,7 @@ public class BitmexAdapter : BaseFeedAdapter
             var bidSize = ele.GetProperty("bidSize").GetDecimal();
 
             var askLevelEntry = new PriceLevelEntry(
-                side: Side.Buy,
+                side: Side.Sell,
                 priceTicks: PriceUtils.ToTicks(askPrice),
                 quantity: (long)(askSize * 100_000_000)
             );
