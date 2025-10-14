@@ -112,6 +112,45 @@ public class BinanceTopic : ExchangeTopic
 }
 
 /// <summary>
+/// Defines the specific WebSocket topics for BitMEX.
+/// </summary>
+public class BitmexTopic : ExchangeTopic
+{
+    private readonly string _topicSuffix;
+    private readonly string _topicName;
+
+    private BitmexTopic(string eventTypeString, string topicSuffix, string topicName) : base(eventTypeString)
+    {
+        _topicSuffix = topicSuffix;
+        _topicName = topicName;
+    }
+
+    public override string GetStreamName(string symbol) => $"{_topicSuffix}{symbol.ToLowerInvariant()}";
+    public override string GetTopicName() => _topicName;
+
+    // Static properties to access topics like an enum
+    // Live trades
+    public static BitmexTopic Trade { get; } = new("trade", "trade:", "trade");
+    // Top level of the book
+    public static BitmexTopic Quote { get; } = new("quote", "quote:", "quote");
+    // Top 10 levels using traditional full book push
+    public static BitmexTopic OrderBook10 { get; } = new("orderBook10", "orderBook10:", "orderBook10");
+
+    public override ExchangeEnum Exchange => ExchangeEnum.BITMEX;
+
+    /// <summary>
+    /// Gets all defined topics for this exchange using reflection.
+    /// </summary>
+    public static IEnumerable<BitmexTopic> GetAll()
+    {
+        return typeof(BitmexTopic)
+            .GetProperties(BindingFlags.Public | BindingFlags.Static)
+            .Where(p => p.PropertyType == typeof(BitmexTopic))
+            .Select(p => (BitmexTopic)p.GetValue(null)!);
+    }
+}
+
+/// <summary>
 /// A registry to map event type strings to their corresponding ExchangeTopic objects for fast lookups.
 /// </summary>
 public static class TopicRegistry
@@ -123,6 +162,13 @@ public static class TopicRegistry
     {
         // Register all Binance topics
         foreach (var topic in BinanceTopic.GetAll())
+        {
+            _topicsByEventType.TryAdd(topic.EventTypeString, topic);
+            _topicsById.TryAdd(topic.TopicId, topic);
+        }
+
+        // Register all BitMEX topics
+        foreach (var topic in BitmexTopic.GetAll())
         {
             _topicsByEventType.TryAdd(topic.EventTypeString, topic);
             _topicsById.TryAdd(topic.TopicId, topic);

@@ -174,6 +174,16 @@ public class MarketDataManager
                     return BinanceTopic.BookTicker;
                 }
                 break;
+            case ExchangeEnum.BITMEX:
+                if (typeof(TConsumer) == typeof(OrderBookConsumer))
+                {
+                    return BitmexTopic.OrderBook10;
+                }
+                if (typeof(TConsumer) == typeof(BestOrderBookConsumer))
+                {
+                    return BitmexTopic.Quote;
+                }
+                break;
                 // 다른 거래소에 대한 case를 여기에 추가할 수 있습니다.
                 // case ExchangeEnum.BYBIT: ...
         }
