@@ -37,6 +37,7 @@ public class BestOrderBook
 
     public string Symbol => _instrument.Symbol;
     public int InstrumentId => _instrument.InstrumentId;
+    public ExchangeEnum SourceExchange => _instrument.SourceExchange;
     public long LastUpdateTimestamp => _lastUpdateTimestamp;
     public long UpdateCount => _updateCount;
 
