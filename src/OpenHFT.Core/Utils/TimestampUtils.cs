@@ -1,6 +1,8 @@
 using System.Runtime.CompilerServices;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using OpenHFT.Core.Models;
+using System.Collections.Concurrent;
 
 namespace OpenHFT.Core.Utils;
 
@@ -63,9 +65,9 @@ public static class TimestampUtils
 /// </summary>
 public static class TimeSync
 {
-    // The offset between the server's clock and the local UTC clock, in microseconds.
-    // Calculated as: server_time_micros - local_utc_time_micros
-    private static long _timeOffsetMicros = 0;
+    // 각 거래소별 시간 오프셋(마이크로초)을 저장합니다.
+    // 오프셋 = 서버 시간 - 로컬 UTC 시간
+    private static readonly ConcurrentDictionary<ExchangeEnum, long> _timeOffsetsMicros = new();
     private static ILogger? _logger;
 
     public static void Initialize(ILogger logger)
@@ -77,29 +79,61 @@ public static class TimeSync
     /// Updates the time offset based on the server's time and the current local UTC time.
     /// This should be called periodically to account for clock drift.
     /// </summary>
+    /// <param name="exchange">The exchange to update the time offset for.</param>
     /// <param name="serverTimeMillis">The server time in Unix milliseconds.</param>
-    public static void UpdateTimeOffset(long serverTimeMillis)
+    public static void UpdateTimeOffset(ExchangeEnum exchange, long serverTimeMillis)
     {
         var localTimeMillis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var newOffsetMillis = serverTimeMillis - localTimeMillis;
+        var newOffsetMicros = newOffsetMillis * 1000;
 
-        // Store the offset in microseconds for internal use.
-        Interlocked.Exchange(ref _timeOffsetMicros, newOffsetMillis * 1000);
+        _timeOffsetsMicros[exchange] = newOffsetMicros;
 
-        _logger?.LogInformationWithCaller($"Time synchronized with server. Wall clock offset: {newOffsetMillis} ms");
+        _logger?.LogInformationWithCaller($"Time synchronized with {exchange}. Wall clock offset: {newOffsetMillis} ms");
     }
 
     /// <summary>
     /// Gets the current UTC timestamp, adjusted by the server time offset, in microseconds.
     /// This provides a timestamp that is synchronized with the server's clock.
+    /// If no offset is available for the given exchange, it returns the un-synced local UTC time.
     /// </summary>
+    /// <param name="exchange">The exchange to get the synced timestamp for.</param>
     /// <returns>A synchronized UTC timestamp in microseconds since the Unix epoch.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static long GetSyncedTimestampMicros()
+    public static long GetSyncedTimestampMicros(ExchangeEnum exchange)
     {
-        // Get current local UTC time in microseconds and apply the offset.
         long localUtcMicros = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000;
-        return localUtcMicros + Interlocked.Read(ref _timeOffsetMicros);
+
+        if (_timeOffsetsMicros.TryGetValue(exchange, out var offset))
+        {
+            return localUtcMicros + offset;
+        }
+
+        // 오프셋이 없으면 보정되지 않은 로컬 시간을 반환합니다.
+        return localUtcMicros;
+    }
+
+    /// <summary>
+    /// Gets the current time offset for a specific exchange in milliseconds.
+    /// </summary>
+    /// <param name="exchange">The exchange to get the offset for.</param>
+    /// <returns>The time offset in milliseconds, or 0 if not available.</returns>
+    public static long GetTimeOffsetMillis(ExchangeEnum exchange)
+    {
+        if (_timeOffsetsMicros.TryGetValue(exchange, out var offsetMicros))
+        {
+            return offsetMicros / 1000;
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// Gets all currently stored time offsets in milliseconds.
+    /// </summary>
+    /// <returns>A dictionary mapping each exchange to its time offset in milliseconds.</returns>
+    public static IReadOnlyDictionary<ExchangeEnum, long> GetAllOffsetsMillis()
+    {
+        return _timeOffsetsMicros.ToDictionary(kvp => kvp.Key, kvp => kvp.Value / 1000);
     }
 }
 

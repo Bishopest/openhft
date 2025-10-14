@@ -101,7 +101,7 @@ public class FeedMonitor : BaseMarketDataConsumer
         // 3. latency calculation
         // Calculate latency in milliseconds. data.Timestamp is in milliseconds from the exchange.
         // GetSyncedTimestampMicros provides a local timestamp adjusted by the server time offset.
-        var latency = (TimeSync.GetSyncedTimestampMicros() / 1000.0) - data.Timestamp;
+        var latency = (TimeSync.GetSyncedTimestampMicros(data.SourceExchange) / 1000.0) - data.Timestamp;
         if (latency > 0)
         {
             stats.AddE2ELatency(latency); // latency is already in milliseconds

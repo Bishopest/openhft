@@ -78,7 +78,8 @@ catch (Exception ex)
 
 var feedMonitor = new FeedMonitor(feedHandler, distributor, loggerFactory.CreateLogger<FeedMonitor>(), config, instrumentRepository);
 Timer? statisticsTimer = null;
-Timer? timeSyncTimer = null;
+Timer? binanceTimeSyncTimer = null;
+Timer? bitmexTimeSyncTimer = null;
 
 // MarketDataDistributor 시작
 await distributor.StartAsync(cts.Token);
@@ -106,16 +107,18 @@ await feedHandler.StartAsync(cts.Token);
 var marketDataManager = new MarketDataManager(loggerFactory.CreateLogger<MarketDataManager>(), distributor, instrumentRepository, config);
 var subscriptionManager = new SubscriptionManager(loggerFactory.CreateLogger<SubscriptionManager>(), feedHandler, instrumentRepository, config);
 
-SubscribeToMidPriceLogging(marketDataManager, config, instrumentRepository);
+// SubscribeToMidPriceLogging(marketDataManager, config, instrumentRepository);
 
-await subscriptionManager.InitializeSubscriptionsAsync();
 await SyncTimeWithBinance();
+await SyncTimeWithBitmex();
+await subscriptionManager.InitializeSubscriptionsAsync();
 
 // Start timers
 // Periodically sync time with Binance server to adjust for clock drift.
-timeSyncTimer = new Timer(_ => SyncTimeWithBinance().Wait(), null, TimeSpan.FromHours(1), TimeSpan.FromHours(1));
+binanceTimeSyncTimer = new Timer(_ => SyncTimeWithBinance().Wait(), null, TimeSpan.FromHours(1), TimeSpan.FromHours(1));
+bitmexTimeSyncTimer = new Timer(_ => SyncTimeWithBitmex().Wait(), null, TimeSpan.FromHours(1), TimeSpan.FromHours(1));
 // Print statistics every 5 seconds.
-statisticsTimer = new Timer(PrintStatistics, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+statisticsTimer = new Timer(PrintStatistics, null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
 
 staticLogger.LogInformation("Feed Monitor started successfully. Press Ctrl+C to exit.");
 
@@ -132,7 +135,8 @@ catch (TaskCanceledException)
 // --- 4. 애플리케이션 종료 처리 ---
 staticLogger.LogInformation("Feed Monitor stopping...");
 statisticsTimer?.Change(Timeout.Infinite, 0);
-timeSyncTimer?.Change(Timeout.Infinite, 0);
+binanceTimeSyncTimer?.Change(Timeout.Infinite, 0);
+bitmexTimeSyncTimer?.Change(Timeout.Infinite, 0);
 feedMonitor.OnAlert -= OnFeedAlert;
 await feedHandler.StopAsync(CancellationToken.None); // 종료 시에는 새 토큰 사용
 await distributor.StopAsync(CancellationToken.None);
@@ -150,7 +154,25 @@ async Task SyncTimeWithBinance()
         var apiClient = new BinanceRestApiClient(loggerFactory.CreateLogger<BinanceRestApiClient>(), instrumentRepository, httpClient, ProductType.PerpetualFuture);
         var serverTimeResponse = await apiClient.GetServerTimeAsync(cts.Token);
 
-        TimeSync.UpdateTimeOffset(serverTimeResponse.ServerTime);
+        TimeSync.UpdateTimeOffset(ExchangeEnum.BINANCE, serverTimeResponse.ServerTime);
+    }
+    catch (Exception ex)
+    {
+        staticLogger.LogError(ex, "Failed to synchronize time with Binance server. Latency calculations may be inaccurate.");
+    }
+}
+
+async Task SyncTimeWithBitmex()
+{
+    staticLogger.LogInformationWithCaller("Attempting to synchronize time with Bitmex server...");
+    try
+    {
+        // We only need one type of client to get the time. PerpetualFuture is a safe bet.
+        using var httpClient = new HttpClient();
+        var apiClient = new BitmexRestApiClient(loggerFactory.CreateLogger<BitmexRestApiClient>(), instrumentRepository, httpClient, ProductType.PerpetualFuture);
+        var serverTimeResponse = await apiClient.GetServerTimeAsync(cts.Token);
+
+        TimeSync.UpdateTimeOffset(ExchangeEnum.BITMEX, serverTimeResponse);
     }
     catch (Exception ex)
     {
@@ -186,16 +208,23 @@ void PrintStatistics(object? state)
     BuildStatisticsString(sb, statsDict);
 
     // 기존 콘솔 내용을 지우고 새로운 통계 출력 (콘솔이 깜빡거리는 효과)
-    Console.Clear();
-    Console.WriteLine(sb.ToString());
+    // Console.Clear();
+    // Console.WriteLine(sb.ToString());
     // 로거를 통해 파일에도 기록 (필요 시)
-    // logger.LogInformation("Feed Statistics Update:\n{Statistics}", sb.ToString());
+    staticLogger.LogInformationWithCaller($"Feed Statistics Update:\n{sb.ToString()}");
 }
 
 void BuildStatisticsString(StringBuilder sb, ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, ConcurrentDictionary<int, FeedStatistics>>> statsDict)
 {
     sb.AppendLine("\n--- Feed Statistics ---");
     sb.AppendLine($"Timestamp: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff} UTC");
+
+    var offsets = TimeSync.GetAllOffsetsMillis();
+    if (offsets.Any())
+    {
+        var offsetStrings = string.Join(", ", offsets.Select(kvp => $"{kvp.Key}: {kvp.Value}ms"));
+        sb.AppendLine($"Time Offsets: {offsetStrings}");
+    }
     sb.AppendLine("---------------------------------------------------------------------------------------------------------------------------------");
     sb.AppendLine("| Exchange         | Product Type     | Topic            | Msgs/sec | Avg Latency(ms) | P95 Latency(ms) | Gaps | Drop(%)  | Reconnects |");
     sb.AppendLine("---------------------------------------------------------------------------------------------------------------------------------");
@@ -332,6 +361,10 @@ void CreateAndAddAdaptersFromConfig(SubscriptionConfig config,
                 newAdapter = new BinanceAdapter(loggerFactory.CreateLogger<BinanceAdapter>(), productType, instrumentRepository);
                 break;
             // 다른 거래소 어댑터가 있다면 여기에 추가 (e.g., case ExchangeEnum.BYBIT:)
+            case ExchangeEnum.BITMEX:
+                newAdapter = new BitmexAdapter(loggerFactory.CreateLogger<BitmexAdapter>(), productType, instrumentRepository);
+                break;
+
             default:
                 staticLogger.LogWarning($"No adapter implementation for exchange '{exchange}'. Skipping.");
                 break;
