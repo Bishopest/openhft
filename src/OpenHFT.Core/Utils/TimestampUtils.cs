@@ -109,7 +109,6 @@ public static class TimeSync
             return localUtcMicros + offset;
         }
 
-        // 오프셋이 없으면 보정되지 않은 로컬 시간을 반환합니다.
         return localUtcMicros;
     }
 

@@ -120,7 +120,6 @@ public abstract class BaseFeedAdapter : IFeedAdapter
             }
         }
 
-
         CleanupConnection();
         _logger.LogInformationWithCaller($"Successfully disconnected from {SourceExchange} WebSocket.");
     }
@@ -195,8 +194,6 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         {
             try
             {
-                CleanupConnection();
-
                 _webSocket = new ClientWebSocket();
                 ConfigureWebSocket(_webSocket);
 
@@ -478,7 +475,12 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     {
         lock (_connectionLock)
         {
+            // clean up inactivity cancellation token
             _inactivityCts?.Cancel();
+            _inactivityCts?.Dispose();
+            _inactivityCts = null;
+
+            // cleanup websocket connectivity
             if (_webSocket != null)
             {
                 if (_webSocket.State == WebSocketState.Open || _webSocket.State == WebSocketState.Connecting)
@@ -502,12 +504,6 @@ public abstract class BaseFeedAdapter : IFeedAdapter
                 _cancellationTokenSource = null;
             }
         }
-
-        _cancellationTokenSource?.Dispose();
-        _cancellationTokenSource = null;
-
-        _inactivityCts?.Dispose();
-        _inactivityCts = null;
     }
 
     protected virtual void Dispose(bool disposing)
@@ -530,7 +526,6 @@ public abstract class BaseFeedAdapter : IFeedAdapter
                 Task.WhenAll(allTasks).Wait(TimeSpan.FromSeconds(2));
             }
 
-            CleanupConnection();
             CleanupConnection();
         }
 
