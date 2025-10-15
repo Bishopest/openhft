@@ -147,19 +147,6 @@ public class FeedHandler : IFeedHandler
         AdapterConnectionStateChanged?.Invoke(adapter, e);
 
         _logger.LogInformationWithCaller($"Adapter({adapter?.SourceExchange}) connection state changed: {e.IsConnected} - {e.Reason}");
-
-        if (!e.IsConnected)
-        {
-            _logger.LogInformationWithCaller($"Adapter({adapter?.SourceExchange}) reconnect attempt start");
-            _ = Task.Run(async () =>
-            {
-                await Task.Delay(1000);
-                if (adapter != null)
-                {
-                    await adapter.ConnectAsync();
-                }
-            });
-        }
     }
 
     private void OnFeedError(object? sender, FeedErrorEventArgs e)
