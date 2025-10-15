@@ -4,10 +4,11 @@ using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
+using OpenHFT.Feed.Adapters;
 using OpenHFT.Feed.Interfaces;
 namespace OpenHFT.Feed;
 
-public class SubscriptionManager : ISubscriptionManager
+public class SubscriptionManager : ISubscriptionManager, IDisposable
 {
     private readonly ILogger<SubscriptionManager> _logger;
     private readonly IFeedHandler _feedHandler;
@@ -24,6 +25,8 @@ public class SubscriptionManager : ISubscriptionManager
         _feedHandler = feedHandler;
         _instrumentRepository = instrumentRepository;
         _config = subscriptionConfig;
+
+        _feedHandler.AdapterConnectionStateChanged += OnAdapterConnectionStateChanged;
     }
 
     public async Task InitializeSubscriptionsAsync(CancellationToken cancellationToken = default)
@@ -89,6 +92,54 @@ public class SubscriptionManager : ISubscriptionManager
         _logger.LogInformationWithCaller("All subscription requests have been submitted.");
     }
 
+    private void OnAdapterConnectionStateChanged(object? sender, ConnectionStateChangedEventArgs e)
+    {
+        if (e.IsConnected && sender is BaseFeedAdapter adapter)
+        {
+            // Run re-subscription in the background to not block the event handler.
+            _ = ResubscribeToAdapterAsync(adapter);
+        }
+    }
+
+    private async Task ResubscribeToAdapterAsync(BaseFeedAdapter adapter, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformationWithCaller($"Re-subscribing instruments for connected adapter: {adapter.SourceExchange}/{adapter.ProdType}");
+
+        var instrumentsToSubscribe = new List<Instrument>();
+
+        foreach (var group in _config.Subscriptions)
+        {
+            if (!Enum.TryParse<ExchangeEnum>(group.Exchange, true, out var exchange) ||
+                !Enum.TryParse<ProductType>(group.ProductType, true, out var productType))
+            {
+                continue;
+            }
+
+            if (exchange == adapter.SourceExchange && productType == adapter.ProdType)
+            {
+                foreach (var symbolName in group.Symbols)
+                {
+                    var instrument = _instrumentRepository.FindBySymbol(symbolName, productType, exchange);
+                    if (instrument != null)
+                    {
+                        instrumentsToSubscribe.Add(instrument);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Instrument not found for {Exchange}/{ProductType}/{Symbol} during re-subscription", group.Exchange, group.ProductType, symbolName);
+                    }
+                }
+            }
+        }
+
+        if (instrumentsToSubscribe.Any())
+        {
+            _logger.LogInformationWithCaller($"Requesting re-subscription of {instrumentsToSubscribe.Count} instruments on adapter {adapter.SourceExchange}/{adapter.ProdType}");
+            await adapter.SubscribeAsync(instrumentsToSubscribe, cancellationToken);
+        }
+    }
+
+
     private T ParseEnum<T>(string value) where T : struct, Enum
     {
         if (Enum.TryParse<T>(value, true, out var result))
@@ -109,5 +160,10 @@ public class SubscriptionManager : ISubscriptionManager
             "option" => ProductType.Option,
             _ => ParseEnum<ProductType>(value) // Fallback for direct matches
         };
+    }
+
+    public void Dispose()
+    {
+        _feedHandler.AdapterConnectionStateChanged -= OnAdapterConnectionStateChanged;
     }
 }

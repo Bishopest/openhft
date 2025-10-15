@@ -108,10 +108,11 @@ var marketDataManager = new MarketDataManager(loggerFactory.CreateLogger<MarketD
 var subscriptionManager = new SubscriptionManager(loggerFactory.CreateLogger<SubscriptionManager>(), feedHandler, instrumentRepository, config);
 
 // SubscribeToMidPriceLogging(marketDataManager, config, instrumentRepository);
+// SubscribeToMidPriceDiffLogging(marketDataManager, config, instrumentRepository);
 
 await SyncTimeWithBinance();
 await SyncTimeWithBitmex();
-await subscriptionManager.InitializeSubscriptionsAsync();
+// await subscriptionManager.InitializeSubscriptionsAsync(); // 이제 자동으로 처리됩니다.
 
 // Start timers
 // Periodically sync time with Binance server to adjust for clock drift.
@@ -320,7 +321,64 @@ void SubscribeToMidPriceLogging(MarketDataManager manager, SubscriptionConfig su
             var inst = repo.FindBySymbol(symbol, productType, exchange);
             if (inst != null)
             {
-                manager.SubscribeOrderBook(inst, "GlobalMidPriceLogger", OnOrderBookUpdate);
+                // manager.SubscribeOrderBook(inst, "GlobalMidPriceLogger", OnOrderBookUpdate);
+                manager.SubscribeBestOrderBook(inst, "GlobalMidPriceLogger", OnBestOrderBookUpdate);
+            }
+        }
+
+    }
+}
+
+void SubscribeToMidPriceDiffLogging(MarketDataManager manager, SubscriptionConfig subConfig, IInstrumentRepository repo)
+{
+    var lastBestOrderBookMidPrices = new ConcurrentDictionary<int, long>();
+
+    void OnBestOrderBookUpdate(object? sender, BestOrderBook book)
+    {
+        var newMidPrice = book.GetMidPriceTicks();
+        if (newMidPrice == 0) return;
+
+        var lastMidPrice = lastBestOrderBookMidPrices.GetOrAdd(book.InstrumentId, newMidPrice);
+
+        if (newMidPrice != lastMidPrice)
+        {
+            if (lastBestOrderBookMidPrices.TryUpdate(book.InstrumentId, newMidPrice, lastMidPrice))
+            {
+
+                // staticLogger.LogInformationWithCaller($"[BestOrderBook] {book.Symbol} Mid-Price changed: {lastMidPrice} -> {newMidPrice}");
+                var baseMid = lastBestOrderBookMidPrices.Where(kvp => kvp.Key != book.InstrumentId).FirstOrDefault().Value;
+                var diff = book.SourceExchange == ExchangeEnum.BINANCE ? (newMidPrice - baseMid) : (baseMid - newMidPrice);
+                if (diff > -650000 | diff < -1000000)
+                {
+                    staticLogger.LogInformationWithCaller($"[BestOrderBook] [Binance - Bitmex] {book.Symbol} Mid-Price diff: {diff}");
+                }
+                // staticLogger.LogInformationWithCaller($"{book.ToTerminalString()}");
+
+            }
+        }
+    }
+
+    staticLogger.LogInformation("Setting up mid-price change logging for all configured instruments...");
+    foreach (var group in subConfig.Subscriptions)
+    {
+        if (!Enum.TryParse<ExchangeEnum>(group.Exchange, true, out var exchange))
+        {
+            staticLogger.LogWarning($"Unknown exchange '{group.Exchange}' in config.json. Skipping.");
+            continue;
+        }
+
+        if (!Enum.TryParse<ProductType>(group.ProductType, true, out var productType))
+        {
+            staticLogger.LogWarning($"Unknown product-type '{group.ProductType}' for exchange '{group.Exchange}' in config.json. Skipping.");
+            continue;
+        }
+
+        foreach (var symbol in group.Symbols)
+        {
+            var inst = repo.FindBySymbol(symbol, productType, exchange);
+            if (inst != null)
+            {
+                // manager.SubscribeOrderBook(inst, "GlobalMidPriceLogger", OnOrderBookUpdate);
                 manager.SubscribeBestOrderBook(inst, "GlobalMidPriceLogger", OnBestOrderBookUpdate);
             }
         }

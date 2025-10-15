@@ -248,6 +248,12 @@ public abstract class BaseFeedAdapter : IFeedAdapter
                     _logger.LogInformationWithCaller($"Successfully connected to {SourceExchange} WebSocket.");
                     OnConnectionStateChanged(true, "Connected Successfully");
 
+                    // Clear old subscriptions to allow SubscriptionManager to re-subscribe cleanly.
+                    lock (_subscriptionLock)
+                    {
+                        _subscribedInsts.Clear();
+                    }
+
                     // Start background tasks
                     _inactivityCts = new CancellationTokenSource();
                     _receiveTask = Task.Run(() => ReceiveLoop(cancellationToken), cancellationToken);
