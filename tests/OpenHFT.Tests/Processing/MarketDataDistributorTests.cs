@@ -232,4 +232,14 @@ public class MockAdapter : BaseFeedAdapter
         // BaseFeedAdapter의 protected virtual 메서드를 호출하여 이벤트를 발생시킵니다.
         base.OnMarketDataReceived(marketDataEvent);
     }
+
+    protected override string? GetPingMessage()
+    {
+        throw new NotImplementedException();
+    }
+
+    protected override bool IsPongMessage(MemoryStream messageStream)
+    {
+        throw new NotImplementedException();
+    }
 }
