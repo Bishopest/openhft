@@ -19,6 +19,8 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     private CancellationTokenSource? _inactivityCts;
     // TCS to wait pong messages
     private TaskCompletionSource<bool> _pongTcs;
+    // 0 = not reconnecting, 1 = reconnecting.
+    private volatile int _reconnectionInProgress;
 
     protected readonly ILogger _logger;
     protected readonly IInstrumentRepository _instrumentRepository;
@@ -59,6 +61,8 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     {
         if (_isDisposed) throw new ObjectDisposedException(GetType().Name);
         if (IsConnected) return;
+
+        await DisconnectAsync(CancellationToken.None).ConfigureAwait(false);
 
         _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
@@ -101,8 +105,9 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         {
             try
             {
-                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await Task.WhenAll(tasksToWait).WaitAsync(timeoutCts.Token).ConfigureAwait(false);
+                using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                combinedCts.CancelAfter(TimeSpan.FromSeconds(5));
+                await Task.WhenAll(tasksToWait).WaitAsync(combinedCts.Token).ConfigureAwait(false);
                 _logger.LogInformationWithCaller($"Receive and Heartbeat tasks for {SourceExchange} completed.");
             }
             catch (OperationCanceledException)
@@ -121,6 +126,10 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         }
 
         CleanupConnection();
+
+        _cancellationTokenSource?.Dispose();
+        _cancellationTokenSource = null;
+
         _logger.LogInformationWithCaller($"Successfully disconnected from {SourceExchange} WebSocket.");
     }
 
@@ -182,13 +191,44 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
     #region Connection and Receive Logic
 
+    private async Task InitiateReconnectAsync(string reason)
+    {
+        if (Interlocked.CompareExchange(ref _reconnectionInProgress, 1, 0) == 0)
+        {
+            _logger.LogWarningWithCaller($"Initiating {SourceExchange} reconnection due to: {reason}");
+            OnConnectionStateChanged(false, "Connection Lost");
+
+            // 1. Capture the tasks from the old session before they are cleared.
+            var tasksToWait = new List<Task>();
+            if (_receiveTask != null) tasksToWait.Add(_receiveTask);
+            if (_heartbeatTask != null) tasksToWait.Add(_heartbeatTask);
+
+            // 2. Signal the old session to terminate by cleaning up its resources.
+            CleanupConnection();
+
+            // 3. Explicitly wait for the old tasks to finish.
+            if (tasksToWait.Any())
+            {
+                try
+                {
+                    // Use a short timeout as a safeguard against stuck tasks.
+                    await Task.WhenAll(tasksToWait).WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    // Exceptions (like ObjectDisposedException or TimeoutException) are expected here
+                    // as the tasks are being forcefully terminated. We can log them for debugging.
+                    _logger.LogTrace(ex, "Caught expected exception while waiting for old tasks to terminate during reconnect.");
+                }
+            }
+
+            // 4. Now that the slate is clean, start the new connection attempt.
+            // The main _cancellationTokenSource is still valid.
+            await ConnectWithRetryAsync(_cancellationTokenSource?.Token ?? CancellationToken.None).ConfigureAwait(false);
+        }
+    }
     private async Task ConnectWithRetryAsync(CancellationToken cancellationToken)
     {
-        if (IsConnected || _receiveTask != null)
-        {
-            await DisconnectAsync(CancellationToken.None);
-        }
-
         int retryAttempt = 0;
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -204,14 +244,14 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
                 if (_webSocket.State == WebSocketState.Open)
                 {
+                    Interlocked.Exchange(ref _reconnectionInProgress, 0);
                     _logger.LogInformationWithCaller($"Successfully connected to {SourceExchange} WebSocket.");
                     OnConnectionStateChanged(true, "Connected Successfully");
-                    _receiveTask = Task.Run(() => ReceiveLoop(cancellationToken), cancellationToken);
 
-                    if (IsHeartbeatEnabled)
-                    {
-                        _heartbeatTask = Task.Run(() => HeartbeatLoop(cancellationToken), cancellationToken);
-                    }
+                    // Start background tasks
+                    _inactivityCts = new CancellationTokenSource();
+                    _receiveTask = Task.Run(() => ReceiveLoop(cancellationToken), cancellationToken);
+                    _heartbeatTask = Task.Run(() => HeartbeatLoop(cancellationToken), cancellationToken);
                     return;
                 }
             }
@@ -221,6 +261,10 @@ public abstract class BaseFeedAdapter : IFeedAdapter
                 _logger.LogErrorWithCaller(ex, $"Connection attempt {retryAttempt + 1} for {SourceExchange} failed. Retrying in {delay.TotalSeconds}s...");
                 await Task.Delay(delay, cancellationToken);
                 retryAttempt++;
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _reconnectionInProgress, 0);
             }
         }
 
@@ -276,12 +320,18 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         }
         catch (WebSocketException ex)
         {
-            _logger.LogErrorWithCaller(ex, $"{SourceExchange} WebSocket connection closed unexpectedly. Reason: {ex.Message}. Attempting to reconnect...");
-            OnConnectionStateChanged(false, "Connection Lost");
-            _ = Task.Run(() => ConnectWithRetryAsync(_cancellationTokenSource?.Token ?? CancellationToken.None)).ConfigureAwait(false);
+            var reason = $"{SourceExchange} WebSocket connection closed unexpectedly. Reason: {ex.Message}";
+            _logger.LogErrorWithCaller(ex, reason);
+            _ = InitiateReconnectAsync(reason);
         }
         catch (Exception ex)
         {
+            if (ex is ObjectDisposedException)
+            {
+                _logger.LogInformationWithCaller($"{SourceExchange} ReceiveLoop is stopping due to socket disposal during reconnect.");
+                return;
+            }
+
             _logger.LogErrorWithCaller(ex, $"Unhandled exception in {SourceExchange} ReceiveLoop.");
             OnError(new FeedErrorEventArgs(new FeedReceiveException(SourceExchange, "Unhandled exception in receive loop", ex), null));
         }
@@ -296,25 +346,39 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         {
             try
             {
-                // Wait for a period of inactivity. This delay will be cancelled 
-                // by ResetInactivityTimer if any message is received.
-                await Task.Delay(inactivityTimeout, _inactivityCts!.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                // This is the expected behavior when a message is received.
-                // The timer was reset, so we just loop again.
-                continue;
-            }
+                if (_webSocket is null || _webSocket.State != WebSocketState.Open)
+                {
+                    var reason = $"WebSocket state for {SourceExchange} is not Open (State: {_webSocket?.State.ToString() ?? "null"}).";
+                    _ = InitiateReconnectAsync(reason);
+                    return; // Exit this loop; a new one will be created upon successful reconnection.
+                }
 
-            if (cancellationToken.IsCancellationRequested) break;
+                if (!IsHeartbeatEnabled)
+                {
+                    // If heartbeats are disabled (e.g., Binance), this loop acts as a simple
+                    // state poller. We just delay and then check the state again in the next iteration.
+                    await Task.Delay(inactivityTimeout, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
 
-            // If we reach here, the delay completed without cancellation,
-            // meaning no messages were received for the duration of inactivityTimeout.
-            _logger.LogInformationWithCaller($"No message received for {inactivityTimeout.TotalSeconds}s. Sending ping to {SourceExchange}.");
+                try
+                {
+                    // Wait for a period of inactivity. This delay will be cancelled 
+                    // by ResetInactivityTimer if any message is received.
+                    await Task.Delay(inactivityTimeout, _inactivityCts!.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // This is the expected behavior when a message is received.
+                    // The timer was reset, so we just loop again to check the state and wait.
+                    continue;
+                }
 
-            try
-            {
+                if (cancellationToken.IsCancellationRequested) break;
+
+                // If we reach here, no messages were received. Send a ping.
+                _logger.LogInformationWithCaller($"No message received for {inactivityTimeout.TotalSeconds}s. Sending ping to {SourceExchange}.");
+
                 _pongTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 var pingMessage = GetPingMessage();
                 if (pingMessage != null)
@@ -324,28 +388,40 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
                 // Wait for the pong response or a timeout.
                 using var timeoutCts = new CancellationTokenSource(pingTimeout);
-                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
-
                 var pongTask = _pongTcs.Task;
-                var completedTask = await Task.WhenAny(pongTask, Task.Delay(pingTimeout, linkedCts.Token)).ConfigureAwait(false);
+                var completedTask = await Task.WhenAny(pongTask, Task.Delay(pingTimeout, timeoutCts.Token)).ConfigureAwait(false);
 
                 if (completedTask != pongTask || !pongTask.Result)
                 {
-                    _logger.LogWarningWithCaller($"Did not receive a pong from {SourceExchange} within {pingTimeout.TotalSeconds}s. Connection is considered stale. Triggering reconnect.");
-                    await CloseSocketForReconnectAsync().ConfigureAwait(false);
-                    return; // Exit the heartbeat loop.
+                    // call the centralized reconnect method and then exit the loop.
+                    var reason = $"Pong timeout from {SourceExchange} within {pingTimeout.TotalSeconds}s.";
+                    _ = InitiateReconnectAsync(reason);
+                    return; // Exit this loop.
                 }
 
                 _logger.LogInformationWithCaller($"Successfully received pong from {SourceExchange}.");
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (OperationCanceledException)
             {
-                _logger.LogErrorWithCaller(ex, $"An error occurred in the heartbeat loop for {SourceExchange}. Triggering reconnect.");
-                await CloseSocketForReconnectAsync().ConfigureAwait(false);
-                return; // Exit the heartbeat loop.
+                // cancellationToken exception thrown from DisconnectAsync()
+                break;
+            }
+            catch (ObjectDisposedException)
+            {
+                // This means another thread (likely ReceiveLoop) already initiated a reconnect.
+                // Our job here is to simply exit this loop cleanly.
+                _logger.LogInformationWithCaller($"HeartbeatLoop for {SourceExchange} stopping as socket was disposed by a reconnect process.");
+                break;
+            }
+            catch (Exception ex)
+            {
+                var reason = $"An error occurred in the heartbeat/monitor loop for {SourceExchange}.";
+                _logger.LogErrorWithCaller(ex, reason);
+                _ = InitiateReconnectAsync(reason);
+                return; // Exit this loop.
             }
         }
-        _logger.LogInformationWithCaller($"Heartbeat loop for {SourceExchange} has stopped.");
+        _logger.LogInformationWithCaller($"Heartbeat/Monitor loop for {SourceExchange} has stopped.");
     }
 
     protected async Task SendMessageAsync(string message, CancellationToken cancellationToken)
@@ -439,23 +515,6 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         }
     }
 
-    private async Task CloseSocketForReconnectAsync()
-    {
-        if (_webSocket != null)
-        {
-            try
-            {
-                // Close the output to signal the server, then wait briefly for the remote close frame.
-                // This will cause ReceiveAsync in the ReceiveLoop to throw, triggering the reconnect logic there.
-                await _webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Stale connection", CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarningWithCaller($"Exception while closing stale socket for {SourceExchange}: {ex.Message}");
-            }
-        }
-    }
-
     protected virtual void OnConnectionStateChanged(bool isConnected, string reason)
     {
         ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(isConnected, SourceExchange, reason));
@@ -497,12 +556,6 @@ public abstract class BaseFeedAdapter : IFeedAdapter
                 _webSocket?.Dispose();
                 _webSocket = null;
             }
-
-            if (_cancellationTokenSource != null)
-            {
-                _cancellationTokenSource.Dispose();
-                _cancellationTokenSource = null;
-            }
         }
     }
 
@@ -527,6 +580,8 @@ public abstract class BaseFeedAdapter : IFeedAdapter
             }
 
             CleanupConnection();
+
+            _cancellationTokenSource?.Dispose();
         }
 
         _isDisposed = true;
