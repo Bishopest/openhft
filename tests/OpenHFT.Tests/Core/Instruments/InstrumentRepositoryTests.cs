@@ -56,13 +56,13 @@ BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001";
         Assert.That(btcSpot, Is.Not.Null);
         Assert.That(btcSpot.Symbol, Is.EqualTo("BTCUSDT"));
         Assert.That(btcSpot.ProductType, Is.EqualTo(ProductType.Spot));
-        Assert.That(btcSpot.TickSize, Is.EqualTo(0.01m));
+        Assert.That(btcSpot.TickSize.ToDecimal(), Is.EqualTo(0.01m));
 
         var btcPerp = _repository.FindBySymbol("BTCUSDT", ProductType.PerpetualFuture, ExchangeEnum.BINANCE);
         Assert.That(btcPerp, Is.Not.Null);
         Assert.That(btcPerp.Symbol, Is.EqualTo("BTCUSDT"));
         Assert.That(btcPerp.ProductType, Is.EqualTo(ProductType.PerpetualFuture));
-        Assert.That(btcPerp.TickSize, Is.EqualTo(0.1m));
+        Assert.That(btcPerp.TickSize.ToDecimal(), Is.EqualTo(0.1m));
     }
 
     [Test]
