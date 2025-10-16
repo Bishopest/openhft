@@ -119,10 +119,10 @@ public class OrderBookBenchmarks
                 exchange: ExchangeEnum.BINANCE,
                 baseCurrency: Currency.BTC,
                 quoteCurrency: Currency.USDT,
-                tickSize: 0.1m,
-                lotSize: 0.001m,
+                tickSize: Price.FromDecimal(0.1m),
+                lotSize: Quantity.FromDecimal(0.001m),
                 multiplier: 1m,
-                minOrderSize: 0.001m
+                minOrderSize: Quantity.FromDecimal(0.001m)
         ));
         _symbolId = SymbolUtils.GetSymbolId("BTCUSDT");
 

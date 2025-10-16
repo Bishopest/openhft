@@ -11,9 +11,9 @@ public class Crypto : Instrument
         ExchangeEnum exchange,
         Currency baseCurrency,
         Currency quoteCurrency,
-        decimal tickSize,
-        decimal lotSize,
-        decimal minOrderSize
+        Price tickSize,
+        Quantity lotSize,
+        Quantity minOrderSize
     ) : base(instrumentId, symbol, exchange, baseCurrency, quoteCurrency, tickSize, lotSize, minOrderSize)
     {
 

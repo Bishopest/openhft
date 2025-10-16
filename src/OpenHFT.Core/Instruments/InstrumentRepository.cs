@@ -50,14 +50,14 @@ public class InstrumentRepository : IInstrumentRepository
                 Enum.TryParse<ProductType>(record.type, true, out ProductType productType);
                 var baseCurrency = Currency.FromString(symbol.Replace((string)record.quote_currency, "")); // Simplified logic
                 var quoteCurrency = Currency.FromString(record.quote_currency);
-                var tickSize = decimal.Parse(record.minimum_price_variation);
-                var lotSize = decimal.Parse(record.lot_size);
+                var tickSize = Price.FromDecimal(decimal.Parse(record.minimum_price_variation));
+                var lotSize = Quantity.FromDecimal(decimal.Parse(record.lot_size));
                 var multiplier = decimal.Parse(record.contract_multiplier);
 
-                decimal minOrderSize;
+                Quantity minOrderSize;
                 try
                 {
-                    minOrderSize = decimal.Parse(record.minimum_order_size);
+                    minOrderSize = Quantity.FromDecimal(decimal.Parse(record.minimum_order_size));
                 }
                 catch (Exception)
                 {

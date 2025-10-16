@@ -20,10 +20,10 @@ public abstract class CryptoFuture : Instrument
         ExchangeEnum exchange,
         Currency baseCurrency,
         Currency quoteCurrency,
-        decimal tickSize,
-        decimal lotSize,
+        Price tickSize,
+        Quantity lotSize,
         decimal multiplier,
-        decimal minOrderSize)
+        Quantity minOrderSize)
         : base(instrumentId, symbol, exchange, baseCurrency, quoteCurrency, tickSize, lotSize, minOrderSize)
     {
         Multiplier = multiplier;

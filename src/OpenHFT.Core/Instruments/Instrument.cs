@@ -41,17 +41,17 @@ public abstract class Instrument
     /// <summary>
     /// The smallest price change allowed (e.g., 0.01 for BTCUSDT).
     /// </summary>
-    public decimal TickSize { get; }
+    public Price TickSize { get; }
 
     /// <summary>
     /// The smallest quantity change allowed (e.g., 0.001 for BTC).
     /// </summary>
-    public decimal LotSize { get; }
+    public Quantity LotSize { get; }
 
     /// <summary>
     /// The smallest quantity allowed to send order with
     /// </summary>
-    public decimal MinOrderSize { get; }
+    public Quantity MinOrderSize { get; }
 
     protected Instrument(
         int instrumentId,
@@ -59,9 +59,9 @@ public abstract class Instrument
         ExchangeEnum exchange,
         Currency baseCurrency,
         Currency quoteCurrency,
-        decimal tickSize,
-        decimal lotSize,
-        decimal minOrderSize)
+        Price tickSize,
+        Quantity lotSize,
+        Quantity minOrderSize)
     {
         InstrumentId = instrumentId;
         Symbol = symbol;

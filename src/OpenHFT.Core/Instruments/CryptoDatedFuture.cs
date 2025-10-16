@@ -20,10 +20,10 @@ public class CryptoDatedFuture : CryptoFuture
         ExchangeEnum exchange,
         Currency baseCurrency,
         Currency quoteCurrency,
-        decimal tickSize,
-        decimal lotSize,
+        Price tickSize,
+        Quantity lotSize,
         decimal multiplier,
-        decimal minOrderSize,
+        Quantity minOrderSize,
         DateTimeOffset expirationDate)
         : base(instrumentId, symbol, exchange, baseCurrency, quoteCurrency, tickSize, lotSize, multiplier, minOrderSize)
     {
