@@ -93,11 +93,19 @@ public class MarketDataManager
         _logger.LogInformationWithCaller($"market data consumer successfully installed for {instrument.Symbol}.");
     }
 
-    public void SubscribeOrderBook(Instrument instrument, string subscriberName, EventHandler<OrderBook> callback)
+    public void SubscribeOrderBook(int instrumentId, string subscriberName, EventHandler<OrderBook> callback)
     {
-        if (_consumers.TryGetValue(instrument.InstrumentId, out var consumer))
+        var instrument = _repository.GetById(instrumentId);
+        if (instrument == null)
+        {
+            _logger.LogWarningWithCaller($"Could not find symbol by id {instrumentId}.");
+            return;
+        }
+
+        if (_consumers.TryGetValue(instrumentId, out var consumer))
         {
             consumer.AddSubscriber(subscriberName, callback);
+            _logger.LogInformationWithCaller($"Start to subscribe orderbook by {subscriberName} for symbol {instrument.Symbol}.");
         }
         else
         {
@@ -105,9 +113,16 @@ public class MarketDataManager
         }
     }
 
-    public void UnsubscribeOrderBook(Instrument instrument, string subscriberName)
+    public void UnsubscribeOrderBook(int instrumentId, string subscriberName)
     {
-        if (_consumers.TryGetValue(instrument.InstrumentId, out var consumer))
+        var instrument = _repository.GetById(instrumentId);
+        if (instrument == null)
+        {
+            _logger.LogWarningWithCaller($"Could not find symbol by id {instrumentId}.");
+            return;
+        }
+
+        if (_consumers.TryGetValue(instrumentId, out var consumer))
         {
             consumer.RemoveSubscriber(subscriberName);
         }
@@ -117,9 +132,16 @@ public class MarketDataManager
         }
     }
 
-    public void SubscribeBestOrderBook(Instrument instrument, string subscriberName, EventHandler<BestOrderBook> callback)
+    public void SubscribeBestOrderBook(int instrumentId, string subscriberName, EventHandler<BestOrderBook> callback)
     {
-        if (_bestOrderBookConsumers.TryGetValue(instrument.InstrumentId, out var consumer))
+        var instrument = _repository.GetById(instrumentId);
+        if (instrument == null)
+        {
+            _logger.LogWarningWithCaller($"Could not find symbol by id {instrumentId}.");
+            return;
+        }
+
+        if (_bestOrderBookConsumers.TryGetValue(instrumentId, out var consumer))
         {
             consumer.AddSubscriber(subscriberName, callback);
         }
@@ -129,8 +151,15 @@ public class MarketDataManager
         }
     }
 
-    public void UnsubscribeBestOrderBook(Instrument instrument, string subscriberName)
+    public void UnsubscribeBestOrderBook(int instrumentId, string subscriberName)
     {
+        var instrument = _repository.GetById(instrumentId);
+        if (instrument == null)
+        {
+            _logger.LogWarningWithCaller($"Could not find symbol by id {instrumentId}.");
+            return;
+        }
+
         if (_bestOrderBookConsumers.TryGetValue(instrument.InstrumentId, out var consumer))
         {
             consumer.RemoveSubscriber(subscriberName);
@@ -156,8 +185,8 @@ public class MarketDataManager
             return;
         }
 
-        UnsubscribeOrderBook(instrument, subscriberName);
-        UnsubscribeBestOrderBook(instrument, subscriberName);
+        UnsubscribeOrderBook(instrument.InstrumentId, subscriberName);
+        UnsubscribeBestOrderBook(instrument.InstrumentId, subscriberName);
     }
 
     private ExchangeTopic GetTopicForConsumer<TConsumer>(Instrument instrument) where TConsumer : BaseMarketDataConsumer
