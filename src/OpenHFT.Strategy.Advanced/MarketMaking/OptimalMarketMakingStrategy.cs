@@ -108,7 +108,7 @@ public class OptimalMarketMakingStrategy : IAdvancedStrategy
             {
                 var bidOrder = new OrderIntent(
                     clientOrderId: GenerateOrderId(),
-                    type: OrderType.Limit,
+                    type: OrderTypeEnum.Limit,
                     side: Side.Buy,
                     priceTicks: DecimalToPriceTicks(bidPrice),
                     quantity: DecimalToQuantityTicks(optimalSizes.bidSize),
@@ -123,7 +123,7 @@ public class OptimalMarketMakingStrategy : IAdvancedStrategy
             {
                 var askOrder = new OrderIntent(
                     clientOrderId: GenerateOrderId(),
-                    type: OrderType.Limit,
+                    type: OrderTypeEnum.Limit,
                     side: Side.Sell,
                     priceTicks: DecimalToPriceTicks(askPrice),
                     quantity: DecimalToQuantityTicks(optimalSizes.askSize),
@@ -411,7 +411,7 @@ public class OptimalMarketMakingStrategy : IAdvancedStrategy
             // Update volume on trade events
             if (marketEvent.Kind == EventKind.Trade)
             {
-                var volume = PriceTicksToDecimal(marketEvent.Quantity);
+                var volume = PriceTicksToDecimal(marketEvent.Updates[0].Quantity);
                 context.RollingVolume.Add(volume);
 
                 if (context.RollingVolume.Count > _volumeWindow)

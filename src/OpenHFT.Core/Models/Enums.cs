@@ -24,7 +24,7 @@ public enum EventKind : byte
 /// <summary>
 /// Order types
 /// </summary>
-public enum OrderType : byte
+public enum OrderTypeEnum : byte
 {
     Limit = 0,
     Market = 1,
@@ -52,7 +52,7 @@ public enum AckKind : byte
 /// <summary>
 /// Order status tracking
 /// </summary>
-public enum OrderStatus : byte
+public enum OrderStatusEnum : byte
 {
     PendingNew = 0,
     New = 1,

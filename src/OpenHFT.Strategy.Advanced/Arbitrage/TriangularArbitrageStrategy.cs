@@ -51,7 +51,7 @@ public class TriangularArbitrageStrategy : IAdvancedStrategy
 
         // Update order book reference
         _orderBooks[symbol] = orderBook;
-        _lastPrices[symbol] = PriceTicksToDecimal(marketData.PriceTicks);
+        _lastPrices[symbol] = PriceTicksToDecimal(orderBook.GetMidPriceTicks());
 
         // Accept trade events and update events for testing (normally would only use Trade)
         if (marketData.Kind != EventKind.Trade && marketData.Kind != EventKind.Update)
@@ -76,7 +76,7 @@ public class TriangularArbitrageStrategy : IAdvancedStrategy
             {
                 var testOrder = new OrderIntent(
                     clientOrderId: GenerateOrderId(), // Use the existing method that returns long
-                    type: OrderType.Limit,
+                    type: OrderTypeEnum.Limit,
                     side: Side.Buy,
                     priceTicks: DecimalToPriceTicks(bestPrice.Value.bid * 0.999m), // 0.1% below bid
                     quantity: DecimalToQuantityTicks(0.001m), // Very small quantity
@@ -337,7 +337,7 @@ public class TriangularArbitrageStrategy : IAdvancedStrategy
 
         return new OrderIntent(
             clientOrderId: GenerateOrderId(),
-            type: OrderType.Limit,
+            type: OrderTypeEnum.Limit,
             side: side,
             priceTicks: DecimalToPriceTicks(price),
             quantity: DecimalToQuantityTicks(size),

@@ -136,16 +136,16 @@ public class OrderBookBenchmarks
             var basePrice = side == Side.Buy ? 49000 : 51000;
             var price = basePrice + random.Next(-100, 101);
             var quantity = random.Next(1, 1000) * 100000; // Random quantity in satoshis
-
+            var entryArr = new PriceLevelEntryArray();
+            entryArr[0] = new PriceLevelEntry(side, PriceUtils.ToTicks((decimal)price), quantity);
             _events[i] = new MarketDataEvent(
                 sequence: i + 1,
                 timestamp: TimestampUtils.GetTimestampMicros(),
-                side: side,
-                priceTicks: PriceUtils.ToTicks((decimal)price),
-                quantity: quantity,
                 kind: EventKind.Update,
                 instrumentId: _symbolId,
-                exchange: ExchangeEnum.BINANCE
+                exchange: ExchangeEnum.BINANCE,
+                updateCount: 1,
+                updates: entryArr
             );
         }
     }
@@ -153,15 +153,16 @@ public class OrderBookBenchmarks
     [Benchmark]
     public void ApplySingleEvent()
     {
+        var entryArr = new PriceLevelEntryArray();
+        entryArr[0] = new PriceLevelEntry(Side.Buy, PriceUtils.ToTicks(50000m), 100000000);
         var evt = new MarketDataEvent(
             sequence: 1,
             timestamp: TimestampUtils.GetTimestampMicros(),
-            side: Side.Buy,
-            priceTicks: PriceUtils.ToTicks(50000m),
-            quantity: 100000000,
             kind: EventKind.Update,
             instrumentId: _symbolId,
-            exchange: ExchangeEnum.BINANCE
+            exchange: ExchangeEnum.BINANCE,
+            updateCount: 1,
+            updates: entryArr
         );
 
         _orderBook.ApplyEvent(evt);
@@ -225,15 +226,16 @@ public class RingBufferBenchmarks
 
         for (int i = 0; i < _events.Length; i++)
         {
+            var entryArr = new PriceLevelEntryArray();
+            entryArr[0] = new PriceLevelEntry(Side.Buy, PriceUtils.ToTicks(50000m), 100000000);
             _events[i] = new MarketDataEvent(
                 sequence: i + 1,
                 timestamp: TimestampUtils.GetTimestampMicros(),
-                side: Side.Buy,
-                priceTicks: PriceUtils.ToTicks(50000m),
-                quantity: 100000000,
                 kind: EventKind.Update,
                 instrumentId: symbolId,
-                exchange: ExchangeEnum.BINANCE
+                exchange: ExchangeEnum.BINANCE,
+                updateCount: 1,
+                updates: entryArr
             );
         }
     }
@@ -616,15 +618,16 @@ public class MPSC_Struct_DisruptorBenchmarks
     {
         _events = new MarketDataEvent[1];
         var symbolId = SymbolUtils.GetSymbolId("BTCUSDT");
+        var entryArr = new PriceLevelEntryArray();
+        entryArr[0] = new PriceLevelEntry(Side.Buy, PriceUtils.ToTicks(50000m), 100000000);
         _events[0] = new MarketDataEvent(
             sequence: 1,
             timestamp: TimestampUtils.GetTimestampMicros(),
-            side: Side.Buy,
-            priceTicks: PriceUtils.ToTicks(50000m),
-            quantity: 100000000,
             kind: EventKind.Update,
             instrumentId: symbolId,
-            exchange: ExchangeEnum.BINANCE
+            exchange: ExchangeEnum.BINANCE,
+            updateCount: 1,
+            updates: entryArr
         );
 
         const int operationsPerProducer = 100_000;

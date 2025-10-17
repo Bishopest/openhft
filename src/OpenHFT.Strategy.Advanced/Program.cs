@@ -194,16 +194,16 @@ public class Program
                 };
 
                 var side = random.NextDouble() < 0.5 ? Side.Buy : Side.Sell;
-
+                var entryArr = new PriceLevelEntryArray();
+                entryArr[0] = new PriceLevelEntry(side, DecimalToPriceTicks(currentPrice), DecimalToQuantityTicks(quantity));
                 var marketEvent = new MarketDataEvent(
                     sequence: (long)(i * tradingPairs.Length + pair.symbolId),
                     timestamp: baseTimestamp + (i * 1000) + (pair.symbolId * 100),
-                    side: side,
-                    priceTicks: DecimalToPriceTicks(currentPrice),
-                    quantity: DecimalToQuantityTicks(quantity),
                     kind: eventKind,
                     instrumentId: pair.symbolId,
-                    exchange: ExchangeEnum.BINANCE
+                    exchange: ExchangeEnum.BINANCE,
+                    updateCount: 1,
+                    updates: entryArr
                 );
 
                 events.Add(marketEvent);
@@ -223,10 +223,10 @@ public class Program
                 exchange: ExchangeEnum.BINANCE,
                 baseCurrency: Currency.BTC,
                 quoteCurrency: Currency.USDT,
-                tickSize: 0.1m,
-                lotSize: 0.001m,
+                tickSize: Price.FromDecimal(0.1m),
+                lotSize: Quantity.FromDecimal(0.001m),
                 multiplier: 1m,
-                minOrderSize: 0.001m
+                minOrderSize: Quantity.FromDecimal(0.001m)
             )),
             new OrderBook(new CryptoPerpetual(
                 instrumentId: 1002,
@@ -234,10 +234,10 @@ public class Program
                 exchange: ExchangeEnum.BINANCE,
                 baseCurrency: Currency.ETH,
                 quoteCurrency: Currency.USDT,
-                tickSize: 0.01m,
-                lotSize: 0.01m,
+                tickSize: Price.FromDecimal(0.01m),
+                lotSize: Quantity.FromDecimal(0.01m),
                 multiplier: 1m,
-                minOrderSize: 0.01m
+                minOrderSize: Quantity.FromDecimal(0.01m)
             ))
         };
     }
@@ -266,7 +266,7 @@ public class Program
             _ => $"Symbol{marketEvent.InstrumentId}"
         };
 
-        return $"{marketEvent.Kind} | {symbolName} | ${PriceTicksToDecimal(marketEvent.PriceTicks):F2} | Vol: {PriceTicksToDecimal(marketEvent.Quantity):F4}";
+        return $"{marketEvent.Kind} | {symbolName} | ${PriceTicksToDecimal(marketEvent.Updates[0].PriceTicks):F2} | Vol: {PriceTicksToDecimal(marketEvent.Updates[0].Quantity):F4}";
     }
 
     private static async Task DisplayPerformanceSummary(IAdvancedStrategyManager strategyManager)

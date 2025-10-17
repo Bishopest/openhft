@@ -183,7 +183,7 @@ public class MarketMakingStrategy : BaseStrategy
         {
             yield return new OrderIntent(
                 clientOrderId: quoteState.BidOrderId,
-                type: OrderType.Limit, // Cancel is handled by gateway
+                type: OrderTypeEnum.Limit, // Cancel is handled by gateway
                 side: Side.Buy,
                 priceTicks: 0, // Cancel order
                 quantity: 0,
@@ -197,7 +197,7 @@ public class MarketMakingStrategy : BaseStrategy
         {
             yield return new OrderIntent(
                 clientOrderId: quoteState.AskOrderId,
-                type: OrderType.Limit,
+                type: OrderTypeEnum.Limit,
                 side: Side.Sell,
                 priceTicks: 0, // Cancel order
                 quantity: 0,
@@ -256,7 +256,7 @@ public class MarketMakingStrategy : BaseStrategy
 
             yield return new OrderIntent(
                 clientOrderId: bidOrderId,
-                type: OrderType.Limit,
+                type: OrderTypeEnum.Limit,
                 side: Side.Buy,
                 priceTicks: bidPrice,
                 quantity: bidSize,
@@ -283,7 +283,7 @@ public class MarketMakingStrategy : BaseStrategy
 
             yield return new OrderIntent(
                 clientOrderId: askOrderId,
-                type: OrderType.Limit,
+                type: OrderTypeEnum.Limit,
                 side: Side.Sell,
                 priceTicks: askPrice,
                 quantity: bidSize,

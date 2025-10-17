@@ -283,22 +283,26 @@ public static class TradingHubExtensions
         MarketDataEvent marketData)
     {
         var symbol = GetSymbolName(marketData.InstrumentId);
-        var price = PriceTicksToDecimal(marketData.PriceTicks);
-        var volume = QuantityTicksToDecimal(marketData.Quantity);
-        var side = marketData.Side.ToString();
-        var timestamp = marketData.Timestamp;
-
-        // Debug logging (commented to reduce console noise)
-        // Console.WriteLine($"Broadcasting: {symbol} - Price: {price}, Volume: {volume}, Side: {side}, Time: {timestamp:HH:mm:ss}");
-
-        await hubContext.Clients.Group("TradingUpdates").SendAsync("MarketDataUpdate", new
+        for (var i = 0; i < marketData.UpdateCount; i++)
         {
-            Symbol = symbol,
-            Price = price,
-            Volume = volume,
-            Side = side,
-            Timestamp = timestamp
-        });
+            var update = marketData.Updates[i];
+            var price = PriceTicksToDecimal(update.PriceTicks);
+            var volume = QuantityTicksToDecimal(update.Quantity);
+            var side = update.Side.ToString();
+            var timestamp = marketData.Timestamp;
+            // Debug logging (commented to reduce console noise)
+            // Console.WriteLine($"Broadcasting: {symbol} - Price: {price}, Volume: {volume}, Side: {side}, Time: {timestamp:HH:mm:ss}");
+
+            await hubContext.Clients.Group("TradingUpdates").SendAsync("MarketDataUpdate", new
+            {
+                Symbol = symbol,
+                Price = price,
+                Volume = volume,
+                Side = side,
+                Timestamp = timestamp
+            });
+        }
+
     }
 
     /// <summary>

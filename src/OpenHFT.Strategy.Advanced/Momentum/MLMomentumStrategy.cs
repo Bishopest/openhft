@@ -329,7 +329,7 @@ public class MLMomentumStrategy : IAdvancedStrategy
 
         return new OrderIntent(
             clientOrderId: GenerateOrderId(),
-            type: OrderType.Limit,
+            type: OrderTypeEnum.Limit,
             side: side,
             priceTicks: DecimalToPriceTicks(limitPrice),
             quantity: DecimalToQuantityTicks(signal.size),
@@ -429,7 +429,7 @@ public class MLMomentumStrategy : IAdvancedStrategy
         // Use market order for quick exit
         return new OrderIntent(
             clientOrderId: GenerateOrderId(),
-            type: OrderType.Market,
+            type: OrderTypeEnum.Market,
             side: side,
             priceTicks: 0, // Market order
             quantity: DecimalToQuantityTicks(size),
@@ -696,7 +696,7 @@ public class MLMomentumStrategy : IAdvancedStrategy
     {
         lock (context.UpdateLock)
         {
-            var currentPrice = PriceTicksToDecimal(marketEvent.PriceTicks);
+            var currentPrice = PriceTicksToDecimal(orderBook.GetMidPriceTicks());
 
             context.PriceHistory.Add(currentPrice);
             if (context.PriceHistory.Count > 100) // Keep rolling window
@@ -706,7 +706,7 @@ public class MLMomentumStrategy : IAdvancedStrategy
 
             if (marketEvent.Kind == EventKind.Trade)
             {
-                var volume = PriceTicksToDecimal(marketEvent.Quantity);
+                var volume = PriceTicksToDecimal(orderBook.GetBestAsk().quantity);
                 context.VolumeHistory.Add(volume);
 
                 if (context.VolumeHistory.Count > 100)

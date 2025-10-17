@@ -11,6 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../OpenHFT.Quote/OpenHFT.Quoting.csproj" />
     <ProjectReference Include="..\OpenHFT.Core\OpenHFT.Core.csproj" />
     <ProjectReference Include="..\OpenHFT.Book\OpenHFT.Book.csproj" />
   </ItemGroup>

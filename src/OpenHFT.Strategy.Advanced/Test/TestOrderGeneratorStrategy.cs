@@ -46,7 +46,7 @@ public class TestOrderGeneratorStrategy : IAdvancedStrategy
 
                 var order = new OrderIntent(
                     clientOrderId: TimestampUtils.GetTimestampMicros(),
-                    type: OrderType.Limit,
+                    type: OrderTypeEnum.Limit,
                     side: Side.Buy,
                     priceTicks: DecimalToPriceTicks(bestPrice.Value.bid * 0.99m), // 1% below bid
                     quantity: DecimalToQuantityTicks(0.001m), // Very small quantity

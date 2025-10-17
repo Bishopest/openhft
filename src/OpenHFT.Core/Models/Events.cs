@@ -105,14 +105,14 @@ public class MarketDataEventWrapper // class로 정의
 public readonly struct OrderIntent
 {
     public readonly long ClientOrderId;
-    public readonly OrderType Type;     // Limit/Market/Stop
+    public readonly OrderTypeEnum Type;     // Limit/Market/Stop
     public readonly Side Side;          // Buy/Sell
     public readonly long PriceTicks;    // For Limit orders
     public readonly long Quantity;
     public readonly long TimestampIn;   // Timestamp when intent was created
     public readonly int SymbolId;
 
-    public OrderIntent(long clientOrderId, OrderType type, Side side, long priceTicks,
+    public OrderIntent(long clientOrderId, OrderTypeEnum type, Side side, long priceTicks,
                       long quantity, long timestampIn, int symbolId)
     {
         ClientOrderId = clientOrderId;
