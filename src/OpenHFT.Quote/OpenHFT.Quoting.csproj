@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnablePreviewFeatures>True</EnablePreviewFeatures>
+    <Nullable>enable</Nullable>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../OpenHFT.Book/OpenHFT.Book.csproj" />
+    <ProjectReference Include="../OpenHFT.Core/OpenHFT.Core.csproj" />
+    <ProjectReference Include="../OpenHFT.Gateway/OpenHFT.Gateway.csproj" />
+    <ProjectReference Include="../OpenHFT.Processing/OpenHFT.Processing.csproj" />
+  </ItemGroup>
+  
+</Project>
