@@ -322,7 +322,7 @@ void SubscribeToMidPriceLogging(MarketDataManager manager, SubscriptionConfig su
             if (inst != null)
             {
                 // manager.SubscribeOrderBook(inst, "GlobalMidPriceLogger", OnOrderBookUpdate);
-                manager.SubscribeBestOrderBook(inst, "GlobalMidPriceLogger", OnBestOrderBookUpdate);
+                manager.SubscribeBestOrderBook(inst.InstrumentId, "GlobalMidPriceLogger", OnBestOrderBookUpdate);
             }
         }
 
@@ -379,7 +379,7 @@ void SubscribeToMidPriceDiffLogging(MarketDataManager manager, SubscriptionConfi
             if (inst != null)
             {
                 // manager.SubscribeOrderBook(inst, "GlobalMidPriceLogger", OnOrderBookUpdate);
-                manager.SubscribeBestOrderBook(inst, "GlobalMidPriceLogger", OnBestOrderBookUpdate);
+                manager.SubscribeBestOrderBook(inst.InstrumentId, "GlobalMidPriceLogger", OnBestOrderBookUpdate);
             }
         }
 
