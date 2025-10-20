@@ -1,8 +1,9 @@
 using System;
 using OpenHFT.Book.Core;
 using OpenHFT.Core.Models;
+using OpenHFT.Quoting.FairValue;
 
-namespace OpenHFT.Quoting.FairValue;
+namespace OpenHFT.Quoting.Interfaces;
 
 /// <summary>
 /// Represents an update to an instrument's calculated fair value.

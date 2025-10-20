@@ -1,0 +1,15 @@
+{
+  "subscriptions": [
+    {
+      "exchange": "bitmex",
+      "product-type": "perpetualfuture",
+      "symbols": [ "XBTUSD"]
+    },
+    {
+      "exchange": "binance",
+      "product-type": "perpetualfuture",
+      "symbols": [ "BTCUSDT"]
+    }
+  ],
+  "data-folder": "/Users/jskim/workspace/openhft/data"
+}

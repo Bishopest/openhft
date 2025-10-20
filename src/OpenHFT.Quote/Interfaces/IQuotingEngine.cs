@@ -13,5 +13,5 @@ public interface IQuotingEngine
     void Start();
     void Stop();
     void UpdateParameters(QuotingParameters newParameters);
-    void SetFairValueProvider(IFairValueProvider newProvider);
+    void SetFairValueProvider(FairValueModel model);
 }

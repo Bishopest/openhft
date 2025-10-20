@@ -64,6 +64,12 @@ public sealed class MarketMaker
             return;
         }
 
+        if (target.Ask.Price <= target.Bid.Price)
+        {
+            _logger.LogWarningWithCaller($"Self-crossed quote! ask price => {target.Ask.Price} , bid price => {target.Bid.Price}");
+            return;
+        }
+
         // 1. Determine the desired status for each side based on validation rules.
         var bidStatus = _quoteValidator.ShouldQuoteBeLive(target.Bid, Side.Buy)
             ? QuoteStatus.Live

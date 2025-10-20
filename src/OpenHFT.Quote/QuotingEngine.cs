@@ -16,10 +16,10 @@ public class QuotingEngine : IQuotingEngine
     private readonly ILogger _logger;
     private readonly MarketDataManager _marketDataManager;
     private readonly MarketMaker _marketMaker;
+    private readonly IFairValueProviderFactory _fairValueProviderFactory;
     private readonly object _lock = new();
-
-    private IFairValueProvider _fairValueProvider;
-    private QuotingParameters _parameters;
+    private IFairValueProvider? _fairValueProvider;
+    private QuotingParameters? _parameters;
 
     public Instrument QuotingInstrument { get; }
 
@@ -28,57 +28,98 @@ public class QuotingEngine : IQuotingEngine
         Instrument instrument,
         MarketDataManager marketDataManager,
         MarketMaker marketMaker,
-        IFairValueProvider initialFairValueProvider,
-        QuotingParameters initialParameters)
+        IFairValueProviderFactory fairValueProviderFactory)
     {
         _logger = logger;
         QuotingInstrument = instrument;
         _marketDataManager = marketDataManager;
         _marketMaker = marketMaker;
-        _fairValueProvider = initialFairValueProvider;
-        _parameters = initialParameters;
+        _fairValueProviderFactory = fairValueProviderFactory;
     }
 
     public void Start()
     {
+        if (_parameters == null)
+        {
+            _logger.LogWarningWithCaller($"Please set quoting paramters first for {QuotingInstrument.Symbol}");
+            return;
+        }
+
+        if (_fairValueProvider == null)
+        {
+            _logger.LogWarningWithCaller($"Please set fair value provider first for {QuotingInstrument.Symbol}");
+            return;
+        }
+
         _logger.LogInformationWithCaller($"Starting QuotingEngine for {QuotingInstrument.Symbol}.");
         _fairValueProvider.FairValueChanged += OnFairValueChanged;
-        _marketDataManager.SubscribeOrderBook(QuotingInstrument.InstrumentId, $"QuotingEngine_{QuotingInstrument.Symbol}_{_fairValueProvider.Model}", OnOrderBookUpdate);
+        _marketDataManager.SubscribeOrderBook(QuotingInstrument.InstrumentId, $"QuotingEngine_{QuotingInstrument.Symbol}_{_fairValueProvider?.Model}", OnOrderBookUpdate);
     }
 
     public void Stop()
     {
         _logger.LogInformationWithCaller($"Stopping QuotingEngine for {QuotingInstrument.Symbol}.");
-        _marketDataManager.UnsubscribeOrderBook(QuotingInstrument.InstrumentId, $"QuotingEngine_{QuotingInstrument.Symbol}_{_fairValueProvider.Model}");
-        _fairValueProvider.FairValueChanged -= OnFairValueChanged;
+        if (_fairValueProvider != null)
+        {
+            _marketDataManager.UnsubscribeOrderBook(QuotingInstrument.InstrumentId, $"QuotingEngine_{QuotingInstrument.Symbol}_{_fairValueProvider.Model}");
+            _fairValueProvider.FairValueChanged -= OnFairValueChanged;
+        }
         _ = _marketMaker.CancelAllQuotesAsync(); // Fire and forget cancel
     }
 
     public void UpdateParameters(QuotingParameters newParameters)
     {
+        if (newParameters.InstrumentId != QuotingInstrument.InstrumentId)
+        {
+            _logger.LogWarningWithCaller($"Invalid instrument id({newParameters.InstrumentId}), This is QuotingEngine for id({QuotingInstrument.InstrumentId}).");
+            return;
+        }
+
         lock (_lock)
         {
-            _logger.LogInformationWithCaller($"Updating parameters for Instrument {QuotingInstrument.Symbol}.");
+            if (newParameters == _parameters) return;
+
+            if (_parameters.HasValue && newParameters.FvModel != _parameters.Value.FvModel)
+            {
+                _ = _marketMaker.CancelAllQuotesAsync(); // Fire and forget cancel
+
+            }
+
+            SetFairValueProvider(newParameters.FvModel);
+            _logger.LogInformationWithCaller($"ASIS params => {_parameters}.");
             _parameters = newParameters;
+            _logger.LogInformationWithCaller($"Updating parameters for Instrument {QuotingInstrument.Symbol}.");
+            _logger.LogInformationWithCaller($"TOBE params => {newParameters}");
+            return;
         }
     }
 
-    public void SetFairValueProvider(IFairValueProvider newProvider)
+    public void SetFairValueProvider(FairValueModel model)
     {
-        lock (_lock)
+        if (_fairValueProvider != null)
         {
-            _logger.LogInformationWithCaller($"Swapping FairValueProvider for Instrument {QuotingInstrument.Symbol}.");
-            // Unsubscribe from the old provider
+            if (_fairValueProvider.Model == model)
+            {
+                return;
+            }
             _fairValueProvider.FairValueChanged -= OnFairValueChanged;
-            // Subscribe to the new one
-            _fairValueProvider = newProvider;
-            _fairValueProvider.FairValueChanged += OnFairValueChanged;
+            string oldSubscriptionKey = $"QuotingEngine_{QuotingInstrument.Symbol}_{_fairValueProvider.Model}";
+            _marketDataManager.UnsubscribeOrderBook(QuotingInstrument.InstrumentId, oldSubscriptionKey);
         }
+        var fairValueProvider = _fairValueProviderFactory.CreateProvider(model, QuotingInstrument);
+        _logger.LogInformationWithCaller($"Swapping FairValueProvider for Instrument {QuotingInstrument.Symbol}. New FairValueMOdel: {model}");
+        fairValueProvider.FairValueChanged += OnFairValueChanged;
+        _fairValueProvider = fairValueProvider;
+        string newSubscriptionKey = $"QuotingEngine_{QuotingInstrument.Symbol}_{model}";
+        _marketDataManager.SubscribeOrderBook(QuotingInstrument.InstrumentId, newSubscriptionKey, OnOrderBookUpdate);
     }
 
     private void OnOrderBookUpdate(object? sender, OrderBook ob)
     {
-        _fairValueProvider.Update(ob);
+        if (_fairValueProvider != null)
+        {
+            _fairValueProvider.Update(ob);
+        }
     }
 
     private void OnFairValueChanged(object? sender, FairValueUpdate update)
@@ -91,10 +132,15 @@ public class QuotingEngine : IQuotingEngine
 
     private void Requote(Price fairValue)
     {
+        if (!_parameters.HasValue)
+        {
+            return;
+        }
+
         QuotingParameters currentParams;
         lock (_lock)
         {
-            currentParams = _parameters;
+            currentParams = _parameters.Value;
         }
 
         if (fairValue.ToTicks() == 0) return;

@@ -2,7 +2,6 @@ namespace OpenHFT.Quoting.FairValue;
 
 public enum FairValueModel
 {
-    Raw,
+    Midp,
     FR,
-
 }
