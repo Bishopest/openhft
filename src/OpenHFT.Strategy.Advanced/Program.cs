@@ -1,9 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Strategy.Advanced;
-using OpenHFT.Strategy.Advanced.Arbitrage;
-using OpenHFT.Strategy.Advanced.MarketMaking;
-using OpenHFT.Strategy.Advanced.Momentum;
 using OpenHFT.Core.Models;
 using OpenHFT.Book.Core;
 using OpenHFT.Core.Instruments;
@@ -76,10 +73,6 @@ public class Program
         services.AddSingleton(config);
 
         // Register strategies
-        services.AddSingleton<TriangularArbitrageStrategy>();
-        services.AddSingleton<OptimalMarketMakingStrategy>();
-        services.AddSingleton<MLMomentumStrategy>();
-
         // Register managers
         services.AddSingleton<IAdvancedStrategyManager, AdvancedStrategyManager>();
         services.AddSingleton<RiskManager>();

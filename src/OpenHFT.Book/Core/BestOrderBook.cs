@@ -18,12 +18,12 @@ public class BestOrderBook
     private readonly ILogger<BestOrderBook>? _logger;
 
     // Best Bid
-    private long _bestBidPrice;
-    private long _bestBidQuantity;
+    private Price _bestBidPrice;
+    private Quantity _bestBidQuantity;
 
     // Best Ask
-    private long _bestAskPrice;
-    private long _bestAskQuantity;
+    private Price _bestAskPrice;
+    private Quantity _bestAskQuantity;
 
     // State
     private long _lastUpdateTimestamp;
@@ -72,13 +72,13 @@ public class BestOrderBook
 
             if (update.Side == Side.Buy)
             {
-                _bestBidPrice = update.PriceTicks;
-                _bestBidQuantity = update.Quantity;
+                _bestBidPrice = Price.FromTicks(update.PriceTicks);
+                _bestBidQuantity = Quantity.FromTicks(update.Quantity);
             }
             else // Side.Sell
             {
-                _bestAskPrice = update.PriceTicks;
-                _bestAskQuantity = update.Quantity;
+                _bestAskPrice = Price.FromTicks(update.PriceTicks);
+                _bestAskQuantity = Quantity.FromTicks(update.Quantity);
             }
         }
     }
@@ -87,7 +87,7 @@ public class BestOrderBook
     /// Gets the best bid price and quantity.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public (long priceTicks, long quantity) GetBestBid()
+    public (Price price, Quantity quantity) GetBestBid()
     {
         return (_bestBidPrice, _bestBidQuantity);
     }
@@ -96,7 +96,7 @@ public class BestOrderBook
     /// Gets the best ask price and quantity.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public (long priceTicks, long quantity) GetBestAsk()
+    public (Price price, Quantity quantity) GetBestAsk()
     {
         return (_bestAskPrice, _bestAskQuantity);
     }
@@ -105,22 +105,22 @@ public class BestOrderBook
     /// Gets the current spread in ticks.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public long GetSpreadTicks()
+    public Price GetSpread()
     {
         var bid = _bestBidPrice;
         var ask = _bestAskPrice;
-        return (bid > 0 && ask > 0) ? ask - bid : 0;
+        return (bid.ToTicks() > 0 && ask.ToTicks() > 0) ? ask - bid : Price.FromTicks(0);
     }
 
     /// <summary>
     /// Gets the mid price in ticks.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public long GetMidPriceTicks()
+    public Price GetMidPrice()
     {
         var bid = _bestBidPrice;
         var ask = _bestAskPrice;
-        return (bid > 0 && ask > 0) ? (bid + ask) / 2 : 0;
+        return (bid.ToTicks() > 0 && ask.ToTicks() > 0) ? Price.FromTicks((bid.ToTicks() + ask.ToTicks()) / 2) : Price.FromTicks(0);
     }
 
     /// <summary>
@@ -128,10 +128,10 @@ public class BestOrderBook
     /// </summary>
     public void Clear()
     {
-        _bestBidPrice = 0;
-        _bestBidQuantity = 0;
-        _bestAskPrice = 0;
-        _bestAskQuantity = 0;
+        _bestBidPrice = Price.FromTicks(0);
+        _bestBidQuantity = Quantity.FromTicks(0);
+        _bestAskPrice = Price.FromTicks(0);
+        _bestAskQuantity = Quantity.FromTicks(0);
         _lastUpdateTimestamp = 0;
         _updateCount = 0;
     }
@@ -143,18 +143,18 @@ public class BestOrderBook
     public string ToTerminalString()
     {
         var sb = new StringBuilder();
-        var (bidPriceTicks, bidQty) = GetBestBid();
-        var (askPriceTicks, askQty) = GetBestAsk();
+        var (bidPrice, bidQty) = GetBestBid();
+        var (askPrice, askQty) = GetBestAsk();
 
         // Assuming price ticks are convertible to decimal by dividing by 100.
-        var bidPrice = bidPriceTicks / 100.0m;
-        var askPrice = askPriceTicks / 100.0m;
-        var spread = (bidPrice > 0 && askPrice > 0) ? askPrice - bidPrice : 0m;
+        var bidPriceDecimal = bidPrice.ToDecimal();
+        var askPriceDecimal = askPrice.ToDecimal();
+        var spread = (bidPriceDecimal > 0 && askPriceDecimal > 0) ? askPriceDecimal - bidPriceDecimal : 0m;
 
-        var bidSizeStr = bidQty > 0 ? bidQty.ToString("N0") : " - ";
-        var bidPriceStr = bidPrice > 0 ? bidPrice.ToString("F2") : " - ";
-        var askPriceStr = askPrice > 0 ? askPrice.ToString("F2") : " - ";
-        var askSizeStr = askQty > 0 ? askQty.ToString("N0") : " - ";
+        var bidSizeStr = bidQty.ToTicks() > 0 ? bidQty.ToDecimal().ToString("N0") : " - ";
+        var bidPriceStr = bidPriceDecimal > 0 ? bidPriceDecimal.ToString("F2") : " - ";
+        var askPriceStr = askPriceDecimal > 0 ? askPriceDecimal.ToString("F2") : " - ";
+        var askSizeStr = askQty.ToTicks() > 0 ? askQty.ToDecimal().ToString("N0") : " - ";
         var spreadStr = spread > 0 ? $"[{spread:F2}]" : "";
 
         const int sizeWidth = 10;

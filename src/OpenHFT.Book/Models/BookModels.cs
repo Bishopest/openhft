@@ -9,8 +9,8 @@ namespace OpenHFT.Book.Models;
 /// </summary>
 public class PriceLevel
 {
-    public long PriceTicks { get; set; }
-    public long TotalQuantity { get; set; }
+    public Price Price { get; set; }
+    public Quantity TotalQuantity { get; set; }
     public long OrderCount { get; set; }
     public long LastUpdateSequence { get; set; }
     public long LastUpdateTimestamp { get; set; }
@@ -18,29 +18,29 @@ public class PriceLevel
     // L3 specific: list of individual orders at this level (for simulation)
     public List<OrderEntry>? Orders { get; set; }
 
-    public PriceLevel(long priceTicks)
+    public PriceLevel(Price price)
     {
-        PriceTicks = priceTicks;
-        TotalQuantity = 0;
+        Price = price;
+        TotalQuantity = Quantity.FromTicks(0);
         OrderCount = 0;
         LastUpdateSequence = 0;
         LastUpdateTimestamp = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Update(long quantity, long sequence, long timestamp)
+    public void Update(Quantity quantity, long sequence, long timestamp)
     {
         TotalQuantity = quantity;
         LastUpdateSequence = sequence;
         LastUpdateTimestamp = timestamp;
-        
+
         // Update order count (simplified - in real L3 this would be managed differently)
-        OrderCount = quantity > 0 ? Math.Max(1, OrderCount) : 0;
+        OrderCount = quantity.ToTicks() > 0 ? Math.Max(1, OrderCount) : 0;
     }
 
-    public bool IsEmpty => TotalQuantity <= 0;
+    public bool IsEmpty => TotalQuantity.ToTicks() <= 0;
 
-    public override string ToString() => $"{PriceTicks}@{TotalQuantity}({OrderCount})";
+    public override string ToString() => $"{Price}@{TotalQuantity}({OrderCount})";
 }
 
 /// <summary>
@@ -49,12 +49,12 @@ public class PriceLevel
 public class OrderEntry
 {
     public long OrderId { get; set; }
-    public long Quantity { get; set; }
+    public Quantity Quantity { get; set; }
     public long Timestamp { get; set; }
     public long Sequence { get; set; }
     public int Priority { get; set; } // Time priority within price level
 
-    public OrderEntry(long orderId, long quantity, long timestamp, long sequence)
+    public OrderEntry(long orderId, Quantity quantity, long timestamp, long sequence)
     {
         OrderId = orderId;
         Quantity = quantity;
@@ -71,7 +71,7 @@ public class OrderEntry
 /// </summary>
 public class BookSide
 {
-    private readonly SortedDictionary<long, PriceLevel> _levels;
+    private readonly SortedDictionary<Price, PriceLevel> _levels;
     private readonly Side _side;
     private readonly bool _isAscending;
 
@@ -79,30 +79,30 @@ public class BookSide
     {
         _side = side;
         _isAscending = side == Side.Sell; // Asks ascending, Bids descending
-        
+
         // Custom comparer for price levels
-        var comparer = _isAscending ? Comparer<long>.Default : Comparer<long>.Create((x, y) => y.CompareTo(x));
-        _levels = new SortedDictionary<long, PriceLevel>(comparer);
+        var comparer = _isAscending ? Comparer<Price>.Default : Comparer<Price>.Create((x, y) => y.CompareTo(x));
+        _levels = new SortedDictionary<Price, PriceLevel>(comparer);
     }
 
     public Side Side => _side;
     public int LevelCount => _levels.Count;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void UpdateLevel(long priceTicks, long quantity, long sequence, long timestamp)
+    public void UpdateLevel(Price price, Quantity quantity, long sequence, long timestamp)
     {
-        if (quantity <= 0)
+        if (quantity.ToTicks() <= 0)
         {
             // Remove level
-            _levels.Remove(priceTicks);
+            _levels.Remove(price);
         }
         else
         {
             // Add or update level
-            if (!_levels.TryGetValue(priceTicks, out var level))
+            if (!_levels.TryGetValue(price, out var level))
             {
-                level = new PriceLevel(priceTicks);
-                _levels[priceTicks] = level;
+                level = new PriceLevel(price);
+                _levels[price] = level;
             }
             level.Update(quantity, sequence, timestamp);
         }
@@ -122,9 +122,9 @@ public class BookSide
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public PriceLevel? GetLevel(long priceTicks)
+    public PriceLevel? GetLevel(Price price)
     {
-        return _levels.TryGetValue(priceTicks, out var level) ? level : null;
+        return _levels.TryGetValue(price, out var level) ? level : null;
     }
 
     public IEnumerable<PriceLevel> GetTopLevels(int count)
@@ -146,35 +146,35 @@ public class BookSide
     /// Calculate total depth (quantity) for top N levels
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public long GetDepth(int levels)
+    public Quantity GetDepth(int levels)
     {
-        long totalDepth = 0;
+        Quantity totalDepth = Quantity.FromTicks(0);
         int count = 0;
-        
+
         foreach (var level in _levels.Values)
         {
             if (count >= levels) break;
-            totalDepth += level.TotalQuantity;
+            totalDepth += level.TotalQuantity; // Uses Quantity's operator+
             count++;
         }
-        
+
         return totalDepth;
     }
 
     /// <summary>
     /// Get total quantity available at or better than specified price
     /// </summary>
-    public long GetQuantityAtOrBetter(long priceTicks)
+    public Quantity GetQuantityAtOrBetter(Price price)
     {
-        long totalQuantity = 0;
-        
+        Quantity totalQuantity = Quantity.FromTicks(0);
+
         foreach (var kvp in _levels)
         {
             var levelPrice = kvp.Key;
             var level = kvp.Value;
-            
-            bool includeLevel = _side == Side.Buy ? levelPrice >= priceTicks : levelPrice <= priceTicks;
-            
+
+            bool includeLevel = _side == Side.Buy ? levelPrice >= price : levelPrice <= price;
+
             if (includeLevel)
             {
                 totalQuantity += level.TotalQuantity;
@@ -184,7 +184,7 @@ public class BookSide
                 break; // Levels are sorted, so we can stop here
             }
         }
-        
+
         return totalQuantity;
     }
 }

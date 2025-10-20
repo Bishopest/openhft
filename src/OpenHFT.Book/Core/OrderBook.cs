@@ -100,14 +100,14 @@ public class OrderBook
                 for (int i = 0; i < mdEvent.UpdateCount; i++)
                 {
                     var update = mdEvent.Updates[i];
-                    UpdateLevel(update.Side, update.PriceTicks, update.Quantity, mdEvent.Sequence, mdEvent.Timestamp);
+                    UpdateLevel(update.Side, Price.FromTicks(update.PriceTicks), Quantity.FromTicks(update.Quantity), mdEvent.Sequence, mdEvent.Timestamp);
                 }
                 return true;
             case EventKind.Delete:
                 for (int i = 0; i < mdEvent.UpdateCount; i++)
                 {
                     var update = mdEvent.Updates[i];
-                    UpdateLevel(update.Side, update.PriceTicks, 0, mdEvent.Sequence, mdEvent.Timestamp);
+                    UpdateLevel(update.Side, Price.FromTicks(update.PriceTicks), Quantity.FromTicks(0), mdEvent.Sequence, mdEvent.Timestamp);
                 }
                 return true;
 
@@ -118,10 +118,10 @@ public class OrderBook
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void UpdateLevel(Side side, long priceTicks, long quantity, long sequence, long timestamp)
+    private void UpdateLevel(Side side, Price price, Quantity quantity, long sequence, long timestamp)
     {
         var bookSide = side == Side.Buy ? _bids : _asks;
-        bookSide.UpdateLevel(priceTicks, quantity, sequence, timestamp);
+        bookSide.UpdateLevel(price, quantity, sequence, timestamp);
     }
 
     private void ProcessTrade(in MarketDataEvent mdEvent)
@@ -150,7 +150,7 @@ public class OrderBook
         for (int i = 0; i < mdEvent.UpdateCount; i++)
         {
             var level = mdEvent.Updates[i];
-            UpdateLevel(level.Side, level.PriceTicks, level.Quantity, mdEvent.Sequence, mdEvent.Timestamp);
+            UpdateLevel(level.Side, Price.FromTicks(level.PriceTicks), Quantity.FromTicks(level.Quantity), mdEvent.Sequence, mdEvent.Timestamp);
         }
         _logger?.LogInformationWithCaller($"Processed snapshot for {Symbol} with {mdEvent.UpdateCount} levels at sequence {mdEvent.Sequence}");
     }
@@ -159,42 +159,42 @@ public class OrderBook
     /// Get the best bid price and quantity
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public (long priceTicks, long quantity) GetBestBid()
+    public (Price price, Quantity quantity) GetBestBid()
     {
         var bestBid = _bids.GetBestLevel();
-        return bestBid != null ? (bestBid.PriceTicks, bestBid.TotalQuantity) : (0, 0);
+        return bestBid != null ? (bestBid.Price, bestBid.TotalQuantity) : (Price.FromTicks(0), Quantity.FromTicks(0));
     }
 
     /// <summary>
     /// Get the best ask price and quantity
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public (long priceTicks, long quantity) GetBestAsk()
+    public (Price price, Quantity quantity) GetBestAsk()
     {
         var bestAsk = _asks.GetBestLevel();
-        return bestAsk != null ? (bestAsk.PriceTicks, bestAsk.TotalQuantity) : (0, 0);
+        return bestAsk != null ? (bestAsk.Price, bestAsk.TotalQuantity) : (Price.FromTicks(0), Quantity.FromTicks(0));
     }
 
     /// <summary>
     /// Get the current spread in ticks
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public long GetSpreadTicks()
+    public Price GetSpread()
     {
         var (bidPrice, _) = GetBestBid();
         var (askPrice, _) = GetBestAsk();
-        return bidPrice > 0 && askPrice > 0 ? askPrice - bidPrice : 0;
+        return bidPrice.ToTicks() > 0 && askPrice.ToTicks() > 0 ? askPrice - bidPrice : Price.FromTicks(0);
     }
 
     /// <summary>
     /// Get the mid price in ticks
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public long GetMidPriceTicks()
+    public Price GetMidPrice()
     {
         var (bidPrice, _) = GetBestBid();
         var (askPrice, _) = GetBestAsk();
-        return bidPrice > 0 && askPrice > 0 ? (bidPrice + askPrice) / 2 : 0;
+        return bidPrice.ToTicks() > 0 && askPrice.ToTicks() > 0 ? Price.FromTicks((bidPrice.ToTicks() + askPrice.ToTicks()) / 2) : Price.FromTicks(0);
     }
 
     /// <summary>
@@ -216,16 +216,17 @@ public class OrderBook
         var askDepth = _asks.GetDepth(levels);
 
         var totalDepth = bidDepth + askDepth;
-        if (totalDepth == 0) return 0.0;
+        if (totalDepth.ToTicks() == 0) return 0.0;
 
-        return (double)(bidDepth - askDepth) / totalDepth;
+        var depthDiff = (double)(bidDepth - askDepth).ToDecimal();
+        return depthDiff / (double)totalDepth.ToDecimal();
     }
 
     /// <summary>
     /// Get total depth for a side
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public long GetDepth(Side side, int levels)
+    public Quantity GetDepth(Side side, int levels)
     {
         var bookSide = side == Side.Buy ? _bids : _asks;
         return bookSide.GetDepth(levels);
@@ -238,7 +239,7 @@ public class OrderBook
     {
         var (bidPrice, _) = GetBestBid();
         var (askPrice, _) = GetBestAsk();
-        return bidPrice > 0 && askPrice > 0 && bidPrice >= askPrice;
+        return bidPrice.ToTicks() > 0 && askPrice.ToTicks() > 0 && bidPrice >= askPrice;
     }
 
     /// <summary>
@@ -260,10 +261,10 @@ public class OrderBook
     public BookSnapshot GetSnapshot(int levels = 10)
     {
         var bidLevels = _bids.GetTopLevels(levels).Select(l =>
-            new BookLevel(l.PriceTicks, l.TotalQuantity, l.OrderCount)).ToArray();
+            new BookLevel(l.Price.ToTicks(), l.TotalQuantity.ToTicks(), l.OrderCount)).ToArray();
 
         var askLevels = _asks.GetTopLevels(levels).Select(l =>
-            new BookLevel(l.PriceTicks, l.TotalQuantity, l.OrderCount)).ToArray();
+            new BookLevel(l.Price.ToTicks(), l.TotalQuantity.ToTicks(), l.OrderCount)).ToArray();
 
         return new BookSnapshot
         {
@@ -294,18 +295,18 @@ public class OrderBook
             // Check for negative quantities (basic validation)
             foreach (var level in _bids.GetAllLevels())
             {
-                if (level.TotalQuantity < 0)
+                if (level.TotalQuantity.ToTicks() < 0)
                 {
-                    _logger?.LogWarningWithCaller($"Negative quantity in bids for {Symbol}: {level.PriceTicks}@{level.TotalQuantity}");
+                    _logger?.LogWarningWithCaller($"Negative quantity in bids for {Symbol}: {level.Price}@{level.TotalQuantity}");
                     return false;
                 }
             }
 
             foreach (var level in _asks.GetAllLevels())
             {
-                if (level.TotalQuantity < 0)
+                if (level.TotalQuantity.ToTicks() < 0)
                 {
-                    _logger?.LogWarningWithCaller($"Negative quantity in asks for {Symbol}: {level.PriceTicks}@{level.TotalQuantity}");
+                    _logger?.LogWarningWithCaller($"Negative quantity in asks for {Symbol}: {level.Price}@{level.TotalQuantity}");
                     return false;
                 }
             }
@@ -323,7 +324,7 @@ public class OrderBook
     {
         var (bidPrice, bidQty) = GetBestBid();
         var (askPrice, askQty) = GetBestAsk();
-        return $"{Symbol}: {bidPrice}@{bidQty} | {askPrice}@{askQty} (Spread: {GetSpreadTicks()})";
+        return $"{Symbol}: {bidPrice}@{bidQty} | {askPrice}@{askQty} (Spread: {GetSpread()})";
     }
 
     /// <summary>
@@ -337,7 +338,7 @@ public class OrderBook
         var bids = GetTopLevels(Side.Buy, levels).ToArray();
         var asks = GetTopLevels(Side.Sell, levels).ToArray();
 
-        var spread = GetSpreadTicks() / 100.0m;
+        var spread = GetSpread().ToDecimal();
 
         const int sizeWidth = 10;
         const int priceWidth = 10;
@@ -357,11 +358,11 @@ public class OrderBook
             var ask = i < asks.Length ? asks[i] : null;
 
             // Assuming price ticks are convertible to decimal by dividing by 100.
-            var bidPrice = bid != null ? (bid.PriceTicks / 100.0m).ToString("F2") : "";
-            var bidSize = bid != null ? bid.TotalQuantity.ToString("N0") : "";
+            var bidPrice = bid != null ? bid.Price.ToDecimal().ToString("F2") : "";
+            var bidSize = bid != null ? bid.TotalQuantity.ToDecimal().ToString("N0") : "";
 
-            var askPrice = ask != null ? (ask.PriceTicks / 100.0m).ToString("F2") : "";
-            var askSize = ask != null ? ask.TotalQuantity.ToString("N0") : "";
+            var askPrice = ask != null ? ask.Price.ToDecimal().ToString("F2") : "";
+            var askSize = ask != null ? ask.TotalQuantity.ToDecimal().ToString("N0") : "";
 
             string spreadStr = "";
             if (i == 0 && spread > 0)

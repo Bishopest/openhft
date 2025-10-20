@@ -264,13 +264,13 @@ void BuildStatisticsString(StringBuilder sb, ConcurrentDictionary<ExchangeEnum, 
 
 void SubscribeToMidPriceLogging(MarketDataManager manager, SubscriptionConfig subConfig, IInstrumentRepository repo)
 {
-    var lastOrderBookMidPrices = new ConcurrentDictionary<int, long>();
-    var lastBestOrderBookMidPrices = new ConcurrentDictionary<int, long>();
+    var lastOrderBookMidPrices = new ConcurrentDictionary<int, Price>();
+    var lastBestOrderBookMidPrices = new ConcurrentDictionary<int, Price>();
 
     void OnOrderBookUpdate(object? sender, OrderBook book)
     {
-        var newMidPrice = book.GetMidPriceTicks();
-        if (newMidPrice == 0) return;
+        var newMidPrice = book.GetMidPrice();
+        if (newMidPrice.ToDecimal() == 0) return;
 
         var lastMidPrice = lastOrderBookMidPrices.GetOrAdd(book.InstrumentId, newMidPrice);
 
@@ -286,8 +286,8 @@ void SubscribeToMidPriceLogging(MarketDataManager manager, SubscriptionConfig su
 
     void OnBestOrderBookUpdate(object? sender, BestOrderBook book)
     {
-        var newMidPrice = book.GetMidPriceTicks();
-        if (newMidPrice == 0) return;
+        var newMidPrice = book.GetMidPrice();
+        if (newMidPrice.ToDecimal() == 0) return;
 
         var lastMidPrice = lastBestOrderBookMidPrices.GetOrAdd(book.InstrumentId, newMidPrice);
 
@@ -331,12 +331,12 @@ void SubscribeToMidPriceLogging(MarketDataManager manager, SubscriptionConfig su
 
 void SubscribeToMidPriceDiffLogging(MarketDataManager manager, SubscriptionConfig subConfig, IInstrumentRepository repo)
 {
-    var lastBestOrderBookMidPrices = new ConcurrentDictionary<int, long>();
+    var lastBestOrderBookMidPrices = new ConcurrentDictionary<int, Price>();
 
     void OnBestOrderBookUpdate(object? sender, BestOrderBook book)
     {
-        var newMidPrice = book.GetMidPriceTicks();
-        if (newMidPrice == 0) return;
+        var newMidPrice = book.GetMidPrice();
+        if (newMidPrice.ToDecimal() == 0) return;
 
         var lastMidPrice = lastBestOrderBookMidPrices.GetOrAdd(book.InstrumentId, newMidPrice);
 
@@ -348,7 +348,7 @@ void SubscribeToMidPriceDiffLogging(MarketDataManager manager, SubscriptionConfi
                 // staticLogger.LogInformationWithCaller($"[BestOrderBook] {book.Symbol} Mid-Price changed: {lastMidPrice} -> {newMidPrice}");
                 var baseMid = lastBestOrderBookMidPrices.Where(kvp => kvp.Key != book.InstrumentId).FirstOrDefault().Value;
                 var diff = book.SourceExchange == ExchangeEnum.BINANCE ? (newMidPrice - baseMid) : (baseMid - newMidPrice);
-                if (diff > -650000 | diff < -1000000)
+                if (diff.ToTicks() > -650000 | diff.ToTicks() < -1000000)
                 {
                     staticLogger.LogInformationWithCaller($"[BestOrderBook] [Binance - Bitmex] {book.Symbol} Mid-Price diff: {diff}");
                 }
@@ -382,7 +382,6 @@ void SubscribeToMidPriceDiffLogging(MarketDataManager manager, SubscriptionConfi
                 manager.SubscribeBestOrderBook(inst.InstrumentId, "GlobalMidPriceLogger", OnBestOrderBookUpdate);
             }
         }
-
     }
 }
 
