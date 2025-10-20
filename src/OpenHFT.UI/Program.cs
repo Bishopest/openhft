@@ -12,9 +12,6 @@ using OpenHFT.Feed.Adapters;
 using OpenHFT.Strategy.Interfaces;
 using OpenHFT.Strategy.Strategies;
 using OpenHFT.Strategy.Advanced;
-using OpenHFT.Strategy.Advanced.Arbitrage;
-using OpenHFT.Strategy.Advanced.MarketMaking;
-using OpenHFT.Strategy.Advanced.Momentum;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -103,7 +100,6 @@ static void RegisterHftServices(IServiceCollection services, IConfiguration conf
 
     // Strategy components
     services.AddSingleton<IStrategyEngine, StrategyEngine>();
-    services.AddSingleton<IStrategy, MarketMakingStrategy>();
 
     // Advanced Strategy Manager configuration
     services.AddSingleton<AdvancedStrategyConfig>(provider =>
@@ -137,10 +133,6 @@ static void RegisterHftServices(IServiceCollection services, IConfiguration conf
     });
 
     // Register individual advanced strategies
-    services.AddSingleton<TriangularArbitrageStrategy>();
-    services.AddSingleton<OptimalMarketMakingStrategy>();
-    services.AddSingleton<MLMomentumStrategy>();
-
     services.AddSingleton<IAdvancedStrategyManager, AdvancedStrategyManager>();
 
     // Register AdvancedStrategyManager as hosted service to auto-initialize strategies

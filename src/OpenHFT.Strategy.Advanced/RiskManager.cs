@@ -474,7 +474,7 @@ public class RiskManager
             var level = bookLevels[i];
             if (level != null && !level.IsEmpty)
             {
-                totalLiquidity += PriceTicksToDecimal(level.TotalQuantity);
+                totalLiquidity += level.TotalQuantity.ToDecimal();
             }
         }
 

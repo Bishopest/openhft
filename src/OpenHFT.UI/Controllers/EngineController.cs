@@ -134,8 +134,8 @@ public class EngineController : ControllerBase
                 LastSequence = book.LastSequence,
                 BestBid = book.GetBestBid(),
                 BestAsk = book.GetBestAsk(),
-                Spread = book.GetSpreadTicks(),
-                MidPrice = book.GetMidPriceTicks()
+                Spread = book.GetSpread(),
+                MidPrice = book.GetMidPrice()
             }).ToArray()
         };
 

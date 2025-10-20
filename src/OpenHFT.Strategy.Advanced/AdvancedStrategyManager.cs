@@ -2,9 +2,6 @@ using OpenHFT.Core.Models;
 using OpenHFT.Book.Models;
 using OpenHFT.Book.Core;
 using OpenHFT.Strategy.Interfaces;
-using OpenHFT.Strategy.Advanced.Arbitrage;
-using OpenHFT.Strategy.Advanced.MarketMaking;
-using OpenHFT.Strategy.Advanced.Momentum;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -114,48 +111,6 @@ public class AdvancedStrategyManager : BackgroundService, IAdvancedStrategyManag
 
         try
         {
-            // Initialize Triangular Arbitrage Strategy
-            if (_config.EnableArbitrage)
-            {
-                var arbitrageStrategy = _serviceProvider.GetRequiredService<TriangularArbitrageStrategy>();
-                await RegisterStrategy(arbitrageStrategy, new StrategyAllocation
-                {
-                    StrategyName = arbitrageStrategy.Name,
-                    CapitalAllocation = _config.ArbitrageAllocation,
-                    MaxPosition = _config.MaxArbitragePosition,
-                    RiskLimit = _config.ArbitrageRiskLimit,
-                    IsEnabled = true
-                });
-            }
-
-            // Initialize Optimal Market Making Strategy
-            if (_config.EnableMarketMaking)
-            {
-                var marketMakingStrategy = _serviceProvider.GetRequiredService<OptimalMarketMakingStrategy>();
-                await RegisterStrategy(marketMakingStrategy, new StrategyAllocation
-                {
-                    StrategyName = marketMakingStrategy.Name,
-                    CapitalAllocation = _config.MarketMakingAllocation,
-                    MaxPosition = _config.MaxMarketMakingPosition,
-                    RiskLimit = _config.MarketMakingRiskLimit,
-                    IsEnabled = true
-                });
-            }
-
-            // Initialize ML Momentum Strategy
-            if (_config.EnableMomentum)
-            {
-                var momentumStrategy = _serviceProvider.GetRequiredService<MLMomentumStrategy>();
-                await RegisterStrategy(momentumStrategy, new StrategyAllocation
-                {
-                    StrategyName = momentumStrategy.Name,
-                    CapitalAllocation = _config.MomentumAllocation,
-                    MaxPosition = _config.MaxMomentumPosition,
-                    RiskLimit = _config.MomentumRiskLimit,
-                    IsEnabled = true
-                });
-            }
-
             _logger.LogInformation("Initialized {StrategyCount} advanced strategies", _strategies.Count);
         }
         catch (Exception ex)

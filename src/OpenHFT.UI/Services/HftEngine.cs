@@ -283,13 +283,13 @@ public class HftEngine : BackgroundService
         {
             var (bidPrice, bidQty) = book.GetBestBid();
             var (askPrice, askQty) = book.GetBestAsk();
-            var spread = book.GetSpreadTicks();
+            var spread = book.GetSpread();
 
             _logger.LogInformation(
                 "{Symbol}: {BidPrice}@{BidQty} | {AskPrice}@{AskQty} (Spread: {Spread}, Updates: {Updates})",
                 symbol,
-                OpenHFT.Core.Utils.PriceUtils.FromTicks(bidPrice), bidQty,
-                OpenHFT.Core.Utils.PriceUtils.FromTicks(askPrice), askQty,
+                bidPrice.ToDecimal(), bidQty,
+                askPrice.ToDecimal(), askQty,
                 spread, book.UpdateCount);
         }
     }

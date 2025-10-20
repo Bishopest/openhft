@@ -190,8 +190,8 @@ public class OrderBookBenchmarks
     [Benchmark]
     public void GetSpreadAndMid()
     {
-        var spread = _orderBook.GetSpreadTicks();
-        var mid = _orderBook.GetMidPriceTicks();
+        var spread = _orderBook.GetSpread();
+        var mid = _orderBook.GetMidPrice();
     }
 
     [Benchmark]
