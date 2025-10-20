@@ -81,11 +81,11 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         // Arrange
         var orderBook = new OrderBook(_btc, _logger);
         var symbolId = SymbolUtils.GetSymbolId("BTCUSDT");
-        var price = Price.FromDecimal(50000m); // $50,000
-        var quantity = Quantity.FromDecimal(1m); // 1 BTC
+        var price = 50000m; // $50,000
+        var quantity = 1m; // 1 BTC
 
         var updates = new PriceLevelEntryArray();
-        updates[0] = new PriceLevelEntry(Side.Buy, price.ToTicks(), quantity.ToTicks());
+        updates[0] = new PriceLevelEntry(Side.Buy, price, quantity);
 
         var marketDataEvent = new MarketDataEvent(
             sequence: 1,
@@ -106,8 +106,8 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         orderBook.LastSequence.Should().Be(1);
 
         var (bid, bidQty) = orderBook.GetBestBid();
-        bid.Should().Be(price);
-        bidQty.Should().Be(quantity);
+        bid.Should().Be(Price.FromDecimal(price));
+        bidQty.Should().Be(Quantity.FromDecimal(quantity));
     }
 
     [Test]
@@ -116,11 +116,11 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         // Arrange
         var orderBook = new OrderBook(_btc, _logger);
         var symbolId = SymbolUtils.GetSymbolId("BTCUSDT");
-        var price = Price.FromDecimal(50100m); // $50,100
-        var quantity = Quantity.FromDecimal(0.5m); // 0.5 BTC
+        var price = 50100m; // $50,100
+        var quantity = 0.5m; // 0.5 BTC
 
         var updates = new PriceLevelEntryArray();
-        updates[0] = new PriceLevelEntry(Side.Sell, price.ToTicks(), quantity.ToTicks());
+        updates[0] = new PriceLevelEntry(Side.Sell, price, quantity);
 
         var marketDataEvent = new MarketDataEvent(
             sequence: 1,
@@ -139,8 +139,8 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         result.Should().BeTrue();
 
         var (ask, askQty) = orderBook.GetBestAsk();
-        ask.Should().Be(price);
-        askQty.Should().Be(quantity);
+        ask.Should().Be(Price.FromDecimal(price));
+        askQty.Should().Be(Quantity.FromDecimal(quantity));
     }
 
     [Test]
@@ -150,14 +150,14 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         var orderBook = new OrderBook(_btc, _logger);
         var symbolId = SymbolUtils.GetSymbolId("BTCUSDT");
         var exchange = ExchangeEnum.BINANCE;
-        var bidPrice = Price.FromDecimal(50000m);
-        var askPrice = Price.FromDecimal(50100m);
+        var bidPrice = 50000m;
+        var askPrice = 50100m;
         var expectedSpread = askPrice - bidPrice;
 
         var bidUpdates = new PriceLevelEntryArray();
-        bidUpdates[0] = new PriceLevelEntry(Side.Buy, bidPrice.ToTicks(), Quantity.FromDecimal(1m).ToTicks());
+        bidUpdates[0] = new PriceLevelEntry(Side.Buy, bidPrice, 1m);
         var askUpdates = new PriceLevelEntryArray();
-        askUpdates[0] = new PriceLevelEntry(Side.Sell, askPrice.ToTicks(), Quantity.FromDecimal(1m).ToTicks());
+        askUpdates[0] = new PriceLevelEntry(Side.Sell, askPrice, 1m);
 
         // Add bid
         var bidEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), EventKind.Add, symbolId, exchange,
@@ -173,7 +173,7 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         var spread = orderBook.GetSpread();
 
         // Assert
-        spread.Should().Be(expectedSpread);
+        spread.Should().Be(Price.FromDecimal(expectedSpread));
     }
 
     [Test]
@@ -183,14 +183,14 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         var orderBook = new OrderBook(_btc, _logger);
         var symbolId = SymbolUtils.GetSymbolId("BTCUSDT");
         var exchange = ExchangeEnum.BINANCE;
-        var bidPrice = Price.FromDecimal(50000m);
-        var askPrice = Price.FromDecimal(50100m);
-        var expectedMid = Price.FromTicks((bidPrice.ToTicks() + askPrice.ToTicks()) / 2);
+        var bidPrice = 50000m;
+        var askPrice = 50100m;
+        var expectedMid = Price.FromDecimal((bidPrice + askPrice) / 2m);
 
         var bidUpdates = new PriceLevelEntryArray();
-        bidUpdates[0] = new PriceLevelEntry(Side.Buy, bidPrice.ToTicks(), Quantity.FromDecimal(1m).ToTicks());
+        bidUpdates[0] = new PriceLevelEntry(Side.Buy, bidPrice, 1m);
         var askUpdates = new PriceLevelEntryArray();
-        askUpdates[0] = new PriceLevelEntry(Side.Sell, askPrice.ToTicks(), Quantity.FromDecimal(1m).ToTicks());
+        askUpdates[0] = new PriceLevelEntry(Side.Sell, askPrice, 1m);
 
         // Add bid and ask
         var bidEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), EventKind.Add, symbolId, exchange,
@@ -215,11 +215,11 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         var orderBook = new OrderBook(_btc, _logger);
         var symbolId = SymbolUtils.GetSymbolId("BTCUSDT");
         var exchange = ExchangeEnum.BINANCE;
-        var price = Price.FromDecimal(50000m);
-        var quantity = Quantity.FromDecimal(1m);
+        var price = 50000m;
+        var quantity = 1m;
 
         var addUpdates = new PriceLevelEntryArray();
-        addUpdates[0] = new PriceLevelEntry(Side.Buy, price.ToTicks(), quantity.ToTicks());
+        addUpdates[0] = new PriceLevelEntry(Side.Buy, price, quantity);
 
         // Add bid
         var addEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), EventKind.Add, symbolId, exchange,
@@ -228,11 +228,11 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
 
         // Verify bid exists
         var (bid, bidQty) = orderBook.GetBestBid();
-        bid.Should().Be(price);
-        bidQty.Should().Be(quantity);
+        bid.Should().Be(Price.FromDecimal(price));
+        bidQty.Should().Be(Quantity.FromDecimal(quantity));
 
         var deleteUpdates = new PriceLevelEntryArray();
-        deleteUpdates[0] = new PriceLevelEntry(Side.Buy, price.ToTicks(), 0);
+        deleteUpdates[0] = new PriceLevelEntry(Side.Buy, price, 0);
 
         // Delete the bid
         var deleteEvent = new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), EventKind.Delete, symbolId, exchange,
@@ -254,9 +254,9 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         var exchange = ExchangeEnum.BINANCE;
 
         var bidUpdates = new PriceLevelEntryArray();
-        bidUpdates[0] = new PriceLevelEntry(Side.Buy, Price.FromDecimal(50000m).ToTicks(), Quantity.FromDecimal(1m).ToTicks());
+        bidUpdates[0] = new PriceLevelEntry(Side.Buy, 50000m, 1m);
         var askUpdates = new PriceLevelEntryArray();
-        askUpdates[0] = new PriceLevelEntry(Side.Sell, Price.FromDecimal(50100m).ToTicks(), Quantity.FromDecimal(1m).ToTicks());
+        askUpdates[0] = new PriceLevelEntry(Side.Sell, 50100m, 1m);
 
         var bidEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), EventKind.Add, symbolId, exchange,
             updateCount: 1, updates: bidUpdates);
@@ -283,10 +283,10 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
 
         // Add multiple levels
         var updates = new PriceLevelEntryArray();
-        updates[0] = new PriceLevelEntry(Side.Buy, Price.FromDecimal(50000m).ToTicks(), Quantity.FromDecimal(1m).ToTicks());
-        updates[1] = new PriceLevelEntry(Side.Buy, Price.FromDecimal(49990m).ToTicks(), Quantity.FromDecimal(0.5m).ToTicks());
-        updates[2] = new PriceLevelEntry(Side.Sell, Price.FromDecimal(50010m).ToTicks(), Quantity.FromDecimal(0.75m).ToTicks());
-        updates[3] = new PriceLevelEntry(Side.Sell, Price.FromDecimal(50020m).ToTicks(), Quantity.FromDecimal(0.25m).ToTicks());
+        updates[0] = new PriceLevelEntry(Side.Buy, 50000m, 1m);
+        updates[1] = new PriceLevelEntry(Side.Buy, 49990m, 0m);
+        updates[2] = new PriceLevelEntry(Side.Sell, 50010m, 0m);
+        updates[3] = new PriceLevelEntry(Side.Sell, 50020m, 0m);
 
         var batchEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), EventKind.Add, symbolId, exchange,
             updateCount: 4, updates: updates);
@@ -321,14 +321,14 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
 
         // 1. Add initial data
         var initialUpdates = new PriceLevelEntryArray();
-        initialUpdates[0] = new PriceLevelEntry(Side.Buy, Price.FromDecimal(49000m).ToTicks(), Quantity.FromDecimal(1m).ToTicks());
+        initialUpdates[0] = new PriceLevelEntry(Side.Buy, 49000m, 1m);
         var initialEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), EventKind.Add, symbolId, exchange, updateCount: 1, updates: initialUpdates);
         orderBook.ApplyEvent(initialEvent);
 
         // 2. Prepare snapshot data
         var snapshotUpdates = new PriceLevelEntryArray();
-        snapshotUpdates[0] = new PriceLevelEntry(Side.Buy, Price.FromDecimal(50000m).ToTicks(), Quantity.FromDecimal(2m).ToTicks());
-        snapshotUpdates[1] = new PriceLevelEntry(Side.Sell, Price.FromDecimal(50010m).ToTicks(), Quantity.FromDecimal(3m).ToTicks());
+        snapshotUpdates[0] = new PriceLevelEntry(Side.Buy, 50000m, 2m);
+        snapshotUpdates[1] = new PriceLevelEntry(Side.Sell, 50010m, 3m);
         var snapshotEvent = new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), EventKind.Snapshot, symbolId, exchange, updateCount: 2, updates: snapshotUpdates);
 
         // Act
@@ -359,12 +359,12 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         var exchange = ExchangeEnum.BINANCE;
 
         var updates1 = new PriceLevelEntryArray();
-        updates1[0] = new PriceLevelEntry(Side.Buy, Price.FromDecimal(50000m).ToTicks(), Quantity.FromDecimal(1m).ToTicks());
+        updates1[0] = new PriceLevelEntry(Side.Buy, 50000m, 1m);
         var event1 = new MarketDataEvent(10, TimestampUtils.GetTimestampMicros(), EventKind.Add, symbolId, exchange, updateCount: 1, updates: updates1);
         orderBook.ApplyEvent(event1);
 
         var updates2 = new PriceLevelEntryArray();
-        updates2[0] = new PriceLevelEntry(Side.Buy, Price.FromDecimal(50001m).ToTicks(), Quantity.FromDecimal(1m).ToTicks());
+        updates2[0] = new PriceLevelEntry(Side.Buy, 50001m, 1m);
         var outOfOrderEvent = new MarketDataEvent(9, TimestampUtils.GetTimestampMicros(), EventKind.Add, symbolId, exchange, updateCount: 1, updates: updates2);
 
         // Act

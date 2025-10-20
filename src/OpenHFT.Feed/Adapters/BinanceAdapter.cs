@@ -54,7 +54,7 @@ public class BinanceAdapter : BaseFeedAdapter
             var isBuyerMaker = data.GetProperty("m").GetBoolean();
 
             var updatesArray = new PriceLevelEntryArray();
-            var tradeEntry = new PriceLevelEntry(side: isBuyerMaker ? Side.Sell : Side.Buy, priceTicks: PriceUtils.ToTicks(price), quantity: (long)(quantity * 100_000_000));
+            var tradeEntry = new PriceLevelEntry(side: isBuyerMaker ? Side.Sell : Side.Buy, priceTicks: price, quantity: quantity);
             updatesArray[0] = tradeEntry;
             var marketDataEvent = new MarketDataEvent(
                 sequence: 0, // aggTrade doesn't have a clear sequence like depth updates
@@ -99,7 +99,7 @@ public class BinanceAdapter : BaseFeedAdapter
         if (decimal.TryParse(data.GetProperty("b").GetString(), out var bidPrice) &&
             decimal.TryParse(data.GetProperty("B").GetString(), out var bidQty) && bidQty > 0)
         {
-            var tradeEntry = new PriceLevelEntry(side: Side.Buy, priceTicks: PriceUtils.ToTicks(bidPrice), quantity: (long)(bidQty * 100_000_000));
+            var tradeEntry = new PriceLevelEntry(side: Side.Buy, priceTicks: bidPrice, quantity: bidQty);
             updatesArray[0] = tradeEntry;
         }
         else
@@ -113,7 +113,7 @@ public class BinanceAdapter : BaseFeedAdapter
         if (decimal.TryParse(data.GetProperty("a").GetString(), out var askPrice) &&
             decimal.TryParse(data.GetProperty("A").GetString(), out var askQty) && askQty > 0)
         {
-            var tradeEntry = new PriceLevelEntry(side: Side.Sell, priceTicks: PriceUtils.ToTicks(askPrice), quantity: (long)(askQty * 100_000_000));
+            var tradeEntry = new PriceLevelEntry(side: Side.Sell, priceTicks: askPrice, quantity: askQty);
             updatesArray[1] = tradeEntry;
         }
         else
@@ -167,7 +167,7 @@ public class BinanceAdapter : BaseFeedAdapter
                 if (decimal.TryParse(bid[0].GetString(), out var price) &&
                     decimal.TryParse(bid[1].GetString(), out var quantity))
                 {
-                    var tradeEntry = new PriceLevelEntry(side: Side.Buy, priceTicks: PriceUtils.ToTicks(price), quantity: (long)(quantity * 100_000_000));
+                    var tradeEntry = new PriceLevelEntry(side: Side.Buy, priceTicks: price, quantity: quantity);
                     updatesArray[i] = tradeEntry;
                     i++;
                 }
@@ -188,7 +188,7 @@ public class BinanceAdapter : BaseFeedAdapter
                 if (decimal.TryParse(ask[0].GetString(), out var price) &&
                     decimal.TryParse(ask[1].GetString(), out var quantity))
                 {
-                    var tradeEntry = new PriceLevelEntry(side: Side.Sell, priceTicks: PriceUtils.ToTicks(price), quantity: (long)(quantity * 100_000_000));
+                    var tradeEntry = new PriceLevelEntry(side: Side.Sell, priceTicks: price, quantity: quantity);
                     updatesArray[i] = tradeEntry;
                     i++;
                 }

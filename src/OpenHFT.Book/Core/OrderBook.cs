@@ -33,6 +33,16 @@ public class OrderBook
     private readonly bool _enableL3;
     private long _nextOrderId = 1;
 
+    /// <summary>
+    /// Provides read-only access to all price levels on the bid side, sorted best to worst.
+    /// </summary>
+    public IEnumerable<PriceLevel> Bids => _bids.GetAllLevels();
+
+    /// <summary>
+    /// Provides read-only access to all price levels on the ask side, sorted best to worst.
+    /// </summary>
+    public IEnumerable<PriceLevel> Asks => _asks.GetAllLevels();
+
     public OrderBook(Instrument instrument, ILogger<OrderBook>? logger = null, bool enableL3 = false)
     {
         _logger = logger;
@@ -100,14 +110,14 @@ public class OrderBook
                 for (int i = 0; i < mdEvent.UpdateCount; i++)
                 {
                     var update = mdEvent.Updates[i];
-                    UpdateLevel(update.Side, Price.FromTicks(update.PriceTicks), Quantity.FromTicks(update.Quantity), mdEvent.Sequence, mdEvent.Timestamp);
+                    UpdateLevel(update.Side, Price.FromDecimal(update.PriceTicks), Quantity.FromDecimal(update.Quantity), mdEvent.Sequence, mdEvent.Timestamp);
                 }
                 return true;
             case EventKind.Delete:
                 for (int i = 0; i < mdEvent.UpdateCount; i++)
                 {
                     var update = mdEvent.Updates[i];
-                    UpdateLevel(update.Side, Price.FromTicks(update.PriceTicks), Quantity.FromTicks(0), mdEvent.Sequence, mdEvent.Timestamp);
+                    UpdateLevel(update.Side, Price.FromDecimal(update.PriceTicks), Quantity.FromDecimal(0), mdEvent.Sequence, mdEvent.Timestamp);
                 }
                 return true;
 
@@ -150,7 +160,7 @@ public class OrderBook
         for (int i = 0; i < mdEvent.UpdateCount; i++)
         {
             var level = mdEvent.Updates[i];
-            UpdateLevel(level.Side, Price.FromTicks(level.PriceTicks), Quantity.FromTicks(level.Quantity), mdEvent.Sequence, mdEvent.Timestamp);
+            UpdateLevel(level.Side, Price.FromDecimal(level.PriceTicks), Quantity.FromDecimal(level.Quantity), mdEvent.Sequence, mdEvent.Timestamp);
         }
         _logger?.LogInformationWithCaller($"Processed snapshot for {Symbol} with {mdEvent.UpdateCount} levels at sequence {mdEvent.Sequence}");
     }

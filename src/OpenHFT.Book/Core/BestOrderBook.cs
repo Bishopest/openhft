@@ -72,13 +72,13 @@ public class BestOrderBook
 
             if (update.Side == Side.Buy)
             {
-                _bestBidPrice = Price.FromTicks(update.PriceTicks);
-                _bestBidQuantity = Quantity.FromTicks(update.Quantity);
+                _bestBidPrice = Price.FromDecimal(update.PriceTicks);
+                _bestBidQuantity = Quantity.FromDecimal(update.Quantity);
             }
             else // Side.Sell
             {
-                _bestAskPrice = Price.FromTicks(update.PriceTicks);
-                _bestAskQuantity = Quantity.FromTicks(update.Quantity);
+                _bestAskPrice = Price.FromDecimal(update.PriceTicks);
+                _bestAskQuantity = Quantity.FromDecimal(update.Quantity);
             }
         }
     }

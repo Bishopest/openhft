@@ -259,7 +259,7 @@ public class Program
             _ => $"Symbol{marketEvent.InstrumentId}"
         };
 
-        return $"{marketEvent.Kind} | {symbolName} | ${PriceTicksToDecimal(marketEvent.Updates[0].PriceTicks):F2} | Vol: {PriceTicksToDecimal(marketEvent.Updates[0].Quantity):F4}";
+        return $"{marketEvent.Kind} | {symbolName} | ${marketEvent.Updates[0].PriceTicks:F2} | Vol: {marketEvent.Updates[0].Quantity:F4}";
     }
 
     private static async Task DisplayPerformanceSummary(IAdvancedStrategyManager strategyManager)

@@ -137,7 +137,7 @@ public class OrderBookBenchmarks
             var price = basePrice + random.Next(-100, 101);
             var quantity = random.Next(1, 1000) * 100000; // Random quantity in satoshis
             var entryArr = new PriceLevelEntryArray();
-            entryArr[0] = new PriceLevelEntry(side, PriceUtils.ToTicks((decimal)price), quantity);
+            entryArr[0] = new PriceLevelEntry(side, (decimal)price, (decimal)quantity);
             _events[i] = new MarketDataEvent(
                 sequence: i + 1,
                 timestamp: TimestampUtils.GetTimestampMicros(),
@@ -154,7 +154,7 @@ public class OrderBookBenchmarks
     public void ApplySingleEvent()
     {
         var entryArr = new PriceLevelEntryArray();
-        entryArr[0] = new PriceLevelEntry(Side.Buy, PriceUtils.ToTicks(50000m), 100000000);
+        entryArr[0] = new PriceLevelEntry(Side.Buy, 50000m, 100000000m);
         var evt = new MarketDataEvent(
             sequence: 1,
             timestamp: TimestampUtils.GetTimestampMicros(),
@@ -227,7 +227,7 @@ public class RingBufferBenchmarks
         for (int i = 0; i < _events.Length; i++)
         {
             var entryArr = new PriceLevelEntryArray();
-            entryArr[0] = new PriceLevelEntry(Side.Buy, PriceUtils.ToTicks(50000m), 100000000);
+            entryArr[0] = new PriceLevelEntry(Side.Buy, 50000m, 100000000m);
             _events[i] = new MarketDataEvent(
                 sequence: i + 1,
                 timestamp: TimestampUtils.GetTimestampMicros(),
@@ -619,7 +619,7 @@ public class MPSC_Struct_DisruptorBenchmarks
         _events = new MarketDataEvent[1];
         var symbolId = SymbolUtils.GetSymbolId("BTCUSDT");
         var entryArr = new PriceLevelEntryArray();
-        entryArr[0] = new PriceLevelEntry(Side.Buy, PriceUtils.ToTicks(50000m), 100000000);
+        entryArr[0] = new PriceLevelEntry(Side.Buy, 50000m, 100000000m);
         _events[0] = new MarketDataEvent(
             sequence: 1,
             timestamp: TimestampUtils.GetTimestampMicros(),

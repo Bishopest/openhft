@@ -286,8 +286,8 @@ public static class TradingHubExtensions
         for (var i = 0; i < marketData.UpdateCount; i++)
         {
             var update = marketData.Updates[i];
-            var price = PriceTicksToDecimal(update.PriceTicks);
-            var volume = QuantityTicksToDecimal(update.Quantity);
+            var price = update.PriceTicks;
+            var volume = update.Quantity;
             var side = update.Side.ToString();
             var timestamp = marketData.Timestamp;
             // Debug logging (commented to reduce console noise)

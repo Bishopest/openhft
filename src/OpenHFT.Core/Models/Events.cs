@@ -11,10 +11,10 @@ namespace OpenHFT.Core.Models;
 public readonly struct PriceLevelEntry
 {
     public readonly Side Side;
-    public readonly long PriceTicks;
-    public readonly long Quantity;
+    public readonly decimal PriceTicks;
+    public readonly decimal Quantity;
 
-    public PriceLevelEntry(Side side, long priceTicks, long quantity)
+    public PriceLevelEntry(Side side, decimal priceTicks, decimal quantity)
     {
         Side = side;
         PriceTicks = priceTicks;

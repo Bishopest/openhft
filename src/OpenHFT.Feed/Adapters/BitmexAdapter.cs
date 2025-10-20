@@ -115,8 +115,8 @@ public class BitmexAdapter : BaseFeedAdapter
                     var size = bid[1].GetDecimal();
                     var priceLevelEntry = new PriceLevelEntry(
                         side: Side.Buy,
-                        priceTicks: PriceUtils.ToTicks(price),
-                        quantity: (long)(size * 100_000_000)
+                        priceTicks: price,
+                        quantity: size
                     );
                     updatesArray[i] = priceLevelEntry;
                     i++;
@@ -131,8 +131,8 @@ public class BitmexAdapter : BaseFeedAdapter
                     var size = ask[1].GetDecimal();
                     var priceLevelEntry = new PriceLevelEntry(
                         side: Side.Sell,
-                        priceTicks: PriceUtils.ToTicks(price),
-                        quantity: (long)(size * 100_000_000)
+                        priceTicks: price,
+                        quantity: size
                     );
                     updatesArray[i] = priceLevelEntry;
                     i++;
@@ -196,13 +196,13 @@ public class BitmexAdapter : BaseFeedAdapter
 
             var askLevelEntry = new PriceLevelEntry(
                 side: Side.Sell,
-                priceTicks: PriceUtils.ToTicks(askPrice),
-                quantity: (long)(askSize * 100_000_000)
+                priceTicks: askPrice,
+                quantity: askSize
             );
             var bidLevelEntry = new PriceLevelEntry(
                 side: Side.Buy,
-                priceTicks: PriceUtils.ToTicks(bidPrice),
-                quantity: (long)(bidSize * 100_000_000)
+                priceTicks: bidPrice,
+                quantity: bidSize
             );
             updatesArray[0] = askLevelEntry;
             updatesArray[1] = bidLevelEntry;
@@ -259,8 +259,8 @@ public class BitmexAdapter : BaseFeedAdapter
             var sideStr = ele.GetProperty("side").GetString();
             var priceLevelEntry = new PriceLevelEntry(
                 side: sideStr == "Buy" ? Side.Buy : Side.Sell,
-                priceTicks: PriceUtils.ToTicks(price),
-                quantity: (long)(size * 100_000_000)
+                priceTicks: price,
+                quantity: size
             );
             updatesArray[0] = priceLevelEntry;
             OnMarketDataReceived(new MarketDataEvent(

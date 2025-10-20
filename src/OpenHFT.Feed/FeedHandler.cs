@@ -78,9 +78,9 @@ public class FeedHandler : IFeedHandler
     public void AddAdapter(BaseFeedAdapter adapter)
     {
         var innerDict = _adapters.GetOrAdd(
-        adapter.SourceExchange,
-        _ => new ConcurrentDictionary<ProductType, BaseFeedAdapter>()
-    );
+            adapter.SourceExchange,
+            _ => new ConcurrentDictionary<ProductType, BaseFeedAdapter>()
+        );
 
         // 2. 내부 딕셔너리에 ProducerType 키와 함께 어댑터를 추가합니다.
         if (innerDict.TryAdd(adapter.ProdType, adapter)) // assumes adapter has ProducerType property
