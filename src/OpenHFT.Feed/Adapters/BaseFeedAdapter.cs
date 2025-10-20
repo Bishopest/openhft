@@ -375,8 +375,6 @@ public abstract class BaseFeedAdapter : IFeedAdapter
                 }
                 catch (OperationCanceledException)
                 {
-                    // This is the expected behavior when a message is received.
-                    // The timer was reset, so we just loop again to check the state and wait.
                     continue;
                 }
 
@@ -407,12 +405,12 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
                 _logger.LogInformationWithCaller($"Successfully received pong from {SourceExchange}.");
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException ex)
             {
                 // cancellationToken exception thrown from DisconnectAsync()
                 break;
             }
-            catch (ObjectDisposedException)
+            catch (ObjectDisposedException ex)
             {
                 // This means another thread (likely ReceiveLoop) already initiated a reconnect.
                 // Our job here is to simply exit this loop cleanly.
@@ -512,7 +510,6 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         try
         {
             _inactivityCts?.Cancel();
-            _inactivityCts?.Dispose();
             _inactivityCts = new CancellationTokenSource();
         }
         catch (ObjectDisposedException)
