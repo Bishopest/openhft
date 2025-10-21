@@ -1,8 +1,7 @@
+using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
-using OpenHFT.Quoting.Orders.Interfaces;
-using OpenHFT.Quoting.Orders.Models;
 
-namespace OpenHFT.Quoting.Orders;
+namespace OpenHFT.Core.Orders;
 
 /// <summary>
 /// A concrete implementation of the IOrderBuilder that uses an IOrderFactory

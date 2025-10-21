@@ -1,4 +1,4 @@
-namespace OpenHFT.Quoting.Orders.Models;
+namespace OpenHFT.Core.Models;
 
 public enum OrderType
 {

@@ -1,9 +1,7 @@
 using System;
 using OpenHFT.Core.Models;
-using OpenHFT.Quoting.Models;
-using OpenHFT.Quoting.Orders.Models;
 
-namespace OpenHFT.Quoting.Orders.Interfaces;
+namespace OpenHFT.Core.Interfaces;
 
 public interface IOrder
 {

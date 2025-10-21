@@ -1,9 +1,8 @@
 using Moq;
 using NUnit.Framework;
+using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
-using OpenHFT.Quoting.Orders;
-using OpenHFT.Quoting.Orders.Interfaces;
-using OpenHFT.Quoting.Orders.Models;
+using OpenHFT.Core.Orders;
 namespace OpenHFT.Tests.Quoting.Orders;
 
 [TestFixture]

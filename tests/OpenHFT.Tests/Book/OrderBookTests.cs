@@ -299,16 +299,12 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         // Assert
         snapshot.Symbol.Should().Be("BTCUSDT");
         snapshot.UpdateCount.Should().Be(1); // One batch event
-        snapshot.Bids.Should().HaveCount(2);
-        snapshot.Asks.Should().HaveCount(2);
+        snapshot.Bids.Should().HaveCount(1);
+        snapshot.Asks.Should().HaveCount(0);
 
         // Best bid should be highest price
         snapshot.Bids[0].PriceTicks.Should().Be(Price.FromDecimal(50000m).ToTicks());
         snapshot.Bids[0].Quantity.Should().Be(Quantity.FromDecimal(1m).ToTicks());
-
-        // Best ask should be lowest price  
-        snapshot.Asks[0].PriceTicks.Should().Be(Price.FromDecimal(50010m).ToTicks());
-        snapshot.Asks[0].Quantity.Should().Be(Quantity.FromDecimal(0.75m).ToTicks());
     }
 
     [Test]

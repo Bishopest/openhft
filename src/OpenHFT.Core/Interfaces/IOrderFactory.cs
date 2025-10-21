@@ -1,7 +1,7 @@
 using System;
 using OpenHFT.Core.Models;
 
-namespace OpenHFT.Quoting.Orders.Interfaces;
+namespace OpenHFT.Core.Interfaces;
 
 // This is a sample factory interface. In a real DI container,
 // you might register Func<IOrder> or a more complex factory.

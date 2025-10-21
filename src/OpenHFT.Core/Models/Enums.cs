@@ -71,15 +71,3 @@ public enum OrderStatusEnum : byte
     AcceptedForBidding = 14,
     PendingReplace = 15
 }
-
-/// <summary>
-/// Time in force options
-/// </summary>
-public enum TimeInForce : byte
-{
-    Day = 0,
-    GTC = 1,        // Good Till Cancelled
-    IOC = 2,        // Immediate or Cancel
-    FOK = 3,        // Fill or Kill
-    GTD = 4         // Good Till Date
-}

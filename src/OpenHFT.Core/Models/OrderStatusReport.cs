@@ -1,7 +1,7 @@
 using System;
 using OpenHFT.Core.Models;
 
-namespace OpenHFT.Quoting.Orders.Models;
+namespace OpenHFT.Core.Models;
 
 /// <summary>
 /// Represents a report from the exchange regarding the status of a specific order.

@@ -1,9 +1,8 @@
 using System;
+using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
-using OpenHFT.Quoting.Orders.Interfaces;
-using OpenHFT.Quoting.Orders.Models;
 
-namespace OpenHFT.Quoting.Orders;
+namespace OpenHFT.Core.Orders;
 
 // A sample concrete Order class to make the builder work.
 // Note how properties are mutable (public set) for the builder to use.

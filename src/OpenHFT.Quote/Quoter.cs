@@ -1,11 +1,10 @@
 using Microsoft.Extensions.Logging;
+using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.Orders;
 using OpenHFT.Core.Utils;
 using OpenHFT.Quoting.Interfaces;
 using OpenHFT.Quoting.Models;
-using OpenHFT.Quoting.Orders;
-using OpenHFT.Quoting.Orders.Interfaces;
-using OpenHFT.Quoting.Orders.Models;
 
 namespace OpenHFT.Quoting;
 

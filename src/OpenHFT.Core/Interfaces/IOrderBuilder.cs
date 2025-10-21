@@ -1,8 +1,7 @@
 using System;
 using OpenHFT.Core.Models;
-using OpenHFT.Quoting.Orders.Models;
 
-namespace OpenHFT.Quoting.Orders.Interfaces;
+namespace OpenHFT.Core.Interfaces;
 
 /// <summary>
 /// Defines a fluent interface for constructing an IOrder object.
