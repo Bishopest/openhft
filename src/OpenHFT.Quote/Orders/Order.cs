@@ -1,6 +1,5 @@
 using System;
 using OpenHFT.Core.Models;
-using OpenHFT.Quoting.Models;
 using OpenHFT.Quoting.Orders.Interfaces;
 using OpenHFT.Quoting.Orders.Models;
 
@@ -41,7 +40,7 @@ public class Order : IOrder
 
     // --- Action Methods ---
     public Task SubmitAsync(CancellationToken cancellationToken = default) { /* ... implementation ... */ return Task.CompletedTask; }
-    public Task ReplaceAsync(Quote newQuote, OrderType orderType, CancellationToken cancellationToken = default) { /* ... implementation ... */ return Task.CompletedTask; }
+    public Task ReplaceAsync(Price price, OrderType orderType, CancellationToken cancellationToken = default) { /* ... implementation ... */ return Task.CompletedTask; }
     public Task CancelAsync(CancellationToken cancellationToken = default) { /* ... implementation ... */ return Task.CompletedTask; }
 
     private static long GenerateClientId() => DateTimeOffset.UtcNow.Ticks; // Placeholder

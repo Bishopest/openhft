@@ -70,12 +70,13 @@ public interface IOrder
     Task SubmitAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Submits a request to replace the active order with a new price and/or size.
+    /// Submits a request to replace the active order with a new price.
+    /// Quantity remains unchanged.(if you want more size, then new order or if you want smaller size, then cancel and new order)
     /// If the exchange does not support atomic replacement, the implementation
     /// should handle the cancel/replace logic internally.
     /// </summary>
     /// <param name="cancellationToken">A token for cancelling the replacement.</param>
-    Task ReplaceAsync(Quote newQuote, OrderType orderType, CancellationToken cancellationToken = default);
+    Task ReplaceAsync(Price price, OrderType orderType, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Submits a request to cancel the active order.

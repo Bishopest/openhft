@@ -62,8 +62,13 @@ public sealed class Quoter : IQuoter
             }
             else
             {
-                // Active order exists, so request a replacement.
-                await currentOrder.ReplaceAsync(newQuote, OrderType.Limit, cancellationToken).ConfigureAwait(false);
+                if (currentOrder.Quantity > currentOrder.LeavesQuantity)
+                {
+                    await currentOrder.CancelAsync(cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+
+                await currentOrder.ReplaceAsync(newQuote.Price, OrderType.Limit, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
