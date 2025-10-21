@@ -74,7 +74,7 @@ public class QuotingDebugger
 
     private void PrintOrderBookWithQuotes(OrderBook book, Quote? myBid, Quote? myAsk)
     {
-        const int levelsToShow = 5;
+        const int levelsToShow = 10;
         const int myQuoteWidth = 12;
         const int priceWidth = 14;
         const int sizeWidth = 14;
@@ -87,7 +87,7 @@ public class QuotingDebugger
 
         // Header
         sb.Append($"| {"MY ASK".PadLeft(myQuoteWidth)} ");
-        sb.Append($"| {"ASK PRICE".PadLeft(priceWidth)} | {"ASK SIZE".PadRight(sizeWidth)} ");
+        sb.Append($"| {"ASK SIZE".PadRight(sizeWidth)} | {"ASK PRICE".PadLeft(priceWidth)} ");
         sb.Append($"| {"BID PRICE".PadLeft(priceWidth)} | {"BID SIZE".PadRight(sizeWidth)} ");
         sb.AppendLine($"| {"MY BID".PadRight(myQuoteWidth)} |");
         sb.AppendLine("".PadRight(80, '-'));
@@ -112,7 +112,7 @@ public class QuotingDebugger
             // --- Column 2 & 3: Market Ask Price & Size ---
             string askPriceStr = askLevel?.Price.ToDecimal().ToString("F4") ?? "";
             string askSizeStr = askLevel?.TotalQuantity.ToDecimal().ToString("F4") ?? "";
-            sb.Append($"| {askPriceStr.PadLeft(priceWidth)} | {askSizeStr.PadRight(sizeWidth)} ");
+            sb.Append($"| {askSizeStr.PadRight(sizeWidth)} | {askPriceStr.PadLeft(priceWidth)} ");
 
             // --- Column 4 & 5: Market Bid Price & Size ---
             string bidPriceStr = bidLevel?.Price.ToDecimal().ToString("F4") ?? "";
@@ -160,6 +160,7 @@ public class QuotingDebugger
             sb.AppendLine("".PadRight(80, '-'));
         }
 
+        Console.Clear();
         _logger.LogInformationWithCaller(sb.ToString());
     }
 }
