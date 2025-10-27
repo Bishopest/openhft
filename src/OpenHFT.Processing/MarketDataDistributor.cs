@@ -12,7 +12,6 @@ namespace OpenHFT.Processing;
 
 public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
 {
-    private readonly Disruptor<MarketDataEventWrapper> _disruptor;
     private readonly ILogger<MarketDataDistributor> _logger;
     // key = InstrumentID, key inside = Topic id
     private readonly ConcurrentDictionary<int, ConcurrentDictionary<int, BaseMarketDataConsumer>> _subscriptions = new();
@@ -20,27 +19,9 @@ public class MarketDataDistributor : IEventHandler<MarketDataEventWrapper>
     private readonly ConcurrentDictionary<int, BaseMarketDataConsumer> _systemTopicSubscriptions = new();
     private long _distributedEventCount;
 
-    public MarketDataDistributor(Disruptor<MarketDataEventWrapper> disruptor, ILogger<MarketDataDistributor> logger)
+    public MarketDataDistributor(ILogger<MarketDataDistributor> logger)
     {
-        _disruptor = disruptor;
         _logger = logger;
-    }
-
-    public Task StartAsync(CancellationToken cancellationToken)
-    {
-        _logger.LogInformationWithCaller("Market Data Distributor is starting.");
-
-        _disruptor.HandleEventsWith(this);
-        _disruptor.Start();
-
-        return Task.CompletedTask;
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken)
-    {
-        _logger.LogInformationWithCaller("Market Data Distributor is stopping.");
-        _disruptor.Shutdown(TimeSpan.FromSeconds(10));
-        return Task.CompletedTask;
     }
 
     // Subscription management

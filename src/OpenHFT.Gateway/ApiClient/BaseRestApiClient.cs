@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
+using OpenHFT.Core.Models;
 using OpenHFT.Gateway.ApiClient.Exceptions;
 
 namespace OpenHFT.Gateway.ApiClient;
@@ -41,6 +42,10 @@ public abstract class BaseRestApiClient : IDisposable
     /// </summary>
     protected abstract string BaseUrl { get; }
 
+    public abstract ExchangeEnum SourceExchange { get; }
+
+
+
     protected BaseRestApiClient(
         ILogger logger,
         IInstrumentRepository instrumentRepository,
@@ -59,6 +64,7 @@ public abstract class BaseRestApiClient : IDisposable
         ConfigureHttpClient();
     }
 
+    public abstract Task<long> GetServerTimeAsync(CancellationToken cancellationToken = default);
     /// <summary>
     /// Configures the HttpClient instance, setting the base address and default headers.
     /// </summary>

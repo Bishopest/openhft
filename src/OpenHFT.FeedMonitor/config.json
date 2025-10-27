@@ -2,12 +2,12 @@
   "subscriptions": [
     {
       "exchange": "bitmex",
-      "product-type": "perpetualfuture",
+      "productType": "perpetualfuture",
       "symbols": [ "XBTUSD"]
     },
     {
       "exchange": "binance",
-      "product-type": "perpetualfuture",
+      "productType": "perpetualfuture",
       "symbols": [ "BTCUSDT"]
     }
   ],

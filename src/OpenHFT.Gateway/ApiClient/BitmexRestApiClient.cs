@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
+using OpenHFT.Core.Models;
 
 namespace OpenHFT.Gateway.ApiClient;
 
@@ -37,10 +38,12 @@ public class BitmexRestApiClient : BaseRestApiClient
 {
     protected override string BaseUrl => "https://www.bitmex.com";
 
+    public override ExchangeEnum SourceExchange => ExchangeEnum.BITMEX;
+
     public BitmexRestApiClient(ILogger<BitmexRestApiClient> logger, IInstrumentRepository instrumentRepository, HttpClient httpClient, ProductType productType)
         : base(logger, instrumentRepository, httpClient, productType) { }
 
-    public async Task<long> GetServerTimeAsync(CancellationToken cancellationToken = default)
+    public override async Task<long> GetServerTimeAsync(CancellationToken cancellationToken = default)
     {
         // BitMEX does not have a dedicated /time endpoint.
         // We make a lightweight request and use the 'timestamp' from the response body.

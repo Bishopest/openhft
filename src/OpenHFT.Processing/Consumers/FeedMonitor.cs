@@ -36,16 +36,12 @@ public class FeedMonitor : BaseMarketDataConsumer
         _repository = repository;
         _distributor = distributor;
         _config = config;
-    }
 
-    public Task StartAsync(CancellationToken cancellationToken)
-    {
         _feedHandler.AdapterConnectionStateChanged += OnConnectionStateChanged;
         _feedHandler.FeedError += OnFeedError;
 
         _distributor.Subscribe(this);
         _logger.LogInformationWithCaller("Feed Monitor started and subscribed to FeedHandler events.");
-        return Task.CompletedTask;
     }
 
     protected override void OnMarketData(in MarketDataEvent data)

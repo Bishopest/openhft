@@ -12,6 +12,12 @@ using OpenHFT.Core.Models;
 
 namespace OpenHFT.Gateway.ApiClient;
 
+public record BinanceListenKeyResponse
+{
+    [JsonPropertyName("listenKey")]
+    public string ListenKey { get; init; } = "";
+}
+
 /// <summary>
 /// Represents the data structure for a Binance depth snapshot response.
 /// </summary>
@@ -87,6 +93,8 @@ public class BinanceRestApiClient : BaseRestApiClient
         _ => throw new InvalidOperationException($"Unsupported product type for Binance: {ProdType}")
     };
 
+    public override ExchangeEnum SourceExchange => ExchangeEnum.BINANCE;
+
     public BinanceRestApiClient(ILogger<BinanceRestApiClient> logger, IInstrumentRepository instrumentRepository, HttpClient httpClient, ProductType productType)
         : base(logger, instrumentRepository, httpClient, productType) { }
 
@@ -96,9 +104,19 @@ public class BinanceRestApiClient : BaseRestApiClient
         return SendRequestAsync<BinanceDepthSnapshot>(HttpMethod.Get, endpoint, cancellationToken: cancellationToken);
     }
 
-    public Task<BinanceServerTime> GetServerTimeAsync(CancellationToken cancellationToken = default)
+    public override async Task<long> GetServerTimeAsync(CancellationToken cancellationToken = default)
     {
         var endpoint = "/fapi/v1/time";
-        return SendRequestAsync<BinanceServerTime>(HttpMethod.Get, endpoint, cancellationToken: cancellationToken);
+        var response = await SendRequestAsync<BinanceServerTime>(HttpMethod.Get, endpoint, cancellationToken: cancellationToken);
+        return response.ServerTime;
+    }
+
+    public Task<BinanceListenKeyResponse> CreateListenKeyAsync(ProductType type, CancellationToken ct = default)
+    {
+        // POST /fapi/v1/listenKey
+        // NOTE: This is a private, signed endpoint.
+        // The BaseRestApiClient needs to be extended with a SendPrivateRequestAsync method.
+        // return SendPrivateRequestAsync<BinanceListenKeyResponse>(HttpMethod.Post, "/fapi/v1/listenKey", null, ct);
+        return Task.FromResult(new BinanceListenKeyResponse()); // Placeholder 
     }
 }
