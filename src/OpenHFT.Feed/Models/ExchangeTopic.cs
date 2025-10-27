@@ -17,16 +17,23 @@ public abstract class ExchangeTopic
     /// A unique identifier for this topic instance.
     /// </summary>
     public int TopicId { get; }
+
+    /// <summary>
+    /// Indicates whether this topic requires a specific symbol for subscription (e.g., market data topics).
+    /// If false, it's an account-wide topic (e.g., user data topics).
+    /// </summary>
+    public bool IsSymbolSpecific { get; }
     /// <summary>
     /// The string value that appears in the 'e' or 'type' field of an incoming JSON message.
     /// </summary>
     public string EventTypeString { get; }
     public abstract ExchangeEnum Exchange { get; }
 
-    protected ExchangeTopic(string eventTypeString)
+    protected ExchangeTopic(string eventTypeString, bool isSymbolSpecific = true)
     {
         TopicId = Interlocked.Increment(ref _nextId);
         EventTypeString = eventTypeString;
+        IsSymbolSpecific = isSymbolSpecific;
     }
 
     /// <summary>
@@ -50,7 +57,7 @@ public class SystemTopic : ExchangeTopic
     private readonly string _topicName;
 
     // A system topic's EventTypeString is its unique identifier.
-    private SystemTopic(string eventTypeString, string topicName) : base(eventTypeString)
+    private SystemTopic(string eventTypeString, string topicName) : base(eventTypeString, false)
     {
         _topicName = topicName;
     }
@@ -98,16 +105,27 @@ public class BinanceTopic : ExchangeTopic
     public static BinanceTopic DepthUpdate { get; } = new("depthUpdate", "@depth20@100ms", "DepthUpdate");
 
     public override ExchangeEnum Exchange => ExchangeEnum.BINANCE;
-
-    /// <summary>
-    /// Gets all defined topics for this exchange using reflection.
-    /// </summary>
-    public static IEnumerable<BinanceTopic> GetAll()
-    {
-        return typeof(BinanceTopic)
+    private static readonly Lazy<IEnumerable<BinanceTopic>> _allTopics = new(() =>
+        typeof(BinanceTopic)
             .GetProperties(BindingFlags.Public | BindingFlags.Static)
             .Where(p => p.PropertyType == typeof(BinanceTopic))
-            .Select(p => (BinanceTopic)p.GetValue(null)!);
+            .Select(p => (BinanceTopic)p.GetValue(null)!)
+            .ToList());
+
+    /// <summary>
+    /// Gets all defined market data topics for this exchange.
+    /// </summary>
+    public static IEnumerable<BinanceTopic> GetAllMarketTopics()
+    {
+        return _allTopics.Value.Where(t => t.IsSymbolSpecific);
+    }
+
+    /// <summary>
+    /// Gets all defined private user data topics for this exchange.
+    /// </summary>
+    public static IEnumerable<BinanceTopic> GetAllPrivateTopics()
+    {
+        return _allTopics.Value.Where(t => !t.IsSymbolSpecific);
     }
 }
 
@@ -119,13 +137,13 @@ public class BitmexTopic : ExchangeTopic
     private readonly string _topicSuffix;
     private readonly string _topicName;
 
-    private BitmexTopic(string eventTypeString, string topicSuffix, string topicName) : base(eventTypeString)
+    private BitmexTopic(string eventTypeString, string topicSuffix, string topicName, bool isSymbolSpecific = true) : base(eventTypeString, isSymbolSpecific)
     {
         _topicSuffix = topicSuffix;
         _topicName = topicName;
     }
 
-    public override string GetStreamName(string symbol) => $"{_topicSuffix}{symbol.ToLowerInvariant()}";
+    public override string GetStreamName(string symbol) => IsSymbolSpecific ? $"{_topicSuffix}{symbol.ToLowerInvariant()}" : _topicSuffix;
     public override string GetTopicName() => _topicName;
 
     // Static properties to access topics like an enum
@@ -136,17 +154,31 @@ public class BitmexTopic : ExchangeTopic
     // Top 10 levels using traditional full book push
     public static BitmexTopic OrderBook10 { get; } = new("orderBook10", "orderBook10:", "orderBook10");
 
+    public static BitmexTopic Execution { get; } = new("execution", "execution", "Execution", isSymbolSpecific: false);
+
     public override ExchangeEnum Exchange => ExchangeEnum.BITMEX;
 
-    /// <summary>
-    /// Gets all defined topics for this exchange using reflection.
-    /// </summary>
-    public static IEnumerable<BitmexTopic> GetAll()
-    {
-        return typeof(BitmexTopic)
+    private static readonly Lazy<IEnumerable<BitmexTopic>> _allTopics = new(() =>
+        typeof(BitmexTopic)
             .GetProperties(BindingFlags.Public | BindingFlags.Static)
             .Where(p => p.PropertyType == typeof(BitmexTopic))
-            .Select(p => (BitmexTopic)p.GetValue(null)!);
+            .Select(p => (BitmexTopic)p.GetValue(null)!)
+            .ToList());
+
+    /// <summary>
+    /// Gets all defined market data topics for this exchange.
+    /// </summary>
+    public static IEnumerable<BitmexTopic> GetAllMarketTopics()
+    {
+        return _allTopics.Value.Where(t => t.IsSymbolSpecific);
+    }
+
+    /// <summary>
+    /// Gets all defined private user data topics for this exchange.
+    /// </summary>
+    public static IEnumerable<BitmexTopic> GetAllPrivateTopics()
+    {
+        return _allTopics.Value.Where(t => !t.IsSymbolSpecific);
     }
 }
 
@@ -160,21 +192,31 @@ public static class TopicRegistry
 
     static TopicRegistry()
     {
-        // Register all Binance topics
-        foreach (var topic in BinanceTopic.GetAll())
+        // Register all Binance topics (market and private)
+        foreach (var topic in BinanceTopic.GetAllMarketTopics())
         {
-            _topicsByEventType.TryAdd(topic.EventTypeString, topic);
-            _topicsById.TryAdd(topic.TopicId, topic);
+            RegisterTopic(topic);
+        }
+        foreach (var topic in BinanceTopic.GetAllPrivateTopics())
+        {
+            RegisterTopic(topic);
         }
 
-        // Register all BitMEX topics
-        foreach (var topic in BitmexTopic.GetAll())
+        // Register all BitMEX topics (market and private)
+        foreach (var topic in BitmexTopic.GetAllMarketTopics())
         {
-            _topicsByEventType.TryAdd(topic.EventTypeString, topic);
-            _topicsById.TryAdd(topic.TopicId, topic);
+            RegisterTopic(topic);
         }
-        // Future exchanges can be registered here as well
-        // foreach (var topic in BybitTopic.GetAll()) { ... }
+        foreach (var topic in BitmexTopic.GetAllPrivateTopics())
+        {
+            RegisterTopic(topic);
+        }
+    }
+
+    private static void RegisterTopic(ExchangeTopic topic)
+    {
+        _topicsByEventType.TryAdd(topic.EventTypeString, topic);
+        _topicsById.TryAdd(topic.TopicId, topic);
     }
 
     /// <summary>
@@ -184,7 +226,6 @@ public static class TopicRegistry
     {
         return _topicsByEventType.TryGetValue(eventType, out topic);
     }
-
     /// <summary>
     /// Tries to get the ExchangeTopic associated with a given topic ID.
     /// </summary>
