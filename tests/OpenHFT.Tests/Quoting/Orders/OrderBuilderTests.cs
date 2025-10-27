@@ -9,6 +9,9 @@ namespace OpenHFT.Tests.Quoting.Orders;
 public class OrderBuilderTests
 {
     private Mock<IOrderFactory> _mockOrderFactory;
+    private Mock<IOrderRouter> _mockOrderRouter;
+    private Mock<IOrderGateway> _mockOrderGateway;
+
     private const int InstrumentId = 1;
     private const Side TestSide = Side.Buy;
 
@@ -16,6 +19,14 @@ public class OrderBuilderTests
     public void SetUp()
     {
         _mockOrderFactory = new Mock<IOrderFactory>();
+
+        _mockOrderRouter = new Mock<IOrderRouter>();
+        _mockOrderGateway = new Mock<IOrderGateway>();
+    }
+
+    private Order CreateOrderShell()
+    {
+        return new Order(InstrumentId, TestSide, _mockOrderRouter.Object, _mockOrderGateway.Object);
     }
 
     [Test]
@@ -27,7 +38,7 @@ public class OrderBuilderTests
         var expectedOrderType = OrderType.Limit;
 
         // The factory will return a real, but basic, Order object.
-        var orderShell = new Order(InstrumentId, TestSide);
+        var orderShell = CreateOrderShell();
         _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide)).Returns(orderShell);
 
         var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide);
@@ -57,7 +68,7 @@ public class OrderBuilderTests
     public void Build_WithoutPrice_ShouldThrowInvalidOperationException()
     {
         // Arrange
-        var orderShell = new Order(InstrumentId, TestSide);
+        var orderShell = CreateOrderShell();
         _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide)).Returns(orderShell);
         var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide);
 
@@ -73,7 +84,7 @@ public class OrderBuilderTests
     public void Build_WithoutQuantity_ShouldThrowInvalidOperationException()
     {
         // Arrange
-        var orderShell = new Order(InstrumentId, TestSide);
+        var orderShell = CreateOrderShell();
         _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide)).Returns(orderShell);
         var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide);
 

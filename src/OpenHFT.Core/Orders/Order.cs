@@ -6,8 +6,10 @@ namespace OpenHFT.Core.Orders;
 
 // A sample concrete Order class to make the builder work.
 // Note how properties are mutable (public set) for the builder to use.
-public class Order : IOrder
+public class Order : IOrder, IOrderUpdatable
 {
+    private readonly IOrderRouter _router;
+    private readonly IOrderGateway _gateway;
     public long ClientOrderId { get; }
     public string? ExchangeOrderId { get; internal set; }
     public OrderStatus Status { get; internal set; }
@@ -29,12 +31,17 @@ public class Order : IOrder
     /// Initializes a new instance of the <see cref="Order"/> class.
     /// Public for testing and direct instantiation, but in production, creation via IOrderFactory is recommended.
     /// </summary>
-    public Order(int instrumentId, Side side)
+    public Order(int instrumentId, Side side, IOrderRouter router, IOrderGateway gateway)
     {
         InstrumentId = instrumentId;
         Side = side;
         ClientOrderId = GenerateClientId(); // Should be a robust method
         Status = OrderStatus.Pending;
+
+        _router = router;
+        _gateway = gateway;
+
+        _router.RegisterOrder(this);
     }
 
     // --- Action Methods ---
@@ -43,4 +50,27 @@ public class Order : IOrder
     public Task CancelAsync(CancellationToken cancellationToken = default) { /* ... implementation ... */ return Task.CompletedTask; }
 
     private static long GenerateClientId() => DateTimeOffset.UtcNow.Ticks; // Placeholder
+
+    public void OnStatusReportReceived(in OrderStatusReport report)
+    {
+        Status = report.Status;
+        LeavesQuantity = report.LeavesQuantity;
+        LastUpdateTime = report.Timestamp;
+        LatestReport = report;
+        if (!string.IsNullOrEmpty(report.ExchangeOrderId))
+        {
+            ExchangeOrderId = report.ExchangeOrderId;
+        }
+
+        StatusChanged?.Invoke(this, report);
+
+        switch (report.Status)
+        {
+            case OrderStatus.Filled:
+            case OrderStatus.Cancelled:
+            case OrderStatus.Rejected:
+                _router.DeregisterOrder(this);
+                break;
+        }
+    }
 }
