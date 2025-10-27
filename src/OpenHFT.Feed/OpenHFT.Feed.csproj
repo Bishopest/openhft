@@ -11,16 +11,18 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../OpenHFT.Gateway/OpenHFT.Gateway.csproj" />
     <ProjectReference Include="..\OpenHFT.Core\OpenHFT.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Disruptor" Version="6.0.1" />
-    <PackageReference Include="System.Net.WebSockets.Client" Version="4.3.2" />
-    <PackageReference Include="System.Text.Json" Version="9.0.8" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.9" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.9" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.9" />
+    <PackageReference Include="Disruptor" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="System.Net.WebSockets.Client" />
+    <PackageReference Include="System.Text.Json" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
   </ItemGroup>
 
 </Project>
