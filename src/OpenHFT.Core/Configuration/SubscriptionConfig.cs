@@ -21,7 +21,6 @@ public class SubscriptionGroup
     [JsonProperty("exchange")]
     public string Exchange { get; set; } = string.Empty;
 
-    // This attribute maps the JSON key "product-type" to the C# property "ProductType".
     [JsonProperty("product-type")]
     public string ProductType { get; set; } = string.Empty;
 

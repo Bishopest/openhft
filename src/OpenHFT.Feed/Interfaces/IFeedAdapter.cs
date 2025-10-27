@@ -30,11 +30,20 @@ public interface IFeedAdapter : IDisposable
     Task UnsubscribeAsync(IEnumerable<Instrument> instruments, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Authenticates the WebSocket connection to subscribe to private user data streams.
+    /// </summary>
+    Task AuthenticateAsync(string apiKey, string apiSecret, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets the name of the exchange this adapter connects to.
     /// Should match one of the constants in the `Exchange` class.
     /// </summary>
     ExchangeEnum SourceExchange { get; }
 
+    /// <summary>
+    /// Gets the product type (e.g., Spot, Futures) this adapter handles.
+    /// </summary>
+    ProductType ProdType { get; }
     /// <summary>
     /// Check if adapter is connected
     /// </summary>
@@ -59,6 +68,11 @@ public interface IFeedAdapter : IDisposable
     /// Event fired when market data is received
     /// </summary>
     event EventHandler<MarketDataEvent> MarketDataReceived;
+
+    /// <summary>
+    /// Event fired when a user-specific order update is received.
+    /// </summary>
+    event EventHandler<OrderStatusReport> OrderUpdateReceived;
 }
 
 /// <summary>
@@ -80,6 +94,19 @@ public class ConnectionStateChangedEventArgs : EventArgs
     }
 }
 
+public class AuthenticationEventArgs : EventArgs
+{
+    public bool IsAuthenticated { get; }
+    public string? Reason { get; }
+    public DateTimeOffset Timestamp { get; }
+
+    public AuthenticationEventArgs(bool isAuthenticated, string? reason = null)
+    {
+        IsAuthenticated = isAuthenticated;
+        Reason = reason;
+        Timestamp = DateTimeOffset.UtcNow;
+    }
+}
 /// <summary>
 /// Feed error event arguments
 /// </summary>

@@ -6,6 +6,7 @@ using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Adapters;
 using OpenHFT.Feed.Interfaces;
+using OpenHFT.Feed.Models;
 namespace OpenHFT.Feed;
 
 public class SubscriptionManager : ISubscriptionManager, IDisposable
@@ -14,19 +15,23 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
     private readonly IFeedHandler _feedHandler;
     private readonly IInstrumentRepository _instrumentRepository;
     private readonly SubscriptionConfig _config;
-
+    private readonly IFeedAdapterRegistry _adapterRegistry;
     public SubscriptionManager(
         ILogger<SubscriptionManager> logger,
         IFeedHandler feedHandler,
+        IFeedAdapterRegistry adapterRegistry,
         IInstrumentRepository instrumentRepository,
         SubscriptionConfig subscriptionConfig) // IOptions pattern is best practice
     {
         _logger = logger;
         _feedHandler = feedHandler;
+        _adapterRegistry = adapterRegistry;
         _instrumentRepository = instrumentRepository;
         _config = subscriptionConfig;
 
+        _logger.LogInformationWithCaller($"SubscriptionManager initialized with config: {_config}");
         _feedHandler.AdapterConnectionStateChanged += OnAdapterConnectionStateChanged;
+        _feedHandler.AdapterAuthenticationStateChanged += OnAdapterAuthenticationStateChanged;
     }
 
     public async Task InitializeSubscriptionsAsync(CancellationToken cancellationToken = default)
@@ -74,17 +79,18 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
         foreach (var entry in instrumentsByAdapter)
         {
             var adapterKey = entry.Key;
-            var instrumentsToSubscribe = entry.Value;
-            var adapter = _feedHandler.GetAdapter(adapterKey.Item1, adapterKey.Item2);
+            var adapter = _adapterRegistry.GetAdapter(adapterKey.Item1, adapterKey.Item2);
+            if (adapter == null)
+            {
+                _logger.LogWarningWithCaller($"Adapter not found for {adapterKey}, cannot subscribe to {entry.Value.Count} instruments.");
+                continue;
+            }
 
-            if (adapter != null)
+            var instrumentsToSubscribe = entry.Value;
+            if (instrumentsToSubscribe.Any())
             {
                 _logger.LogInformationWithCaller($"Requesting subscription of {instrumentsToSubscribe.Count} instruments on adapter {adapterKey}");
                 subscribeTasks.Add(adapter.SubscribeAsync(instrumentsToSubscribe, cancellationToken));
-            }
-            else
-            {
-                _logger.LogWarningWithCaller($"Adapter not found for {adapterKey}, cannot subscribe to {instrumentsToSubscribe.Count} instruments.");
             }
         }
 
@@ -94,14 +100,23 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
 
     private void OnAdapterConnectionStateChanged(object? sender, ConnectionStateChangedEventArgs e)
     {
-        if (e.IsConnected && sender is BaseFeedAdapter adapter)
+        if (e.IsConnected && sender is IFeedAdapter adapter)
         {
             // Run re-subscription in the background to not block the event handler.
             _ = ResubscribeToAdapterAsync(adapter);
         }
     }
 
-    private async Task ResubscribeToAdapterAsync(BaseFeedAdapter adapter, CancellationToken cancellationToken = default)
+    private void OnAdapterAuthenticationStateChanged(object? sender, AuthenticationEventArgs e)
+    {
+        if (e.IsAuthenticated && sender is IFeedAdapter adapter)
+        {
+            // Run private topic subscription in the background to not block the event handler.
+            _ = SubscribePrivateTopicsAsync(adapter);
+        }
+    }
+
+    private async Task ResubscribeToAdapterAsync(IFeedAdapter adapter, CancellationToken cancellationToken = default)
     {
         _logger.LogInformationWithCaller($"Re-subscribing instruments for connected adapter: {adapter.SourceExchange}/{adapter.ProdType}");
 
@@ -139,6 +154,26 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
         }
     }
 
+    private async Task SubscribePrivateTopicsAsync(IFeedAdapter adapter, CancellationToken cancellationToken = default)
+    {
+        if (adapter is not BaseAuthFeedAdapter authAdapter)
+        {
+            _logger.LogWarningWithCaller($"Adapter {adapter.SourceExchange} does not support authentication (BaseAuthFeedAdapter not implemented). Skipping private topics.");
+            return;
+        }
+
+        var privateTopics = adapter.SourceExchange switch
+        {
+            ExchangeEnum.BINANCE => BinanceTopic.GetAllPrivateTopics(),
+            ExchangeEnum.BITMEX => BitmexTopic.GetAllPrivateTopics(),
+            _ => Enumerable.Empty<ExchangeTopic>()
+        };
+
+        if (!privateTopics.Any()) return;
+
+        _logger.LogInformationWithCaller($"Subscribing to {privateTopics.Count()} private topics for {adapter.SourceExchange}/{adapter.ProdType}.");
+        await authAdapter.SubscribeToPrivateTopicsAsync(cancellationToken);
+    }
 
     private T ParseEnum<T>(string value) where T : struct, Enum
     {

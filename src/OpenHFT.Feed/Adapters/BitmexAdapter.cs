@@ -11,7 +11,7 @@ using OpenHFT.Feed.Models;
 
 namespace OpenHFT.Feed.Adapters;
 
-public class BitmexAdapter : BaseFeedAdapter
+public class BitmexAdapter : BaseAuthFeedAdapter
 {
     private const string DefaultBaseUrl = "wss://ws.bitmex.com/realtime";
 
@@ -28,16 +28,49 @@ public class BitmexAdapter : BaseFeedAdapter
         return DefaultBaseUrl;
     }
 
-    private static IEnumerable<string> GetDefaultStreamsForSymbol(string symbol)
-    {
-        return BitmexTopic.GetAll().Select(topic => topic.GetStreamName(symbol));
-    }
-
     protected override void ConfigureWebsocket(ClientWebSocket websocket)
     {
         websocket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
     }
 
+    protected override async Task DoAuthenticateAsync(CancellationToken cancellationToken)
+    {
+        var expires = DateTimeOffset.UtcNow.AddSeconds(30).ToUnixTimeSeconds();
+
+        var signatureString = $"GET/realtime{expires}";
+        var signature = CreateSignature(signatureString); // Uses helper from BaseAuthFeedAdapter
+
+        var authRequest = new
+        {
+            op = "authKeyExpires",
+            args = new object[] { ApiKey!, expires, signature }
+        };
+
+        var message = JsonSerializer.Serialize(authRequest);
+        _logger.LogInformationWithCaller("Sending authentication request to BitMEX WebSocket.");
+        await SendMessageAsync(message, cancellationToken);
+
+        await SubscribeToPrivateTopicsAsync(cancellationToken);
+    }
+
+    public override Task SubscribeToPrivateTopicsAsync(CancellationToken cancellationToken)
+    {
+        var privateTopics = BitmexTopic.GetAllPrivateTopics();
+        var topicArgs = privateTopics.Select(t => t.GetStreamName("")).ToArray();
+        if (!topicArgs.Any())
+        {
+            _logger.LogWarningWithCaller("No private topics defined for BitMEX; skipping subscription.");
+            return Task.CompletedTask;
+        }
+        var subscriptionRequest = new
+        {
+            op = "subscribe",
+            args = topicArgs
+        };
+        var message = JsonSerializer.Serialize(subscriptionRequest);
+        _logger.LogInformationWithCaller($"Subscribing to private BitMEX topics: {string.Join(", ", topicArgs)}");
+        return SendMessageAsync(message, cancellationToken);
+    }
 
     protected override Task DoSubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
     {
@@ -52,7 +85,7 @@ public class BitmexAdapter : BaseFeedAdapter
     private Task SendSubscriptionRequest(string operation, IEnumerable<Instrument> insts, CancellationToken cancellationToken)
     {
         var allStreams = insts
-            .SelectMany(inst => GetDefaultStreamsForSymbol(inst.Symbol)) // Now uses the new static method
+            .SelectMany(inst => BitmexTopic.GetAllMarketTopics().Select(topic => topic.GetStreamName(inst.Symbol)))
             .ToArray();
 
         if (!allStreams.Any())
@@ -69,6 +102,47 @@ public class BitmexAdapter : BaseFeedAdapter
         var message = JsonSerializer.Serialize(request);
         _logger.LogInformationWithCaller($"Sending Bitmex {operation} request: {message}");
         return SendMessageAsync(message, cancellationToken);
+    }
+
+    private void ProcessExecution(JsonElement data)
+    {
+        foreach (var exeJson in data.EnumerateArray())
+        {
+            try
+            {
+                var report = ParseExecution(exeJson);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogErrorWithCaller(ex, "Failed to process BitMEX execution message.");
+            }
+        }
+    }
+    private OrderStatusReport ParseExecution(JsonElement exeJson)
+    {
+        var symbol = exeJson.GetProperty("symbol").GetString();
+        if (symbol == null)
+        {
+            throw new FeedParseException(SourceExchange, "Invalid symbol in execution message", null, null, BitmexTopic.Execution.TopicId);
+        }
+
+        var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
+        if (instrument == null)
+        {
+            throw new FeedParseException(SourceExchange, $"Invalid instrument(symbol: {symbol}) in execution message", null, null, BitmexTopic.Execution.TopicId);
+        }
+
+        var execType = exeJson.GetProperty("execType").GetString();
+        var orderStatus = execType switch
+        {
+            "New" => OrderStatus.New,
+            "Filled" => OrderStatus.Filled,
+            "PartiallyFilled" => OrderStatus.PartiallyFilled,
+            _ => OrderStatus.New
+        };
+
+        var report = new OrderStatusReport();
+        return report;
     }
 
     private void ProcessOrderBook10(JsonElement data)
@@ -309,6 +383,10 @@ public class BitmexAdapter : BaseFeedAdapter
                 else if (topic == BitmexTopic.Trade)
                 {
                     ProcessTrade(dataElement);
+                }
+                else if (topic == BitmexTopic.Execution)
+                {
+                    ProcessExecution(dataElement);
                 }
             }
         }

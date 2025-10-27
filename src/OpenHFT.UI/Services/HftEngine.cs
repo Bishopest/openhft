@@ -118,7 +118,7 @@ public class HftEngine : BackgroundService
         // _feedHandler.Initialize(_marketDataQueue);
         try
         {
-            await _feedHandler.StartAsync(cancellationToken);
+            // await _feedHandler.StartAsync(cancellationToken);
             _logger.LogInformation("Feed handler started successfully");
         }
         catch (Exception ex)
@@ -321,7 +321,6 @@ public class HftEngine : BackgroundService
         try
         {
             await _strategyEngine.StopAsync();
-            await _feedHandler.StopAsync();
 
             _marketDataQueue.Dispose();
 

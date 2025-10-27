@@ -7,7 +7,6 @@ using OpenHFT.Core.Utils;
 using OpenHFT.Core.Collections;
 using OpenHFT.Book.Core;
 using System.Threading.Channels;
-using Disruptor.Processing;
 using OpenHFT.Core.Instruments;
 
 namespace OpenHFT.Benchmarks;

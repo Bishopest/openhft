@@ -9,6 +9,7 @@ using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Exceptions;
 using OpenHFT.Feed.Interfaces;
 using OpenHFT.Feed.Models;
+using OpenHFT.Gateway.ApiClient;
 
 namespace OpenHFT.Feed.Adapters;
 
@@ -16,19 +17,24 @@ namespace OpenHFT.Feed.Adapters;
 /// Binance WebSocket feed adapter for real-time market data
 /// Supports both individual symbol streams and combined streams
 /// </summary>
-public class BinanceAdapter : BaseFeedAdapter
+public class BinanceAdapter : BaseAuthFeedAdapter
 {
-    private const string DefaultBaseUrl = "wss://fstream.binance.com/stream";
-
+    private readonly BinanceRestApiClient _restApiClient;
+    private string _listenKey;
     public override ExchangeEnum SourceExchange => ExchangeEnum.BINANCE;
 
     public BinanceAdapter(ILogger<BinanceAdapter> logger, ProductType type, IInstrumentRepository instrumentRepository) : base(logger, type, instrumentRepository)
     {
     }
 
-    private static IEnumerable<string> GetDefaultStreamsForSymbol(string symbol)
+    protected override async Task DoAuthenticateAsync(CancellationToken cancellationToken)
     {
-        return BinanceTopic.GetAll().Select(topic => topic.GetStreamName(symbol));
+        _logger.LogInformationWithCaller("Requesting a new listen key from Binance REST API...");
+
+        var listenKeyResponse = await _restApiClient.CreateListenKeyAsync(ProdType, cancellationToken);
+        _listenKey = listenKeyResponse.ListenKey;
+
+        _logger.LogInformationWithCaller("Successfully obtained listen key from Binance.");
     }
 
     private void ProcessAggTrade(JsonElement data)
@@ -216,7 +222,19 @@ public class BinanceAdapter : BaseFeedAdapter
 
     protected override string GetBaseUrl()
     {
-        return DefaultBaseUrl;
+        var baseUrl = ProdType switch
+        {
+            ProductType.PerpetualFuture => "wss://fstream.binance.com/stream",
+            ProductType.Spot => "wss://stream.binance.com:9443/stream",
+            _ => throw new InvalidOperationException($"Unsupported product type for Binance: {ProdType}")
+        };
+
+        if (!string.IsNullOrEmpty(_listenKey))
+        {
+            return $"{baseUrl}?streams={_listenKey}";
+        }
+
+        return baseUrl;
     }
 
     protected override async Task ProcessMessage(MemoryStream messageStream)
@@ -277,7 +295,7 @@ public class BinanceAdapter : BaseFeedAdapter
     protected override Task DoSubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
     {
         var allStreams = insts
-            .SelectMany(inst => GetDefaultStreamsForSymbol(inst.Symbol)) // Now uses the new static method
+            .SelectMany(inst => BinanceTopic.GetAllMarketTopics().Select(topic => topic.GetStreamName(inst.Symbol)))
             .ToArray();
 
         if (!allStreams.Any())
@@ -292,14 +310,14 @@ public class BinanceAdapter : BaseFeedAdapter
             id = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         });
 
-        _logger.LogInformationWithCaller($"Subscribing to {allStreams.Length} streams on {Exchange.Decode(SourceExchange)}");
+        _logger.LogInformationWithCaller($"Sending Binance subscribe request: {string.Join(", ", allStreams)}");
         return SendMessageAsync(subscribeMessage, cancellationToken);
     }
 
     protected override Task DoUnsubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
     {
         var allStreams = insts
-            .SelectMany(inst => GetDefaultStreamsForSymbol(inst.Symbol)) // Now uses the new static method
+            .SelectMany(inst => BinanceTopic.GetAllMarketTopics().Select(topic => topic.GetStreamName(inst.Symbol)))
             .ToArray();
 
         if (!allStreams.Any())
@@ -334,5 +352,11 @@ public class BinanceAdapter : BaseFeedAdapter
     {
         // Not used for Binance.
         return false;
+    }
+
+    public override Task SubscribeToPrivateTopicsAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformationWithCaller("SubscribeToPrivateTopicsAsync is not implemented for BinanceAdapter.");
+        return Task.CompletedTask;
     }
 }

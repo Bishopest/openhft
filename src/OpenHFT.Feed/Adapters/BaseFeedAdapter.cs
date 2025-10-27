@@ -46,6 +46,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     public event EventHandler<ConnectionStateChangedEventArgs>? ConnectionStateChanged;
     public event EventHandler<FeedErrorEventArgs>? Error;
     public event EventHandler<MarketDataEvent>? MarketDataReceived;
+    public event EventHandler<OrderStatusReport>? OrderUpdateReceived;
 
     public ProductType ProdType { get; }
 
@@ -181,6 +182,13 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         }
     }
 
+    public virtual Task AuthenticateAsync(string apiKey, string apiSecret, CancellationToken cancellationToken = default)
+    {
+        // By default, adapters do not support authentication.
+        // Derived classes that require it must override this method.
+        _logger.LogWarningWithCaller($"{GetType().Name} does not support authentication.");
+        return Task.FromException(new NotSupportedException($"{GetType().Name} does not support authentication."));
+    }
     public void Dispose()
     {
         Dispose(true);
