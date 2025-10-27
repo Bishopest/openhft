@@ -143,12 +143,12 @@ public class ConfigLoaderTests
     public void Get_StringValue_ReturnsCorrectValue()
     {
         // Arrange
-        var jsonContent = @"{ ""data-folder"": ""/var/data"", ""subscriptions"": [] }";
+        var jsonContent = @"{ ""dataFolder"": ""/var/data"", ""subscriptions"": [] }";
         var configPath = CreateTestConfigFile(jsonContent);
         var loader = new ConfigLoader(new NullLogger<ConfigLoader>(), configPath);
 
         // Act
-        var result = loader.Get("data-folder");
+        var result = loader.Get("dataFolder");
 
         // Assert
         Assert.That(result, Is.EqualTo("/var/data"));

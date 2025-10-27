@@ -11,5 +11,5 @@
       "symbols": [ "BTCUSDT"]
     }
   ],
-  "data-folder": "/Users/jskim/workspace/openhft/data"
+  "dataFolder": "/Users/jskim/workspace/openhft/data"
 }
