@@ -6,7 +6,6 @@ using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Adapters;
-using OpenHFT.Feed.Exceptions;
 using OpenHFT.Feed.Interfaces;
 
 namespace OpenHFT.Feed;
@@ -14,134 +13,55 @@ namespace OpenHFT.Feed;
 public class FeedHandler : IFeedHandler
 {
     private readonly ILogger<FeedHandler> _logger;
-    private readonly ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, BaseFeedAdapter>> _adapters;
+    private readonly IEnumerable<IFeedAdapter> _adapters;
     private readonly RingBuffer<MarketDataEventWrapper> _ringBuffer;
+    private RingBuffer<OrderStatusReportWrapper> _orderUpdateRingBuffer;
     public event EventHandler<FeedErrorEventArgs>? FeedError;
     public event EventHandler<ConnectionStateChangedEventArgs>? AdapterConnectionStateChanged;
+    public event EventHandler<AuthenticationEventArgs>? AdapterAuthenticationStateChanged;
 
     public FeedHandlerStatistics Statistics { get; } = new();
 
-    public FeedHandler(ILogger<FeedHandler> logger, ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<ProductType, BaseFeedAdapter>> adapters, Disruptor<MarketDataEventWrapper> disruptor)
+    public FeedHandler(
+        ILogger<FeedHandler> logger,
+        IFeedAdapterRegistry adapterRegistry,
+        Disruptor<MarketDataEventWrapper> disruptor,
+        Disruptor<OrderStatusReportWrapper> orderUpdateDisruptor)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _adapters = adapters ?? throw new ArgumentNullException(nameof(adapters));
+        _adapters = adapterRegistry.GetAllAdapters() ?? throw new ArgumentNullException(nameof(adapterRegistry));
         _ringBuffer = disruptor.RingBuffer ?? throw new ArgumentNullException(nameof(disruptor));
+        _orderUpdateRingBuffer = orderUpdateDisruptor.RingBuffer ?? throw new ArgumentNullException(nameof(orderUpdateDisruptor));
 
         Statistics.StartTime = DateTimeOffset.UtcNow;
-        _logger.LogInformationWithCaller($"FeedHandler initialized with {_adapters.Count} adapters.");
+        _logger.LogInformationWithCaller($"FeedHandler initialized with {_adapters.Count()} adapters.");
 
-        foreach (var exchangeKvp in adapters)
-        {
-            var exchangeName = exchangeKvp.Key;
-
-            foreach (var adapterKvp in exchangeKvp.Value)
-            {
-                var adapter = adapterKvp.Value;
-
-                adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
-                adapter.Error += OnFeedError;
-                adapter.MarketDataReceived += OnMarketDataReceived;
-                _logger.LogInformationWithCaller($"Register market data handler for {exchangeName} adapter (Producer: {adapterKvp.Key})");
-            }
-        }
-    }
-    public async Task StartAsync(CancellationToken cancellationToken = default)
-    {
-        int cnt = 0;
-        foreach (var exchangeKvp in _adapters)
-        {
-            foreach (var adapterKvp in exchangeKvp.Value)
-            {
-                await adapterKvp.Value.ConnectAsync(cancellationToken);
-                cnt++;
-            }
-        }
-
-        _logger.LogInformationWithCaller($"Feedhandler started with adapter({cnt})");
-    }
-
-    public async Task StopAsync(CancellationToken cancellationToken = default)
-    {
-        int cnt = 0;
-        foreach (var exchangeKvp in _adapters)
-        {
-            foreach (var adapterKvp in exchangeKvp.Value)
-            {
-                await adapterKvp.Value.DisconnectAsync(cancellationToken);
-                cnt++;
-            }
-        }
-
-        _logger.LogInformationWithCaller($"Feedhandler stopped with adapter({cnt})");
-    }
-
-    public void AddAdapter(BaseFeedAdapter adapter)
-    {
-        var innerDict = _adapters.GetOrAdd(
-            adapter.SourceExchange,
-            _ => new ConcurrentDictionary<ProductType, BaseFeedAdapter>()
-        );
-
-        // 2. 내부 딕셔너리에 ProducerType 키와 함께 어댑터를 추가합니다.
-        if (innerDict.TryAdd(adapter.ProdType, adapter)) // assumes adapter has ProducerType property
+        foreach (var adapter in _adapters)
         {
             adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
             adapter.Error += OnFeedError;
             adapter.MarketDataReceived += OnMarketDataReceived;
-            _logger.LogInformationWithCaller($"Adapter for {Exchange.Decode(adapter.SourceExchange)} ({adapter.ProdType}) added Feedhandler");
+            adapter.OrderUpdateReceived += OnOrderUpdateReceived;
+
+            if (adapter is BaseAuthFeedAdapter authAdapter)
+            {
+                authAdapter.AuthenticationStateChanged += onAdapterAuthenticationStateChanged;
+            }
+            _logger.LogInformationWithCaller($"Register market data handler for {adapter.SourceExchange} adapter (Product Type: {adapter.ProdType}");
         }
     }
 
-    public void RemoveAdapter(ExchangeEnum sourceExchange, ProductType type)
+    private void onAdapterAuthenticationStateChanged(object? sender, AuthenticationEventArgs e)
     {
-        if (_adapters.TryGetValue(sourceExchange, out var innerDict))
-        {
-            if (innerDict.TryRemove(type, out var adapter))
-            {
-                adapter.ConnectionStateChanged -= OnAdapterConnectionStateChanged;
-                adapter.Error -= OnFeedError;
-                adapter.MarketDataReceived -= OnMarketDataReceived;
-                _logger.LogInformationWithCaller($"Adapter for {Exchange.Decode(adapter.SourceExchange)} ({type}) removed from Feedhandler");
+        var adapter = sender as IFeedAdapter;
+        if (adapter == null) return;
 
-            }
-        }
-    }
-    /// <summary>
-    /// Retrieves the specific BaseFeedAdapter for the given exchange and producer type.
-    /// </summary>
-    /// <param name="sourceExchange">The exchange enum of the desired adapter.</param>
-    /// <param name="type">The producer type of the desired adapter.</param>
-    /// <returns>The requested BaseFeedAdapter instance.</returns>
-    /// <exception cref="KeyNotFoundException">Thrown if the adapter for the specified exchange and producer type is not found.</exception>
-    public BaseFeedAdapter? GetAdapter(ExchangeEnum sourceExchange, ProductType type)
-    {
-        // 1. Exchange 키로 내부 딕셔너리를 찾습니다.
-        if (_adapters.TryGetValue(sourceExchange, out var innerDict))
-        {
-            // 2. ProducerType 키로 어댑터를 찾습니다.
-            if (innerDict.TryGetValue(type, out var adapter))
-            {
-                return adapter;
-            }
-            else
-            {
-                var msg = $"Adapter for exchange {Exchange.Decode(sourceExchange)} and ProducerType {type} not found.";
-                _logger.LogError(msg);
-                throw new KeyNotFoundException(msg);
-            }
-        }
-        else
-        {
-            // 3. Exchange 키 자체가 존재하지 않을 경우 예외를 발생시킵니다.
-            var msg = $"Adapter for exchange {Exchange.Decode(sourceExchange)} not found in FeedHandler.";
-            _logger.LogError(msg);
-            throw new KeyNotFoundException(msg);
-        }
+        AdapterAuthenticationStateChanged?.Invoke(adapter, e);
     }
 
     private void OnAdapterConnectionStateChanged(object? sender, ConnectionStateChangedEventArgs e)
     {
-        var adapter = sender as BaseFeedAdapter;
+        var adapter = sender as IFeedAdapter;
         if (adapter == null) return;
 
         AdapterConnectionStateChanged?.Invoke(adapter, e);
@@ -182,14 +102,31 @@ public class FeedHandler : IFeedHandler
         }
     }
 
+    private void OnOrderUpdateReceived(object? sender, OrderStatusReport orderStatusReport)
+    {
+        if (_orderUpdateRingBuffer.TryNext(out long sequence))
+        {
+            try
+            {
+                var wrapper = _orderUpdateRingBuffer[sequence];
+                wrapper.SetData(orderStatusReport);
+            }
+            finally
+            {
+                _orderUpdateRingBuffer.Publish(sequence);
+            }
+        }
+        else
+        {
+            _logger.LogWarningWithCaller($"Order Disruptor ring buffer is full. Dropping order update for OrderId {orderStatusReport.ClientOrderId}. This indicates the consumer is too slow or has stalled.");
+        }
+    }
+
     public void Dispose()
     {
-        foreach (var exchangeKvp in _adapters)
+        foreach (var adapter in _adapters)
         {
-            foreach (var adapterKvp in exchangeKvp.Value)
-            {
-                adapterKvp.Value.Dispose();
-            }
+            adapter.Dispose();
         }
     }
 }
