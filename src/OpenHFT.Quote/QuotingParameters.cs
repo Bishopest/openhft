@@ -36,6 +36,10 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     public readonly int Depth { get; }
 
     /// <summary>
+    /// Specifies the type of quoter to be used for this instance.
+    /// </summary>
+    public readonly QuoterType Type { get; }
+    /// <summary>
     /// Initializes a new instance of the QuotingParameters struct with all required values.
     /// </summary>
     /// <param name="instrumentId">The ID of the instrument these parameters apply to.</param>
@@ -44,7 +48,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     /// <param name="skewBp">The skew in basis points.</param>
     /// <param name="size">The quantity for each quote level.</param>
     /// <param name="depth">The number of quote levels on each side.</param>
-    public QuotingParameters(int instrumentId, FairValueModel fvModel, decimal spreadBp, decimal skewBp, Quantity size, int depth)
+    /// <param name="type">The type of quoter to be used.</param>
+    public QuotingParameters(int instrumentId, FairValueModel fvModel, decimal spreadBp, decimal skewBp, Quantity size, int depth, QuoterType type)
     {
         InstrumentId = instrumentId;
         FvModel = fvModel;
@@ -52,6 +57,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         SkewBp = skewBp;
         Size = size;
         Depth = depth;
+        Type = type;
     }
 
     public override string ToString()
@@ -62,6 +68,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
                $"\"SkewBp\": {SkewBp}, " +
                $"\"Size\": {Size.ToDecimal()}, " +
                $"\"Depth\": {Depth}" +
+               $"\"Type\": {Type}" +
                $" }}";
     }
 
@@ -72,8 +79,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
                SpreadBp == other.SpreadBp &&
                SkewBp == other.SkewBp &&
                Size == other.Size &&
-               Depth == other.Depth;
-
+               Depth == other.Depth &&
+               Type == other.Type;
     }
     public override bool Equals(object? obj)
     {
@@ -89,6 +96,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         hash.Add(SkewBp);
         hash.Add(Size);
         hash.Add(Depth);
+        hash.Add(Type);
         return hash.ToHashCode();
     }
 

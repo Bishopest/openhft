@@ -1,6 +1,8 @@
 using System;
 using OpenHFT.Core.Instruments;
-using OpenHFT.Quoting.FairValue;
+using OpenHFT.Core.Models;
+using OpenHFT.Processing;
+using OpenHFT.Quoting.Models;
 
 namespace OpenHFT.Quoting.Interfaces;
 
@@ -10,8 +12,9 @@ namespace OpenHFT.Quoting.Interfaces;
 public interface IQuotingEngine
 {
     Instrument QuotingInstrument { get; }
-    void Start();
-    void Stop();
+    event EventHandler<QuotePair> QuotePairCalculated;
+    void Start(MarketDataManager marketDataManager);
+    void Stop(MarketDataManager marketDataManager);
     void UpdateParameters(QuotingParameters newParameters);
     void SetFairValueProvider(FairValueModel model);
 }

@@ -5,7 +5,6 @@ using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Processing;
-using OpenHFT.Quoting.FairValue;
 using OpenHFT.Quoting.Interfaces;
 using OpenHFT.Quoting.Models;
 
@@ -14,30 +13,29 @@ namespace OpenHFT.Quoting;
 public class QuotingEngine : IQuotingEngine
 {
     private readonly ILogger _logger;
-    private readonly MarketDataManager _marketDataManager;
     private readonly MarketMaker _marketMaker;
     private readonly IFairValueProviderFactory _fairValueProviderFactory;
     private readonly object _lock = new();
     private IFairValueProvider? _fairValueProvider;
     private QuotingParameters? _parameters;
 
+    public event EventHandler<QuotePair> QuotePairCalculated;
+
     public Instrument QuotingInstrument { get; }
 
     public QuotingEngine(
         ILogger logger,
         Instrument instrument,
-        MarketDataManager marketDataManager,
         MarketMaker marketMaker,
         IFairValueProviderFactory fairValueProviderFactory)
     {
         _logger = logger;
         QuotingInstrument = instrument;
-        _marketDataManager = marketDataManager;
         _marketMaker = marketMaker;
         _fairValueProviderFactory = fairValueProviderFactory;
     }
 
-    public void Start()
+    public void Start(MarketDataManager marketDataManager)
     {
         if (_parameters == null)
         {
@@ -53,15 +51,15 @@ public class QuotingEngine : IQuotingEngine
 
         _logger.LogInformationWithCaller($"Starting QuotingEngine for {QuotingInstrument.Symbol}.");
         _fairValueProvider.FairValueChanged += OnFairValueChanged;
-        _marketDataManager.SubscribeOrderBook(QuotingInstrument.InstrumentId, $"QuotingEngine_{QuotingInstrument.Symbol}_{_fairValueProvider?.Model}", OnOrderBookUpdate);
+        marketDataManager.SubscribeOrderBook(QuotingInstrument.InstrumentId, $"QuotingEngine_{QuotingInstrument.Symbol}_{_fairValueProvider?.Model}", OnOrderBookUpdate);
     }
 
-    public void Stop()
+    public void Stop(MarketDataManager marketDataManager)
     {
         _logger.LogInformationWithCaller($"Stopping QuotingEngine for {QuotingInstrument.Symbol}.");
         if (_fairValueProvider != null)
         {
-            _marketDataManager.UnsubscribeOrderBook(QuotingInstrument.InstrumentId, $"QuotingEngine_{QuotingInstrument.Symbol}_{_fairValueProvider.Model}");
+            marketDataManager.UnsubscribeOrderBook(QuotingInstrument.InstrumentId, $"QuotingEngine_{QuotingInstrument.Symbol}_{_fairValueProvider.Model}");
             _fairValueProvider.FairValueChanged -= OnFairValueChanged;
         }
         _ = _marketMaker.CancelAllQuotesAsync(); // Fire and forget cancel
@@ -103,15 +101,12 @@ public class QuotingEngine : IQuotingEngine
                 return;
             }
             _fairValueProvider.FairValueChanged -= OnFairValueChanged;
-            string oldSubscriptionKey = $"QuotingEngine_{QuotingInstrument.Symbol}_{_fairValueProvider.Model}";
-            _marketDataManager.UnsubscribeOrderBook(QuotingInstrument.InstrumentId, oldSubscriptionKey);
         }
+
         var fairValueProvider = _fairValueProviderFactory.CreateProvider(model, QuotingInstrument);
         _logger.LogInformationWithCaller($"Swapping FairValueProvider for Instrument {QuotingInstrument.Symbol}. New FairValueMOdel: {model}");
         fairValueProvider.FairValueChanged += OnFairValueChanged;
         _fairValueProvider = fairValueProvider;
-        string newSubscriptionKey = $"QuotingEngine_{QuotingInstrument.Symbol}_{model}";
-        _marketDataManager.SubscribeOrderBook(QuotingInstrument.InstrumentId, newSubscriptionKey, OnOrderBookUpdate);
     }
 
     private void OnOrderBookUpdate(object? sender, OrderBook ob)
@@ -168,6 +163,7 @@ public class QuotingEngine : IQuotingEngine
 
         // Delegate execution to the MarketMaker
         // This is a fire-and-forget call to avoid blocking the fair value update thread.
+        QuotePairCalculated?.Invoke(this, targetQuotePair);
         _ = _marketMaker.UpdateQuoteTargetAsync(targetQuotePair);
     }
 }
