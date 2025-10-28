@@ -8,11 +8,10 @@ namespace OpenHFT.Quoting.Interfaces;
 public interface IQuoteValidator
 {
     /// <summary>
-    /// Determines if a given quote is valid to be placed on the market.
+    /// Determines if a given quote pair is valid to be placed on the market.
     /// For example, it checks if the quote would cross the spread.
     /// </summary>
-    /// <param name="quote">The quote to validate.</param>
-    /// <param name="side">The side of the quote.</param>
-    /// <returns>True if the quote is valid (Live), false otherwise (Held).</returns>
-    bool ShouldQuoteBeLive(Quote quote, Side side);
+    /// <param name="pair">The quote pair to validate.</param>
+    /// <returns>Live if the quote is valid (does not cross), Held otherwise.</returns>
+    TwoSidedQuoteStatus ShouldQuoteBeLive(QuotePair pair);
 }

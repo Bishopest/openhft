@@ -71,23 +71,17 @@ public sealed class MarketMaker
         }
 
         // 1. Determine the desired status for each side based on validation rules.
-        var bidStatus = _quoteValidator.ShouldQuoteBeLive(target.Bid, Side.Buy)
-            ? QuoteStatus.Live
-            : QuoteStatus.Held;
-
-        var askStatus = _quoteValidator.ShouldQuoteBeLive(target.Ask, Side.Sell)
-            ? QuoteStatus.Live
-            : QuoteStatus.Held;
+        var pairedStatus = _quoteValidator.ShouldQuoteBeLive(target);
 
         // 2. Update and publish the new status.
-        UpdateStatus(new TwoSidedQuoteStatus(_instrument.InstrumentId, bidStatus, askStatus));
+        UpdateStatus(pairedStatus);
 
         // 3. Create and execute the necessary actions for each side concurrently.
-        var bidActionTask = (bidStatus == QuoteStatus.Live)
+        var bidActionTask = (pairedStatus.BidStatus == QuoteStatus.Live)
             ? _bidQuoter.UpdateQuoteAsync(target.Bid)
             : _bidQuoter.CancelQuoteAsync();
 
-        var askActionTask = (askStatus == QuoteStatus.Live)
+        var askActionTask = (pairedStatus.AskStatus == QuoteStatus.Live)
             ? _askQuoter.UpdateQuoteAsync(target.Ask)
             : _askQuoter.CancelQuoteAsync();
 
