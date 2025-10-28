@@ -4,4 +4,5 @@ public enum FairValueModel
 {
     Midp,
     FR,
+    BestMidp
 }

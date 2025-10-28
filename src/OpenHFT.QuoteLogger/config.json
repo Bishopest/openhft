@@ -5,7 +5,7 @@
     "symbol": "XBTUSD",
     "quoterType": "log",
     "fairValue": {
-      "model": "midp",
+      "model": "bestMidp",
       "params": {
         "exchange": "binance",
         "productType": "perpetualfuture",

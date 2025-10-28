@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using OpenHFT.Book.Core;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
+using OpenHFT.Quoting.Interfaces;
 
 namespace OpenHFT.Quoting.FairValue;
 
@@ -9,7 +10,7 @@ namespace OpenHFT.Quoting.FairValue;
 /// A Fair Value Provider that calculates the fair value as the simple mid-price
 /// (average of best bid and best ask) from the raw order book data.
 /// </summary>
-public class MidpFairValueProvider : AbstractFairValueProvider
+public class MidpFairValueProvider : AbstractFairValueProvider, IOrderBookConsumerProvider
 {
     public override FairValueModel Model => FairValueModel.Midp;
 
@@ -17,15 +18,21 @@ public class MidpFairValueProvider : AbstractFairValueProvider
     {
     }
 
-    protected override Price? CalculateFairValue(OrderBook orderBook)
+    public void Update(OrderBook ob)
     {
-        var midPrice = orderBook.GetMidPrice();
+        if (ob.InstrumentId != SourceInstrumentId) return;
 
-        if (midPrice.ToDecimal() == 0)
+        var midP = ob.GetMidPrice();
+
+        if (midP.ToDecimal() == 0m)
         {
-            return null;
+            return;
         }
 
-        return midPrice;
+        if (midP != _lastFairValue)
+        {
+            _lastFairValue = midP;
+            OnFairValueChanged(new FairValueUpdate(SourceInstrumentId, midP));
+        }
     }
 }

@@ -34,10 +34,10 @@ public class FairValueProviderFactory : IFairValueProviderFactory
             case FairValueModel.Midp:
                 // Resolve the specific logger needed for MidpFairValueProvider from the DI container.
                 return new MidpFairValueProvider(_logger, fvInstrumentId);
-
+            case FairValueModel.BestMidp:
+                return new BestMidpFairValueProvider(_logger, fvInstrumentId);
             case FairValueModel.FR:
                 throw new NotImplementedException($"FairValueModel '{model}' is not yet implemented in FairValueProviderFactory.");
-
             default:
                 // This handles any undefined enum values, ensuring robustness.
                 throw new ArgumentOutOfRangeException(nameof(model), $"Unsupported FairValueModel: {model}. Please check if the enum value is correct and implemented in the factory.");

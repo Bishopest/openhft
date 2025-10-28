@@ -23,17 +23,14 @@ public readonly struct FairValueUpdate
 /// </summary>
 public interface IFairValueProvider
 {
+    /// <summary>
+    /// The instrument ID from which this provider derives its fair value.
+    /// </summary>
+    int SourceInstrumentId { get; }
 
     FairValueModel Model { get; }
     /// <summary>
     /// Fired whenever the calculated fair value changes.
     /// </summary>
     event EventHandler<FairValueUpdate> FairValueChanged;
-
-    /// <summary>
-    /// Updates the provider with the latest market data (Top of Book).
-    /// The implementation should decide if this new data results in a fair value change.
-    /// </summary>
-    /// <param name="topOfBook">The latest top-of-book data for the instrument.</param>
-    void Update(OrderBook ob);
 }
