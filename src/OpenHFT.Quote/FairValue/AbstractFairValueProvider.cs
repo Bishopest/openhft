@@ -11,17 +11,17 @@ namespace OpenHFT.Quoting.FairValue;
 public abstract class AbstractFairValueProvider : IFairValueProvider
 {
     protected readonly ILogger Logger;
-    protected readonly Instrument Inst;
+    protected readonly int InstrumentId;
     private Price? _lastFairValue;
     public Price? LastFairValue => _lastFairValue;
 
     public abstract FairValueModel Model { get; }
     public event EventHandler<FairValueUpdate>? FairValueChanged;
 
-    protected AbstractFairValueProvider(ILogger logger, Instrument instrument)
+    protected AbstractFairValueProvider(ILogger logger, int instrumentId)
     {
         Logger = logger;
-        Inst = instrument;
+        InstrumentId = instrumentId;
         _lastFairValue = null;
     }
 
@@ -32,9 +32,9 @@ public abstract class AbstractFairValueProvider : IFairValueProvider
     /// <param name="orderBook">The latest order book data.</param>
     public void Update(OrderBook orderBook)
     {
-        if (orderBook.InstrumentId != Inst.InstrumentId)
+        if (orderBook.InstrumentId != InstrumentId)
         {
-            Logger.LogWarningWithCaller($"Received an order book for a wrong instrument. Expected {Inst.InstrumentId}, got {orderBook.InstrumentId}");
+            Logger.LogWarningWithCaller($"Received an order book for a wrong instrument. Expected {InstrumentId}, got {orderBook.InstrumentId}");
             return;
         }
 
@@ -50,7 +50,7 @@ public abstract class AbstractFairValueProvider : IFairValueProvider
         if (newFairValue.Value != _lastFairValue)
         {
             _lastFairValue = newFairValue.Value;
-            OnFairValueChanged(new FairValueUpdate(Inst.InstrumentId, _lastFairValue.Value));
+            OnFairValueChanged(new FairValueUpdate(InstrumentId, _lastFairValue.Value));
         }
     }
 

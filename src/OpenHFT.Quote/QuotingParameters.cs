@@ -1,6 +1,4 @@
-using System;
 using OpenHFT.Core.Models;
-using OpenHFT.Quoting.FairValue;
 
 namespace OpenHFT.Quoting;
 
@@ -13,6 +11,9 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     public readonly int InstrumentId { get; }
 
     public readonly FairValueModel FvModel { get; }
+
+    public readonly int FairValueSourceInstrumentId { get; }
+
     /// <summary>
     /// spread ratio in bp to calculate quotes on each side from fair value.
     // Price of ask quote = fair value * (1 + SpreadBp * 1e-4 / 2 )
@@ -44,15 +45,17 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     /// </summary>
     /// <param name="instrumentId">The ID of the instrument these parameters apply to.</param>
     /// <param name="fvModel">The fair value model to be used.</param>
+    /// <param name="fairValueSourceInstrumentId"></param>
     /// <param name="spreadBp">The spread in basis points.</param>
     /// <param name="skewBp">The skew in basis points.</param>
     /// <param name="size">The quantity for each quote level.</param>
     /// <param name="depth">The number of quote levels on each side.</param>
     /// <param name="type">The type of quoter to be used.</param>
-    public QuotingParameters(int instrumentId, FairValueModel fvModel, decimal spreadBp, decimal skewBp, Quantity size, int depth, QuoterType type)
+    public QuotingParameters(int instrumentId, FairValueModel fvModel, int fairValueSourceInstrumentId, decimal spreadBp, decimal skewBp, Quantity size, int depth, QuoterType type)
     {
         InstrumentId = instrumentId;
         FvModel = fvModel;
+        FairValueSourceInstrumentId = fairValueSourceInstrumentId;
         SpreadBp = spreadBp;
         SkewBp = skewBp;
         Size = size;

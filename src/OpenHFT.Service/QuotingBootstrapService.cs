@@ -53,9 +53,24 @@ public class QuotingBootstrapService : IHostedService
                 continue;
             }
 
+            if (!Enum.TryParse<ExchangeEnum>(config.FairValue.Params.Exchange, true, out var fvExchange) ||
+                !Enum.TryParse<ProductType>(config.FairValue.Params.ProductType, true, out var fvProductType))
+            {
+                _logger.LogWarningWithCaller($"Invalid fair value params for {config.FairValue.Params.Symbol}. Skipping.");
+                continue;
+            }
+            var sourceInstrument = _instrumentRepository.FindBySymbol(config.FairValue.Params.Symbol, fvProductType, fvExchange);
+
+            if (sourceInstrument == null)
+            {
+                _logger.LogWarningWithCaller($"Source instrument '{config.FairValue.Params.Symbol}' not found. Skipping deployment.");
+                continue;
+            }
+
             var parameters = new QuotingParameters(
                 instrument.InstrumentId,
                 config.FairValue.Model,
+                sourceInstrument.InstrumentId,
                 config.SpreadBp,
                 config.SkewBp,
                 Quantity.FromDecimal(config.Size),

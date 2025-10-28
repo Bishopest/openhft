@@ -13,7 +13,7 @@ public class MidpFairValueProvider : AbstractFairValueProvider
 {
     public override FairValueModel Model => FairValueModel.Midp;
 
-    public MidpFairValueProvider(ILogger logger, Instrument instrument) : base(logger, instrument)
+    public MidpFairValueProvider(ILogger logger, int instrumentId) : base(logger, instrumentId)
     {
     }
 

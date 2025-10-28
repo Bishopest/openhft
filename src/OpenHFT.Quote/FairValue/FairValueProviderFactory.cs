@@ -25,15 +25,15 @@ public class FairValueProviderFactory : IFairValueProviderFactory
     /// Creates a new IFairValueProvider instance based on the specified model.
     /// </summary>
     /// <param name="model">The model type required for the provider (e.g., Midp, FR).</param>
-    /// <param name="instrument">The instrument the provider will work with.</param>
+    /// <param name="fvInstrumentId"></param>jjj
     /// <returns>A new, initialized Fair Value Provider.</returns>
-    public IFairValueProvider CreateProvider(FairValueModel model, Instrument instrument)
+    public IFairValueProvider CreateProvider(FairValueModel model, int fvInstrumentId)
     {
         switch (model)
         {
             case FairValueModel.Midp:
                 // Resolve the specific logger needed for MidpFairValueProvider from the DI container.
-                return new MidpFairValueProvider(_logger, instrument);
+                return new MidpFairValueProvider(_logger, fvInstrumentId);
 
             case FairValueModel.FR:
                 throw new NotImplementedException($"FairValueModel '{model}' is not yet implemented in FairValueProviderFactory.");

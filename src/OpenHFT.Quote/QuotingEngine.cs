@@ -51,18 +51,29 @@ public class QuotingEngine : IQuotingEngine
 
         _logger.LogInformationWithCaller($"Starting QuotingEngine for {QuotingInstrument.Symbol}.");
         _fairValueProvider.FairValueChanged += OnFairValueChanged;
-        marketDataManager.SubscribeOrderBook(QuotingInstrument.InstrumentId, $"QuotingEngine_{QuotingInstrument.Symbol}_{_fairValueProvider?.Model}", OnOrderBookUpdate);
+        var fvInstrumentId = _parameters.Value.FairValueSourceInstrumentId;
+        marketDataManager.SubscribeOrderBook(fvInstrumentId, $"QuotingEngine_{QuotingInstrument.Symbol}_{_fairValueProvider?.Model}", OnOrderBookUpdate);
     }
 
     public void Stop(MarketDataManager marketDataManager)
     {
         _logger.LogInformationWithCaller($"Stopping QuotingEngine for {QuotingInstrument.Symbol}.");
-        if (_fairValueProvider != null)
-        {
-            marketDataManager.UnsubscribeOrderBook(QuotingInstrument.InstrumentId, $"QuotingEngine_{QuotingInstrument.Symbol}_{_fairValueProvider.Model}");
-            _fairValueProvider.FairValueChanged -= OnFairValueChanged;
-        }
         _ = _marketMaker.CancelAllQuotesAsync(); // Fire and forget cancel
+        if (_parameters == null)
+        {
+            _logger.LogWarningWithCaller($"Can not stop fv provider because of null quoting paramters {QuotingInstrument.Symbol}");
+            return;
+        }
+
+        if (_fairValueProvider == null)
+        {
+            _logger.LogWarningWithCaller($"Can not stop fv provider because of null fair value provider {QuotingInstrument.Symbol}");
+            return;
+        }
+
+        var fvInstrumentId = _parameters.Value.FairValueSourceInstrumentId;
+        marketDataManager.UnsubscribeOrderBook(fvInstrumentId, $"QuotingEngine_{QuotingInstrument.Symbol}_{_fairValueProvider.Model}");
+        _fairValueProvider.FairValueChanged -= OnFairValueChanged;
     }
 
     public void UpdateParameters(QuotingParameters newParameters)
@@ -83,9 +94,9 @@ public class QuotingEngine : IQuotingEngine
 
             }
 
+            _parameters = newParameters;
             SetFairValueProvider(newParameters.FvModel);
             _logger.LogInformationWithCaller($"ASIS params => {_parameters}.");
-            _parameters = newParameters;
             _logger.LogInformationWithCaller($"Updating parameters for Instrument {QuotingInstrument.Symbol}.");
             _logger.LogInformationWithCaller($"TOBE params => {newParameters}");
             return;
@@ -103,7 +114,13 @@ public class QuotingEngine : IQuotingEngine
             _fairValueProvider.FairValueChanged -= OnFairValueChanged;
         }
 
-        var fairValueProvider = _fairValueProviderFactory.CreateProvider(model, QuotingInstrument);
+        if (_parameters == null)
+        {
+            _logger.LogWarningWithCaller($"Set quoting parameters first for {QuotingInstrument.Symbol}");
+            return;
+        }
+
+        var fairValueProvider = _fairValueProviderFactory.CreateProvider(model, _parameters.Value.FairValueSourceInstrumentId);
         _logger.LogInformationWithCaller($"Swapping FairValueProvider for Instrument {QuotingInstrument.Symbol}. New FairValueMOdel: {model}");
         fairValueProvider.FairValueChanged += OnFairValueChanged;
         _fairValueProvider = fairValueProvider;
@@ -119,7 +136,12 @@ public class QuotingEngine : IQuotingEngine
 
     private void OnFairValueChanged(object? sender, FairValueUpdate update)
     {
-        if (update.InstrumentId == QuotingInstrument.InstrumentId)
+        if (!_parameters.HasValue)
+        {
+            return;
+        }
+
+        if (update.InstrumentId == _parameters.Value.FairValueSourceInstrumentId)
         {
             Requote(update.FairValue);
         }
