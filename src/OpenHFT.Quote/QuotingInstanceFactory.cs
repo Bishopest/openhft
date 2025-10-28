@@ -48,9 +48,8 @@ public class QuotingInstanceFactory : IQuotingInstanceFactory
             bidQuoter,
             askQuoter,
             validator);
-
-        var engine = new QuotingEngine(_loggerFactory.CreateLogger<QuotingEngine>(), instrument, mm, _fairValueProviderFactory);
-        engine.UpdateParameters(parameters);
+        var fvProvider = _fairValueProviderFactory.CreateProvider(parameters.FvModel, parameters.FairValueSourceInstrumentId);
+        var engine = new QuotingEngine(_loggerFactory.CreateLogger<QuotingEngine>(), instrument, mm, fvProvider, parameters);
 
         return new QuotingInstance(engine);
     }

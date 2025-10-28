@@ -75,6 +75,43 @@ public class QuotingInstanceManager : IQuotingInstanceManager
         }
     }
 
+    public void UpdateStrategyParameters(QuotingParameters newParameters)
+    {
+        var instrumentId = newParameters.InstrumentId;
+        if (!_activeInstances.TryGetValue(instrumentId, out var instance))
+        {
+            _logger.LogWarningWithCaller($"Cannot update parameters: No active strategy for InstrumentId {instrumentId}.");
+            return;
+        }
+
+        // Get the current parameters from the engine.
+        // This requires QuotingEngine to expose its current parameters.
+        if (!instance.TryGetEngine(out var engine))
+        {
+            _logger.LogWarningWithCaller($"Cannot update parameters: Engine for InstrumentId {instrumentId} not found from instance.");
+            return;
+        }
+
+        var currentParameters = engine.CurrentParameters;
+
+        // Check if core, immutable parameters have changed.
+        if (newParameters.FvModel != currentParameters.FvModel ||
+            newParameters.FairValueSourceInstrumentId != currentParameters.FairValueSourceInstrumentId ||
+            newParameters.Type != currentParameters.Type)
+        {
+            _logger.LogInformationWithCaller($"Core parameters changed for InstrumentId {instrumentId}. Redeploying strategy.");
+            // Redeploy by retiring the old instance and deploying a new one.
+            RetireStrategy(instrumentId);
+            DeployStrategy(newParameters);
+        }
+        else
+        {
+            _logger.LogInformationWithCaller($"Tunable parameters changed for InstrumentId {instrumentId}. Updating in-place.");
+            // Only tunable parameters changed, so update the existing engine.
+            engine.UpdateParameters(newParameters);
+        }
+    }
+
     public IReadOnlyCollection<QuotingInstance> GetAllInstances()
     {
         return _activeInstances.Values.ToList().AsReadOnly();

@@ -12,9 +12,9 @@ namespace OpenHFT.Quoting.Interfaces;
 public interface IQuotingEngine
 {
     Instrument QuotingInstrument { get; }
+    QuotingParameters CurrentParameters { get; }
     event EventHandler<QuotePair> QuotePairCalculated;
     void Start(MarketDataManager marketDataManager);
     void Stop(MarketDataManager marketDataManager);
     void UpdateParameters(QuotingParameters newParameters);
-    void SetFairValueProvider(FairValueModel model);
 }
