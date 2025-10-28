@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Orders;
@@ -13,11 +14,11 @@ namespace OpenHFT.Quoting;
 /// It handles placing, modifying, and cancelling the order based on incoming quotes.
 /// This class is designed to be thread-safe for its public methods.
 /// </summary>
-public sealed class Quoter : IQuoter
+public sealed class SingleOrderQuoter : IQuoter
 {
     private readonly ILogger _logger;
     private readonly Side _side;
-    private readonly int _instrumentId;
+    private readonly Instrument _instrument;
     private readonly IOrderFactory _orderFactory; // To create IOrder objects
     private readonly object _stateLock = new();
 
@@ -26,15 +27,15 @@ public sealed class Quoter : IQuoter
     // 0 = idle, 1 = request in progress. Prevents concurrent modification attempts.
     private int _requestInProgressFlag;
 
-    public Quoter(
+    public SingleOrderQuoter(
         ILogger logger,
         Side side,
-        int instrumentId,
+        Instrument instrument,
         IOrderFactory orderFactory)
     {
         _logger = logger;
         _side = side;
-        _instrumentId = instrumentId;
+        _instrument = instrument;
         _orderFactory = orderFactory;
     }
 
@@ -118,7 +119,7 @@ public sealed class Quoter : IQuoter
     {
         // Use the factory and builder to create a new order object.
         // The builder logic is now encapsulated elsewhere.
-        var orderBuilder = new OrderBuilder(_orderFactory, _instrumentId, _side);
+        var orderBuilder = new OrderBuilder(_orderFactory, _instrument.InstrumentId, _side);
         var newOrder = orderBuilder
             .WithPrice(quote.Price)
             .WithQuantity(quote.Size)
