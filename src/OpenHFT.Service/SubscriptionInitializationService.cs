@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Interfaces;
 
-namespace OpenHFT.FeedMonitor.Hosting;
+namespace OpenHFT.Service;
 
 public class SubscriptionInitializationService : IHostedService
 {

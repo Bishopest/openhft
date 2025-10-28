@@ -5,7 +5,7 @@ using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Interfaces;
 using OpenHFT.Gateway.Interfaces;
 
-namespace OpenHFT.FeedMonitor.Hosting;
+namespace OpenHFT.Service;
 
 public class FeedOrchestrator : IHostedService
 {

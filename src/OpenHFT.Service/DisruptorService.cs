@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 
-namespace OpenHFT.FeedMonitor.Hosting;
+namespace OpenHFT.Service;
 
 public class DisruptorService : IHostedService
 {

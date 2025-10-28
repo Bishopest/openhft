@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using CsvHelper;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
@@ -11,6 +12,7 @@ namespace OpenHFT.Core.Instruments;
 public class InstrumentRepository : IInstrumentRepository
 {
     private readonly ILogger<InstrumentRepository> _logger;
+    private readonly IConfiguration _configuration;
 
     // Main storage for fast lookup by our internal ID
     private readonly Dictionary<int, Instrument> _instrumentsById = new();
@@ -20,9 +22,27 @@ public class InstrumentRepository : IInstrumentRepository
 
     private int _nextInstrumentId = 1;
 
-    public InstrumentRepository(ILogger<InstrumentRepository> logger)
+    public InstrumentRepository(ILogger<InstrumentRepository> logger, IConfiguration configuration)
     {
         _logger = logger;
+        _configuration = configuration;
+        _ = StartAsync();
+    }
+    public Task StartAsync()
+    {
+        _logger.LogInformationWithCaller("Loading instruments from CSV specified in configuration...");
+        var dataFolder = _configuration["dataFolder"];
+
+        if (string.IsNullOrEmpty(dataFolder))
+        {
+            throw new InvalidOperationException("Configuration key 'dataFolder' is not set in config.json.");
+        }
+
+        var instrumentsCsvPath = Path.Combine(dataFolder, "instruments.csv");
+        LoadFromCsv(instrumentsCsvPath);
+        _logger.LogInformationWithCaller($"Instruments loaded successfully from '{instrumentsCsvPath}'.");
+
+        return Task.CompletedTask;
     }
 
     public void LoadFromCsv(string filePath)

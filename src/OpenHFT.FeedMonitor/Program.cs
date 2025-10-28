@@ -25,6 +25,7 @@ using OpenHFT.FeedMonitor.Hosting;
 using Microsoft.Extensions.Options;
 using OpenHFT.Gateway;
 using OpenHFT.Gateway.Interfaces;
+using OpenHFT.Service;
 
 public class Program
 {
@@ -136,7 +137,6 @@ public class Program
 
                 // --- 4. IHostedService 등록 ---
                 services.AddHostedService<DisruptorService>();
-                services.AddHostedService<InstrumentLoaderService>();
                 services.AddHostedService<FeedOrchestrator>();
                 services.AddHostedService<StatisticsService>();
                 services.AddHostedService<SubscriptionInitializationService>();
