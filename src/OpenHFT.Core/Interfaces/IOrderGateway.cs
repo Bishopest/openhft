@@ -1,4 +1,6 @@
 using System;
+using OpenHFT.Core.Instruments;
+using OpenHFT.Core.Models;
 using OpenHFT.Core.Orders;
 
 namespace OpenHFT.Core.Interfaces;
@@ -9,6 +11,8 @@ namespace OpenHFT.Core.Interfaces;
 /// </summary>
 public interface IOrderGateway
 {
+    ExchangeEnum SourceExchange { get; }
+    ProductType ProdType { get; }
     /// <summary>
     /// Submits a new order to the exchange.
     /// </summary>
