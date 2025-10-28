@@ -1,77 +1,75 @@
-using System;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Book.Core;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Utils;
 using OpenHFT.Processing;
+using OpenHFT.Quoting.Interfaces;
 using OpenHFT.Quoting.Models;
 
 namespace OpenHFT.Quoting;
 
 /// <summary>
-/// A utility class to visualize the output of a QuotingEngine.
-/// It subscribes to order book updates and monitors the state of mock quoters
-/// to print a visual representation of the order book with the engine's quotes.
+/// An IHostedService that visualizes the output of QuotingInstances.
+/// It subscribes to order book updates and monitors the state of mock quoters.
 /// </summary>
-public class QuotingDebugger
+public class QuoteDebugger
 {
-    private readonly ILogger _logger;
-    private readonly Instrument _instrument;
+    private readonly ILogger<QuoteDebugger> _logger;
     private readonly MarketDataManager _marketDataManager;
-    private readonly QuotingEngine _quotingEngine;
-    private readonly LogQuoter _bidQuoter;
-    private readonly LogQuoter _askQuoter;
+    private readonly IQuotingInstanceManager _quotingInstanceManager;
 
+    private Instrument? _instrumentToMonitor;
     private QuotePair? _lastDisplayedQuotePair;
 
-    public QuotingDebugger(
-        Instrument instrument,
+    public QuoteDebugger(
+        ILogger<QuoteDebugger> logger,
         MarketDataManager marketDataManager,
-        QuotingEngine quotingEngine,
-        LogQuoter bidQuoter,
-        LogQuoter askQuoter,
-        ILogger logger)
+        IQuotingInstanceManager quotingInstanceManager
+    )
     {
         _logger = logger;
-        _instrument = instrument;
         _marketDataManager = marketDataManager;
-        _quotingEngine = quotingEngine;
-        _bidQuoter = bidQuoter;
-        _askQuoter = askQuoter;
+        _quotingInstanceManager = quotingInstanceManager;
     }
 
-    public void Start()
+    public Task StartAsync(CancellationToken cancellationToken)
     {
-        _marketDataManager.SubscribeOrderBook(_instrument.InstrumentId, $"QuotingDebugger_{_instrument.Symbol}", OnOrderBookUpdate);
-        _logger.LogInformationWithCaller($"QuotingDebugger started for {_instrument.Symbol}. Waiting for market data...");
-    }
+        _logger.LogInformationWithCaller("Starting QuoteDebugger...");
 
-    public void Stop()
-    {
-        _marketDataManager.UnsubscribeOrderBook(_instrument.InstrumentId, $"QuotingDebugger_{_instrument.Symbol}");
-        _logger.LogInformationWithCaller($"QuotingDebugger stopped for {_instrument.Symbol}.");
-    }
+        var instance = _quotingInstanceManager.GetAllInstances().FirstOrDefault();
 
-    private void OnOrderBookUpdate(object? sender, OrderBook book)
-    {
-        var currentBidQuote = _bidQuoter.LatestQuote;
-        var currentAskQuote = _askQuoter.LatestQuote;
-
-        var currentQuotePair = (currentBidQuote.HasValue || currentAskQuote.HasValue)
-            ? new QuotePair(_instrument.InstrumentId, currentBidQuote ?? default, currentAskQuote ?? default, 0)
-            : (QuotePair?)null;
-
-        // Only print if the quotes have changed since the last print.
-        if (currentQuotePair.Equals(_lastDisplayedQuotePair))
+        if (instance == null)
         {
-            return;
+            _logger.LogWarningWithCaller("Quoting Debugger: No active QuotingInstance found to monitor.");
+            return Task.CompletedTask;
         }
 
-        _lastDisplayedQuotePair = currentQuotePair;
-        PrintOrderBookWithQuotes(book, currentBidQuote, currentAskQuote);
+        if (instance.TryGetEngine(out var engine))
+        {
+            _instrumentToMonitor = engine.QuotingInstrument;
+            engine.QuotePairCalculated += OnQuotePairCalculated;
+            _marketDataManager.SubscribeOrderBook(_instrumentToMonitor.InstrumentId, "QuoteDebugger_{_instrumentToMonitor.Symbol}", OnOrderBookUpdate);
+
+            _logger.LogInformationWithCaller($"Quote Debugger started. Monitoring {_instrumentToMonitor.Symbol}");
+        }
+
+        return Task.CompletedTask;
     }
 
+    private void OnQuotePairCalculated(object? sender, QuotePair pair)
+    {
+        _lastDisplayedQuotePair = pair;
+    }
+
+    private void OnOrderBookUpdate(object? sender, OrderBook ob)
+    {
+        var currentQuotePair = _lastDisplayedQuotePair;
+        var myBid = currentQuotePair?.Bid.Size.ToTicks() > 0 ? currentQuotePair?.Bid : null;
+        var myAsk = currentQuotePair?.Ask.Size.ToTicks() > 0 ? currentQuotePair?.Ask : null;
+
+        PrintOrderBookWithQuotes(ob, myBid, myAsk);
+    }
     private void PrintOrderBookWithQuotes(OrderBook book, Quote? myBid, Quote? myAsk)
     {
         const int levelsToShow = 10;
@@ -162,5 +160,15 @@ public class QuotingDebugger
 
         Console.Clear();
         _logger.LogInformationWithCaller(sb.ToString());
+    }
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        if (_instrumentToMonitor != null)
+        {
+            _marketDataManager.UnsubscribeOrderBook(_instrumentToMonitor.InstrumentId, $"QuotingDebugger_{_instrumentToMonitor.Symbol}");
+            _logger.LogInformationWithCaller($"QuoteDebugger stopped for {_instrumentToMonitor.Symbol}.");
+        }
+
+        return Task.CompletedTask;
     }
 }

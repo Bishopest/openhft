@@ -47,8 +47,12 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
 
             try
             {
-                var exchange = ParseEnum<ExchangeEnum>(group.Exchange);
-                var productType = ParseProductType(group.ProductType);
+                if (!Enum.TryParse<ExchangeEnum>(group.Exchange, true, out var exchange) ||
+                    !Enum.TryParse<ProductType>(group.ProductType, true, out var productType))
+                {
+                    continue;
+                }
+
                 var adapterKey = (exchange, productType);
 
                 if (!instrumentsByAdapter.ContainsKey(adapterKey))

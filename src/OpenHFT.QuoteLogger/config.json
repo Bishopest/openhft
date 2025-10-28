@@ -1,15 +1,21 @@
 {
-  "subscriptions": [
-    {
-      "exchange": "bitmex",
-      "product-type": "perpetualfuture",
-      "symbols": [ "XBTUSD"]
+  "quoting" : {
+    "exchange": "bitmex",
+    "productType": "perpetualfuture",
+    "symbol": "XBTUSD",
+    "quoterType": "log",
+    "fairValue": {
+      "model": "midp",
+      "params": {
+        "exchange": "binance",
+        "productType": "perpetualfuture",
+        "symbol": "BTCUSDT"
+      }
     },
-    {
-      "exchange": "binance",
-      "product-type": "perpetualfuture",
-      "symbols": [ "BTCUSDT"]
-    }
-  ],
-  "data-folder": "/Users/jskim/workspace/openhft/data"
+    "spreadBp": 1.0,
+    "skewBp": 0.5,
+    "size": 1000,
+    "depth": 1
+  },
+  "dataFolder": "/Users/jskim/workspace/openhft/data"
 }

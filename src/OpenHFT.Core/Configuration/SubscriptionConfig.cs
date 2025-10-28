@@ -21,7 +21,7 @@ public class SubscriptionGroup
     [JsonProperty("exchange")]
     public string Exchange { get; set; } = string.Empty;
 
-    [JsonProperty("product-type")]
+    [JsonProperty("productType")]
     public string ProductType { get; set; } = string.Empty;
 
     [JsonProperty("symbols")]
