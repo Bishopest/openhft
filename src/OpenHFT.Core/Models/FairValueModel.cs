@@ -1,4 +1,4 @@
-namespace OpenHFT.Quoting.FairValue;
+namespace OpenHFT.Core.Models;
 
 public enum FairValueModel
 {

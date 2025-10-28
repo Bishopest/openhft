@@ -1,6 +1,6 @@
 using System;
 using OpenHFT.Core.Instruments;
-using OpenHFT.Quoting.FairValue;
+using OpenHFT.Core.Models;
 
 namespace OpenHFT.Quoting.Interfaces;
 

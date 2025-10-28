@@ -1,7 +1,6 @@
-using System;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
+using OpenHFT.Core.Models;
 using OpenHFT.Quoting.Interfaces;
 
 namespace OpenHFT.Quoting.FairValue;
@@ -13,11 +12,11 @@ namespace OpenHFT.Quoting.FairValue;
 /// </summary>
 public class FairValueProviderFactory : IFairValueProviderFactory
 {
-    private readonly ILogger _logger;
+    private readonly ILogger<FairValueProviderFactory> _logger;
     /// <summary>
     /// Initializes a new instance of the FairValueProviderFactory.
     /// </summary>
-    public FairValueProviderFactory(ILogger logger)
+    public FairValueProviderFactory(ILogger<FairValueProviderFactory> logger)
     {
         _logger = logger;
     }

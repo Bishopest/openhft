@@ -2,8 +2,6 @@ using Microsoft.Extensions.Logging;
 using OpenHFT.Book.Core;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
-using OpenHFT.Core.Utils;
-using OpenHFT.Quoting.Interfaces;
 
 namespace OpenHFT.Quoting.FairValue;
 
