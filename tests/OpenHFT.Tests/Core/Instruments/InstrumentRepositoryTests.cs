@@ -1,6 +1,11 @@
+using FluentAssertions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using OpenHFT.Core.Instruments;
+using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 
 namespace OpenHFT.Tests.Core.Instruments;
@@ -8,15 +13,38 @@ namespace OpenHFT.Tests.Core.Instruments;
 [TestFixture]
 public class InstrumentRepositoryTests
 {
+    private ServiceProvider _serviceProvider = null!;
     private string _testDirectory;
     private InstrumentRepository _repository;
 
-    [SetUp]
-    public void SetUp()
+    private void SetupRepositoryWithContent(string csvContent)
     {
         _testDirectory = Path.Combine(Path.GetTempPath(), "InstrumentRepositoryTests", Guid.NewGuid().ToString());
         Directory.CreateDirectory(_testDirectory);
-        _repository = new InstrumentRepository(new NullLogger<InstrumentRepository>());
+
+        var filePath = Path.Combine(_testDirectory, "instruments.csv");
+        File.WriteAllText(filePath, csvContent);
+
+        var inMemorySettings = new Dictionary<string, string>
+        {
+            { "dataFolder", _testDirectory }
+        };
+
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(inMemorySettings)
+            .Build();
+
+        var services = new ServiceCollection();
+
+        services.AddLogging(builder => builder.AddConsole()); // AddConsole() 사용
+        services.AddSingleton(configuration);
+        services.AddSingleton<IInstrumentRepository, InstrumentRepository>();
+
+        _serviceProvider = services.BuildServiceProvider();
+
+        // Get the repository instance. The constructor will automatically load the CSV.
+        _repository = (InstrumentRepository)_serviceProvider.GetRequiredService<IInstrumentRepository>();
+
     }
 
     [TearDown]
@@ -28,13 +56,6 @@ public class InstrumentRepositoryTests
         }
     }
 
-    private string CreateTestCsvFile(string content)
-    {
-        var filePath = Path.Combine(_testDirectory, "instruments.csv");
-        File.WriteAllText(filePath, content);
-        return filePath;
-    }
-
     [Test]
     public void LoadFromCsv_ValidFile_LoadsInstrumentsCorrectly()
     {
@@ -43,14 +64,11 @@ public class InstrumentRepositoryTests
 BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10
 BINANCE,ETHUSDT,Spot,ETH,USDT,0.01,0.0001,1,10
 BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001";
-        var filePath = CreateTestCsvFile(csvContent);
+        SetupRepositoryWithContent(csvContent);
 
         // Act
-        _repository.LoadFromCsv(filePath);
         var allInstruments = _repository.GetAll().ToList();
-
-        // Assert
-        Assert.That(allInstruments.Count, Is.EqualTo(3));
+        allInstruments.Should().HaveCount(3);
 
         var btcSpot = _repository.FindBySymbol("BTCUSDT", ProductType.Spot, ExchangeEnum.BINANCE);
         Assert.That(btcSpot, Is.Not.Null);
@@ -68,11 +86,31 @@ BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001";
     [Test]
     public void LoadFromCsv_FileDoesNotExist_ThrowsFileNotFoundException()
     {
+        _testDirectory = Path.Combine(Path.GetTempPath(), "InstrumentRepositoryTests", Guid.NewGuid().ToString());
+        Directory.CreateDirectory(_testDirectory);
         // Arrange
         var nonExistentPath = Path.Combine(_testDirectory, "non_existent.csv");
+        var inMemorySettings = new Dictionary<string, string>
+        {
+            { "dataFolder", nonExistentPath }
+        };
+
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(inMemorySettings)
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging(builder => builder.AddConsole());
+        services.AddSingleton(configuration);
+        services.AddSingleton<IInstrumentRepository, InstrumentRepository>();
 
         // Act & Assert
-        Assert.Throws<FileNotFoundException>(() => _repository.LoadFromCsv(nonExistentPath));
+        var serviceProvider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<FileNotFoundException>(() =>
+            serviceProvider.GetRequiredService<IInstrumentRepository>()
+        );
+        _serviceProvider = serviceProvider;
     }
 
     [Test]
@@ -82,10 +120,9 @@ BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001";
         var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
 BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10
 BINANCE,ETHUSDT,Spot,ETH,USDT,invalid_decimal,0.0001,1,10"; // Malformed record
-        var filePath = CreateTestCsvFile(csvContent);
+        SetupRepositoryWithContent(csvContent);
 
         // Act
-        _repository.LoadFromCsv(filePath);
         var allInstruments = _repository.GetAll().ToList();
 
         // Assert
@@ -99,9 +136,7 @@ BINANCE,ETHUSDT,Spot,ETH,USDT,invalid_decimal,0.0001,1,10"; // Malformed record
         // Arrange
         var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
 BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001";
-        var filePath = CreateTestCsvFile(csvContent);
-        _repository.LoadFromCsv(filePath);
-
+        SetupRepositoryWithContent(csvContent);
         // Act
         var found = _repository.FindBySymbol("BTCUSDT", ProductType.PerpetualFuture, ExchangeEnum.BINANCE);
 
@@ -117,8 +152,7 @@ BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001";
         // Arrange
         var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
 BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10";
-        var filePath = CreateTestCsvFile(csvContent);
-        _repository.LoadFromCsv(filePath);
+        SetupRepositoryWithContent(csvContent);
 
         // Act
         var found = _repository.FindBySymbol("btcusdt", ProductType.Spot, ExchangeEnum.BINANCE);
@@ -134,8 +168,7 @@ BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10";
         // Arrange
         var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
 BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10";
-        var filePath = CreateTestCsvFile(csvContent);
-        _repository.LoadFromCsv(filePath);
+        SetupRepositoryWithContent(csvContent);
 
         // Act
         var found = _repository.FindBySymbol("ETHUSDT", ProductType.Spot, ExchangeEnum.BINANCE);
@@ -150,8 +183,8 @@ BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10";
         // Arrange
         var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
 BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10";
-        var filePath = CreateTestCsvFile(csvContent);
-        _repository.LoadFromCsv(filePath);
+        SetupRepositoryWithContent(csvContent);
+
         var instrument = _repository.FindBySymbol("BTCUSDT", ProductType.Spot, ExchangeEnum.BINANCE);
         Assert.That(instrument, Is.Not.Null);
 

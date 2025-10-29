@@ -42,12 +42,12 @@ public class ConfigLoaderTests
           ""subscriptions"": [
             {
               ""exchange"": ""binance"",
-              ""product-type"": ""spot"",
+              ""productType"": ""spot"",
               ""symbols"": [ ""BTCUSDT"" ]
             },
             {
               ""exchange"": ""binance"",
-              ""product-type"": ""perpetual"",
+              ""productType"": ""perpetualfuture"",
               ""symbols"": [ ""BTCUSDT"", ""ETHUSDT"" ]
             }
           ]
@@ -69,7 +69,7 @@ public class ConfigLoaderTests
         Assert.That(spotGroup.Symbols.Length, Is.EqualTo(1));
         Assert.That(spotGroup.Symbols[0], Is.EqualTo("BTCUSDT"));
 
-        var perpGroup = result.Subscriptions.FirstOrDefault(g => g.ProductType == "perpetual");
+        var perpGroup = result.Subscriptions.FirstOrDefault(g => g.ProductType == "perpetualfuture");
         Assert.That(perpGroup, Is.Not.Null);
         Assert.That(perpGroup.Exchange, Is.EqualTo("binance"));
         Assert.That(perpGroup.Symbols.Length, Is.EqualTo(2));

@@ -5,36 +5,54 @@ using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Book.Core;
 using OpenHFT.Core.Instruments;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using OpenHFT.Core.Interfaces;
 
 namespace OpenHFT.Tests.Book;
 
 [TestFixture]
 public class OrderBookTests
 {
+    private ServiceProvider _serviceProvider = null!;
     private ILogger<OrderBook> _logger;
-    private string _testDirectory;
-    private InstrumentRepository _repository;
+    private string _testDirectory = null!;
+    private InstrumentRepository _repository = null!;
 
     private Instrument _btc;
     private Instrument _eth;
     [SetUp]
     public void Setup()
     {
-        var loggerFactory = LoggerFactory.Create(builder => { });
-        _logger = loggerFactory.CreateLogger<OrderBook>();
-
+        // --- 1. 테스트용 임시 디렉토리 및 csv 파일 생성
         _testDirectory = Path.Combine(Path.GetTempPath(), "InstrumentRepositoryTests", Guid.NewGuid().ToString());
         Directory.CreateDirectory(_testDirectory);
-        _repository = new InstrumentRepository(new NullLogger<InstrumentRepository>());
         var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
 BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10
 BINANCE,ETHUSDT,Spot,ETH,USDT,0.01,0.0001,1,10
 BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001
 BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
-
         var filePath = CreateTestCsvFile(csvContent);
-        _repository.LoadFromCsv(filePath);
+
+        // --- 2. IConfiguration 생성
+        var inMemorySettings = new Dictionary<string, string>
+        {
+            ["dataFolder"] = _testDirectory
+        };
+
+        Microsoft.Extensions.Configuration.IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(inMemorySettings)
+            .Build();
+
+        // --- 3. DI 컨테이너 구성
+        var services = new ServiceCollection();
+        services.AddLogging(builder => builder.AddConsole());
+        services.AddSingleton(configuration);
+        services.AddSingleton<IInstrumentRepository, InstrumentRepository>();
+
+        _serviceProvider = services.BuildServiceProvider();
+        _logger = _serviceProvider.GetRequiredService<ILogger<OrderBook>>();
+        _repository = (InstrumentRepository)_serviceProvider.GetRequiredService<IInstrumentRepository>();
         _btc = _repository.FindBySymbol("BTCUSDT", ProductType.Spot, ExchangeEnum.BINANCE)!;
         _eth = _repository.FindBySymbol("ETHUSDT", ProductType.Spot, ExchangeEnum.BINANCE);
     }

@@ -3,7 +3,7 @@ using NUnit.Framework;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Orders;
-namespace OpenHFT.Tests.Quoting.Orders;
+namespace OpenHFT.Tests.Core.Orders;
 
 [TestFixture]
 public class OrderBuilderTests

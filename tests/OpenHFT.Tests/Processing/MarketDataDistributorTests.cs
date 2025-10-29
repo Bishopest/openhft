@@ -19,6 +19,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OpenHFT.Feed.Models;
 using Microsoft.Extensions.DependencyInjection;
 using OpenHFT.Core.Orders;
+using Castle.Core.Configuration;
+using Microsoft.Extensions.Configuration;
 
 namespace OpenHFT.Tests.Processing;
 
@@ -26,140 +28,103 @@ namespace OpenHFT.Tests.Processing;
 public class MarketDataDistributorTests
 {
     private ServiceProvider _serviceProvider = null!;
-    // 테스트에 사용될 핵심 컴포넌트들
-    private Disruptor<MarketDataEventWrapper> _disruptor = null!;
-    private Disruptor<OrderStatusReportWrapper> _orderDisruptor = null!;
+    private string _testDirectory;
     private MockAdapter _mockAdapter = null!;
-    private FeedHandler _feedHandler = null!;
-    private MarketDataDistributor _distributor = null!;
-    private OrderRouter _orderRouter = null!;
-    private OrderUpdateDistributor _orderDistributor = null!;
-
-
-
-
-    // 테스트 결과를 확인할 테스트용 Consumer들
     private TestConsumer _btcConsumer = null!;
     private TestConsumer _ethConsumer = null!;
-    private ExchangeTopic _testTopic = BinanceTopic.AggTrade;
-
-    private ILogger<MarketDataDistributor> _logger = null!;
-    private string _testDirectory;
-    private InstrumentRepository _repository;
-
+    private readonly ExchangeTopic _testTopic = BinanceTopic.AggTrade;
+    private Instrument _btc;
+    private Instrument _eth;
     [SetUp]
     public void Setup()
     {
         _testDirectory = Path.Combine(Path.GetTempPath(), "InstrumentRepositoryTests", Guid.NewGuid().ToString());
         Directory.CreateDirectory(_testDirectory);
-        _repository = new InstrumentRepository(new NullLogger<InstrumentRepository>());
         var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
 BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10
 BINANCE,ETHUSDT,Spot,ETH,USDT,0.01,0.0001,1,10
 BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001
 BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
+        File.WriteAllText(Path.Combine(_testDirectory, "instruments.csv"), csvContent);
+        var inMemorySettings = new Dictionary<string, string>
+        {
+            { "dataFolder", _testDirectory }
+        };
+        Microsoft.Extensions.Configuration.IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(inMemorySettings)
+            .Build();
 
-        var filePath = CreateTestCsvFile(csvContent);
-        _repository.LoadFromCsv(filePath);
-
-        // --- 1. 로깅 팩토리 생성 (모든 컴포넌트가 공유) ---
-        var loggerFactory = LoggerFactory.Create(builder => { });
-        _logger = loggerFactory.CreateLogger<MarketDataDistributor>();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(configuration);
+        services.AddSingleton<IInstrumentRepository, InstrumentRepository>();
+        var instrumentRepository = new InstrumentRepository(new NullLogger<InstrumentRepository>(), configuration);
+        instrumentRepository.StartAsync().Wait();
 
         // --- 2. 테스트용 Consumer(옵저버) 생성 ---
-        var btc = _repository.FindBySymbol("BTCUSDT", ProductType.Spot, ExchangeEnum.BINANCE);
-        var eth = _repository.FindBySymbol("ETHUSDT", ProductType.Spot, ExchangeEnum.BINANCE);
-        if (btc == null || eth == null)
+        _btc = instrumentRepository.FindBySymbol("BTCUSDT", ProductType.Spot, ExchangeEnum.BINANCE);
+        _eth = instrumentRepository.FindBySymbol("ETHUSDT", ProductType.Spot, ExchangeEnum.BINANCE);
+        if (_btc == null || _eth == null)
             throw new Exception("Instruments not found in repository.");
-        _btcConsumer = new TestConsumer(_logger, btc, "BTC_Consumer", _testTopic);
-        _ethConsumer = new TestConsumer(_logger, eth, "ETH_Consumer", _testTopic);
-        var allConsumers = new List<BaseMarketDataConsumer> { _btcConsumer, _ethConsumer };
-        _disruptor = new Disruptor<MarketDataEventWrapper>(
-            () => new MarketDataEventWrapper(),
-            1024,
-            TaskScheduler.Default,
-            ProducerType.Multi,
-            new BlockingWaitStrategy()
-        );
-        _orderDisruptor = new Disruptor<OrderStatusReportWrapper>(
-            () => new OrderStatusReportWrapper(),
-            1024,
-            TaskScheduler.Default,
-            ProducerType.Multi,
-            new BlockingWaitStrategy()
-        );
-        // --- 4. Mock IFeedAdapter 생성 ---
-        _mockAdapter = new MockAdapter(_logger, ProductType.PerpetualFuture, null);
+        _btcConsumer = new TestConsumer(new NullLogger<TestConsumer>(), _btc, "BTC_Consumer", _testTopic);
+        _ethConsumer = new TestConsumer(new NullLogger<TestConsumer>(), _eth, "ETH_Consumer", _testTopic);
 
-        // --- 5. 핵심 컴포넌트들을 '수동'으로 조립 ---
-        // a) Distributor 생성 (Disruptor와 로거 주입)
-        _distributor = new MarketDataDistributor(
-            loggerFactory.CreateLogger<MarketDataDistributor>()
-        );
-        _orderRouter = new OrderRouter(
-            loggerFactory.CreateLogger<OrderRouter>()
-        );
-        _orderDistributor = new OrderUpdateDistributor(
-            loggerFactory.CreateLogger<OrderUpdateDistributor>(),
-            _orderRouter
-        );
-        _disruptor.HandleEventsWith(_distributor);
-        _orderDisruptor.HandleEventsWith(_orderDistributor);
-        _disruptor.Start();
-        _orderDisruptor.Start();
+        _mockAdapter = new MockAdapter(new NullLogger<MockAdapter>(), ProductType.PerpetualFuture, instrumentRepository);
+        services.AddSingleton<IFeedAdapter>(_mockAdapter);
+        services.AddSingleton<MarketDataDistributor>();
+        services.AddSingleton<IOrderRouter, OrderRouter>();
+        services.AddSingleton<IOrderUpdateHandler, OrderUpdateDistributor>();
 
-        // b) FeedHandler 생성 (어댑터와 Disruptor 주입)
-        var adapterDict = new ConcurrentDictionary<(ExchangeEnum, ProductType), IFeedAdapter>();
-        adapterDict.TryAdd((ExchangeEnum.BINANCE, ProductType.PerpetualFuture), _mockAdapter);
-        var registry = new FeedAdapterRegistry(adapterDict);
-        _feedHandler = new FeedHandler(
-            loggerFactory.CreateLogger<FeedHandler>(),
-            registry,
-            _disruptor,
-            _orderDisruptor
-        );
-
-        // c) Distributor가 모든 Consumer를 구독하도록 설정
-        foreach (var consumer in allConsumers)
+        services.AddSingleton(provider =>
         {
-            _distributor.Subscribe(consumer);
-        }
+            var disruptor = new Disruptor<MarketDataEventWrapper>(() => new MarketDataEventWrapper(), 1024);
+            disruptor.HandleEventsWith(provider.GetRequiredService<MarketDataDistributor>());
+            return disruptor;
+        });
+
+        services.AddSingleton(provider =>
+        {
+            var disruptor = new Disruptor<OrderStatusReportWrapper>(() => new OrderStatusReportWrapper(), 1024);
+            disruptor.HandleEventsWith(provider.GetRequiredService<IOrderUpdateHandler>());
+            return disruptor;
+        });
+        services.AddSingleton<IFeedAdapterRegistry, FeedAdapterRegistry>();
+        services.AddSingleton<IFeedHandler, FeedHandler>();
+        _serviceProvider = services.BuildServiceProvider();
     }
 
     [TearDown]
     public void TearDown()
     {
         // 테스트가 끝난 후 Disruptor를 안전하게 종료
-        _disruptor?.Shutdown(TimeSpan.FromSeconds(1));
+        _serviceProvider?.Dispose();
         if (Directory.Exists(_testDirectory))
         {
             Directory.Delete(_testDirectory, true);
         }
     }
 
-    private string CreateTestCsvFile(string content)
-    {
-        var filePath = Path.Combine(_testDirectory, "instruments.csv");
-        File.WriteAllText(filePath, content);
-        return filePath;
-    }
-
     [Test]
     public async Task Distributor_ShouldDistributeEvents_ToCorrectlySubscribedConsumers()
     {
+        var disruptor = _serviceProvider.GetRequiredService<Disruptor<MarketDataEventWrapper>>();
+        var distributor = _serviceProvider.GetRequiredService<MarketDataDistributor>();
 
-        var btcSymbolId = SymbolUtils.GetSymbolId("BTCUSDT");
-        var ethSymbolId = SymbolUtils.GetSymbolId("ETHUSDT");
-        var exchange = ExchangeEnum.BINANCE;
+        _serviceProvider.GetRequiredService<IFeedHandler>();
 
+        distributor.Subscribe(_btcConsumer);
+        distributor.Subscribe(_ethConsumer);
+
+        var ringBufer = disruptor.Start();
+        var repository = _serviceProvider.GetRequiredService<IInstrumentRepository>();
         // 테스트용 이벤트 생성
         var btcUpdates = new PriceLevelEntryArray();
         var ethUpdates = new PriceLevelEntryArray();
         btcUpdates[0] = new PriceLevelEntry(Side.Buy, 50000m, 100m);
         ethUpdates[0] = new PriceLevelEntry(Side.Sell, 3000m, 200m);
 
-        var btcEvent = new MarketDataEvent(1, 1, EventKind.Update, btcSymbolId, exchange, 0, _testTopic.TopicId, 1, btcUpdates);
-        var ethEvent = new MarketDataEvent(2, 2, EventKind.Update, ethSymbolId, exchange, 0, _testTopic.TopicId, 1, ethUpdates);
+        var btcEvent = new MarketDataEvent(1, 1, EventKind.Update, _btc.InstrumentId, _btc.SourceExchange, 0, _testTopic.TopicId, 1, btcUpdates);
+        var ethEvent = new MarketDataEvent(2, 2, EventKind.Update, _eth.InstrumentId, _eth.SourceExchange, 0, _testTopic.TopicId, 1, ethUpdates);
 
         // --- Act ---
         // Mock 어댑터에서 이벤트를 '발생'시킴.
@@ -173,11 +138,11 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         // --- Assert ---
         // 1. BTC Consumer는 BTC 이벤트만 받아야 함
         _btcConsumer.ReceivedEvents.Should().HaveCount(1);
-        _btcConsumer.ReceivedEvents[0].InstrumentId.Should().Be(btcSymbolId);
+        _btcConsumer.ReceivedEvents[0].InstrumentId.Should().Be(_btc.InstrumentId);
 
         // 2. ETH Consumer는 ETH 이벤트만 받아야 함
         _ethConsumer.ReceivedEvents.Should().HaveCount(1);
-        _ethConsumer.ReceivedEvents[0].InstrumentId.Should().Be(ethSymbolId);
+        _ethConsumer.ReceivedEvents[0].InstrumentId.Should().Be(_eth.InstrumentId);
     }
 }
 
