@@ -254,13 +254,14 @@ public abstract class BaseFeedAdapter : IFeedAdapter
                 {
                     Interlocked.Exchange(ref _reconnectionInProgress, 0);
                     _logger.LogInformationWithCaller($"Successfully connected to {SourceExchange} WebSocket.");
-                    OnConnectionStateChanged(true, "Connected Successfully");
 
                     // Clear old subscriptions to allow SubscriptionManager to re-subscribe cleanly.
                     lock (_subscriptionLock)
                     {
                         _subscribedInsts.Clear();
                     }
+
+                    OnConnectionStateChanged(true, "Connected Successfully");
 
                     // Start background tasks
                     _inactivityCts = new CancellationTokenSource();
