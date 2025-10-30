@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.Utils;
 
 namespace OpenHFT.Gateway.ApiClient;
 
@@ -87,29 +88,61 @@ public class PriceLevelConverter : JsonConverter<IReadOnlyList<(decimal Price, d
 /// </summary>
 public class BinanceRestApiClient : BaseRestApiClient
 {
-    protected override string BaseUrl => ProdType switch
+    protected override string GetBaseUrl(ExecutionMode mode)
     {
-        ProductType.PerpetualFuture => "https://fapi.binance.com",
-        ProductType.Spot => "https://api.binance.com",
-        _ => throw new InvalidOperationException($"Unsupported product type for Binance: {ProdType}")
-    };
+        if (ProdType == ProductType.PerpetualFuture)
+        {
+            return mode switch
+            {
+                ExecutionMode.Live => "https://fapi.binance.com",
+                ExecutionMode.Testnet => "https://fapi.binance.com",
+                _ => throw new InvalidOperationException($"Unsupported Execution Mode for Binance: {mode}")
+            };
+        }
+        else if (ProdType == ProductType.Spot)
+        {
+            return mode switch
+            {
+                ExecutionMode.Live => "https://api.binance.com",
+                ExecutionMode.Testnet => "https://api.binance.com",
+                _ => throw new InvalidOperationException($"Unsupported Execution Mode for Binance: {mode}")
+            };
+        }
+        else
+        {
+            throw new NotImplementedException($"Unsupported product type for Binance: {ProdType}");
+        }
+    }
 
     public override ExchangeEnum SourceExchange => ExchangeEnum.BINANCE;
 
-    public BinanceRestApiClient(ILogger<BinanceRestApiClient> logger, IInstrumentRepository instrumentRepository, HttpClient httpClient, ProductType productType)
-        : base(logger, instrumentRepository, httpClient, productType) { }
+    public BinanceRestApiClient(ILogger<BinanceRestApiClient> logger, IInstrumentRepository instrumentRepository, HttpClient httpClient, ProductType productType, ExecutionMode mode)
+        : base(logger, instrumentRepository, httpClient, productType, mode) { }
 
-    public Task<BinanceDepthSnapshot> GetDepthSnapshotAsync(string symbol, int limit = 20, CancellationToken cancellationToken = default)
+    public async Task<BinanceDepthSnapshot> GetDepthSnapshotAsync(string symbol, int limit = 20, CancellationToken cancellationToken = default)
     {
         var endpoint = $"/fapi/v1/depth?symbol={symbol.ToUpper()}&limit={limit}";
-        return SendRequestAsync<BinanceDepthSnapshot>(HttpMethod.Get, endpoint, cancellationToken: cancellationToken);
+        var result = await SendRequestAsync<BinanceDepthSnapshot>(HttpMethod.Get, endpoint, cancellationToken: cancellationToken);
+        if (!result.IsSuccess)
+        {
+            _logger.LogWarningWithCaller($"Failed to get depth snapshot for {symbol}: {result.Error.Message}");
+            throw result.Error;
+        }
+
+        return result.Data;
     }
 
     public override async Task<long> GetServerTimeAsync(CancellationToken cancellationToken = default)
     {
         var endpoint = "/fapi/v1/time";
-        var response = await SendRequestAsync<BinanceServerTime>(HttpMethod.Get, endpoint, cancellationToken: cancellationToken);
-        return response.ServerTime;
+        var result = await SendRequestAsync<BinanceServerTime>(HttpMethod.Get, endpoint, cancellationToken: cancellationToken);
+        if (!result.IsSuccess)
+        {
+            _logger.LogWarningWithCaller($"Failed to get server time: {result.Error.Message}");
+            throw result.Error;
+        }
+
+        return result.Data.ServerTime;
     }
 
     public Task<BinanceListenKeyResponse> CreateListenKeyAsync(ProductType type, CancellationToken ct = default)
@@ -121,7 +154,7 @@ public class BinanceRestApiClient : BaseRestApiClient
         return Task.FromResult(new BinanceListenKeyResponse()); // Placeholder 
     }
 
-    protected override void AddSignatureToRequest(HttpRequestMessage request, string? queryString, Dictionary<string, object>? bodyParams)
+    protected override void AddSignatureToRequest(HttpRequestMessage request, string fullPath, string? queryString, Dictionary<string, object>? bodyParams)
     {
         // 1. API 키 헤더 추가
         request.Headers.Add("X-MBX-APIKEY", ApiKey);

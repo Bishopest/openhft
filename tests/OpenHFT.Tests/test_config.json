@@ -15,5 +15,8 @@
       "product-type": "perpetual",
       "symbols": [ "BTCUSDT" ]
     }
-  ]
+  ],
+  "trading": {
+    "mode": "Testnet"
+  }
 }

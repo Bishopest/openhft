@@ -2,10 +2,12 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.Utils;
 using OpenHFT.Gateway.ApiClient.Exceptions;
 
 namespace OpenHFT.Gateway.ApiClient;
@@ -41,17 +43,17 @@ public abstract class BaseRestApiClient : IDisposable
     /// <summary>
     /// The base URL for the REST API. Must be implemented by derived classes.
     /// </summary>
-    protected abstract string BaseUrl { get; }
+    protected abstract string GetBaseUrl(ExecutionMode mode);
+    protected readonly ExecutionMode _executionMode;
 
     public abstract ExchangeEnum SourceExchange { get; }
-
-
 
     protected BaseRestApiClient(
         ILogger logger,
         IInstrumentRepository instrumentRepository,
         HttpClient httpClient,
         ProductType productType,
+        ExecutionMode executionMode,
         string? apiSecret = null,
         string? apiKey = null)
     {
@@ -59,6 +61,7 @@ public abstract class BaseRestApiClient : IDisposable
         _instrumentRepository = instrumentRepository;
         _httpClient = httpClient;
         ProdType = productType;
+        _executionMode = executionMode;
         ApiSecret = apiSecret;
         ApiKey = apiKey;
 
@@ -71,34 +74,41 @@ public abstract class BaseRestApiClient : IDisposable
     /// </summary>
     protected virtual void ConfigureHttpClient()
     {
-        _httpClient.BaseAddress = new Uri(BaseUrl);
+        _httpClient.BaseAddress = new Uri(GetBaseUrl(_executionMode));
         _httpClient.DefaultRequestHeaders.Accept.Clear();
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
 
     /// <summary>
-    /// Sends an HTTP request and deserializes the JSON response.
+    /// Sends a public HTTP request and returns a result object, avoiding exceptions for predictable failures.
     /// </summary>
     /// <typeparam name="T">The type to deserialize the response into.</typeparam>
     /// <param name="method">The HTTP method (e.g., HttpMethod.Get).</param>
     /// <param name="endpoint">The API endpoint path (e.g., "/api/v3/ticker/price").</param>
     /// <param name="payload">The request body for POST/PUT requests. Will be serialized to JSON.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>The deserialized response object.</returns>
-    /// <exception cref="RestApiException">Thrown when the API returns an error or the request fails.</exception>
-    public async Task<T> SendRequestAsync<T>(
+    /// <returns>A RestApiResult object containing either the successful data or an error.</returns>
+    public async Task<RestApiResult<T>> SendRequestAsync<T>(
         HttpMethod method,
         string endpoint,
         object? payload = null,
         CancellationToken cancellationToken = default)
     {
-        // The BaseAddress is already set in ConfigureHttpClient. We only need the relative path.
         using var request = new HttpRequestMessage(method, endpoint.TrimStart('/'));
 
         if (payload != null)
         {
-            var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions { IgnoreNullValues = true });
-            request.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+            try
+            {
+                var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull });
+                request.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Failed to serialize payload for request to {Endpoint}.", endpoint);
+                var error = new RestApiException($"Payload serialization error: {ex.Message}", ex);
+                return RestApiResult<T>.Failure(error);
+            }
         }
 
         try
@@ -106,45 +116,63 @@ public abstract class BaseRestApiClient : IDisposable
             using var response = await _httpClient.SendAsync(request, cancellationToken);
             var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
 
+            // 1. Handle non-successful HTTP status codes
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError("API request to {Uri} failed with status {StatusCode}. Response: {Response}",
                     request.RequestUri, response.StatusCode, responseContent);
-                throw new RestApiException(
+                var error = new RestApiException(
                     $"API request failed: {response.StatusCode}",
                     response.StatusCode,
                     responseContent);
+                return RestApiResult<T>.Failure(error);
             }
 
+            // 2. Handle empty responses
             if (string.IsNullOrWhiteSpace(responseContent))
             {
-                throw new RestApiException("API returned an empty response.", response.StatusCode, responseContent);
+                var error = new RestApiException("API returned an empty response.", response.StatusCode, responseContent);
+                return RestApiResult<T>.Failure(error);
             }
 
-            var result = JsonSerializer.Deserialize<T>(responseContent);
-            if (result == null)
+            // 3. Handle JSON parsing errors
+            try
             {
-                throw new RestApiException("Failed to deserialize API response.", response.StatusCode, responseContent);
-            }
+                var result = JsonSerializer.Deserialize<T>(responseContent);
+                if (result == null)
+                {
+                    var error = new RestApiException("Failed to deserialize API response to a non-null object.", response.StatusCode, responseContent);
+                    return RestApiResult<T>.Failure(error);
+                }
 
-            return result;
+                // 4. Return success result
+                return RestApiResult<T>.Success(result);
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Failed to parse JSON response from {Uri}. Response: {ResponseContent}", request.RequestUri, responseContent);
+                var error = new RestApiException($"JSON parsing error: {ex.Message}", ex);
+                return RestApiResult<T>.Failure(error);
+            }
         }
-        catch (HttpRequestException ex)
+        catch (HttpRequestException ex) // Handle network-level errors
         {
             _logger.LogError(ex, "HTTP request to {Uri} failed.", request.RequestUri);
-            throw new RestApiException($"Network error during API request: {ex.Message}", ex);
+            var error = new RestApiException($"Network error during API request: {ex.Message}", ex);
+            return RestApiResult<T>.Failure(error);
         }
-        catch (JsonException ex)
+        catch (Exception ex) // Handle any other unexpected errors
         {
-            _logger.LogError(ex, "Failed to parse JSON response from {Uri}.", request.RequestUri);
-            throw new RestApiException($"JSON parsing error: {ex.Message}", ex);
+            _logger.LogError(ex, "An unexpected error occurred during the request to {Uri}.", request.RequestUri);
+            var error = new RestApiException($"Request failed: {ex.Message}", ex);
+            return RestApiResult<T>.Failure(error);
         }
     }
 
     /// <summary>
     /// Sends a signed, private HTTP request. This is a template method.
     /// </summary>
-    public async Task<T> SendPrivateRequestAsync<T>(
+    public async Task<RestApiResult<T>> SendPrivateRequestAsync<T>(
         HttpMethod method,
         string endpoint,
         Dictionary<string, object>? queryParams = null,
@@ -161,7 +189,7 @@ public abstract class BaseRestApiClient : IDisposable
         using var request = new HttpRequestMessage(method, fullEndpoint.TrimStart('/'));
 
         // 2. add signature(abstract method) 
-        AddSignatureToRequest(request, queryString, bodyParams);
+        AddSignatureToRequest(request, fullEndpoint, queryString, bodyParams);
 
         // 3. send request & handle responses
         try
@@ -171,17 +199,35 @@ public abstract class BaseRestApiClient : IDisposable
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new RestApiException($"API Error: {response.StatusCode}", response.StatusCode, responseContent);
+                var ex = new RestApiException($"API Error: {response.StatusCode}", response.StatusCode, responseContent);
+                _logger.LogErrorWithCaller(ex, $"API request to {request.RequestUri} failed with status {response.StatusCode}. Response: {responseContent}");
+                return RestApiResult<T>.Failure(ex);
             }
+            try
+            {
+                var result = JsonSerializer.Deserialize<T>(responseContent);
+                if (result == null)
+                {
+                    var ex = new RestApiException("Failed to deserialize response to a non-null object.", response.StatusCode, responseContent);
+                    _logger.LogErrorWithCaller(ex, $"Failed to deserialize API response from {request.RequestUri}. Response: {responseContent}");
+                    return RestApiResult<T>.Failure(ex);
+                }
 
-            var result = JsonSerializer.Deserialize<T>(responseContent);
-            if (result == null) throw new RestApiException("Failed to deserialize response.", response.StatusCode, responseContent);
+                return RestApiResult<T>.Success(result);
 
-            return result;
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogErrorWithCaller(ex, $"Failed to parse JSON response from {request.RequestUri}");
+                var error = new RestApiException($"JSON parsing error: {ex.Message}", ex);
+                return RestApiResult<T>.Failure(error);
+            }
         }
         catch (Exception ex)
         {
-            throw new RestApiException($"Request failed: {ex.Message}", ex);
+            _logger.LogErrorWithCaller(ex, $"An unexpected error occurred during the request to {request.RequestUri}.");
+            var error = new RestApiException($"Request failed: {ex.Message}", ex);
+            return RestApiResult<T>.Failure(error);
         }
     }
 
@@ -191,6 +237,7 @@ public abstract class BaseRestApiClient : IDisposable
     /// </summary>
     protected abstract void AddSignatureToRequest(
         HttpRequestMessage request,
+        string fullPath,
         string? queryString,
         Dictionary<string, object>? bodyParams);
 

@@ -15,6 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting " />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
@@ -22,9 +23,11 @@
     <PackageReference Include="Moq" />
     <PackageReference Include="NUnit" />
     <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="DotNetEnv" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../../src/OpenHFT.Gateway/OpenHFT.Gateway.csproj" />
     <ProjectReference Include="../../src/OpenHFT.Quote/OpenHFT.Quoting.csproj" />
     <ProjectReference Include="..\..\src\OpenHFT.Core\OpenHFT.Core.csproj" />
     <ProjectReference Include="..\..\src\OpenHFT.Processing\OpenHFT.Processing.csproj" />

@@ -1,8 +1,10 @@
 using System;
+using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Orders;
+using OpenHFT.Core.Utils;
 using OpenHFT.Gateway.ApiClient;
 using OpenHFT.Gateway.ApiClient.Bitmex;
 using OpenHFT.Gateway.ApiClient.Exceptions;
@@ -11,6 +13,7 @@ namespace OpenHFT.Gateway;
 
 public class BitmexOrderGateway : IOrderGateway
 {
+    private readonly ILogger<BitmexOrderGateway> _logger;
     private readonly BitmexRestApiClient _apiClient;
     private readonly IInstrumentRepository _instrumentRepository;
 
@@ -18,10 +21,12 @@ public class BitmexOrderGateway : IOrderGateway
     public ProductType ProdType { get; }
 
     public BitmexOrderGateway(
+        ILogger<BitmexOrderGateway> logger,
         BitmexRestApiClient apiClient,
         IInstrumentRepository instrumentRepository,
         ProductType prodType)
     {
+        _logger = logger;
         _apiClient = apiClient;
         _instrumentRepository = instrumentRepository;
         ProdType = prodType;
@@ -43,18 +48,17 @@ public class BitmexOrderGateway : IOrderGateway
             { "clOrdID", request.ClientOrderId.ToString() }
         };
 
-        try
-        {
-            var response = await _apiClient.SendPrivateRequestAsync<BitmexOrderResponse>(
-                HttpMethod.Post, "/api/v1/order", queryParams: null, bodyParams: payload, cancellationToken);
+        var result = await _apiClient.SendPrivateRequestAsync<BitmexOrderResponse>(
+            HttpMethod.Post, "/api/v1/order", queryParams: null, bodyParams: payload, cancellationToken);
 
-            var initialReport = MapResponseToReport(response, instrument.InstrumentId);
-            return new OrderPlacementResult(true, response.OrderId, initialReport: initialReport);
-        }
-        catch (RestApiException ex)
+        if (!result.IsSuccess)
         {
-            return new OrderPlacementResult(false, null, $"API Error: {ex.StatusCode} - {ex.ResponseContent}");
+            _logger.LogWarningWithCaller($"Failed to place order: {result.Error.Message}");
+            return new OrderPlacementResult(false, null, result.Error.Message);
         }
+
+        var initialReport = MapResponseToReport(result.Data, instrument.InstrumentId);
+        return new OrderPlacementResult(true, result.Data.OrderId, initialReport: initialReport);
     }
 
     public async Task<OrderModificationResult> SendReplaceOrderAsync(ReplaceOrderRequest request, CancellationToken cancellationToken = default)
@@ -65,34 +69,31 @@ public class BitmexOrderGateway : IOrderGateway
             { "price", request.NewPrice.ToDecimal() },
         };
 
-        try
+        var result = await _apiClient.SendPrivateRequestAsync<BitmexOrderResponse>(
+            HttpMethod.Put, "/api/v1/order", queryParams: null, bodyParams: payload, cancellationToken);
+        if (!result.IsSuccess)
         {
-            var response = await _apiClient.SendPrivateRequestAsync<BitmexOrderResponse>(
-                HttpMethod.Put, "/api/v1/order", queryParams: null, bodyParams: payload, cancellationToken);
-            return new OrderModificationResult(true, response.OrderId);
+            _logger.LogWarningWithCaller($"Failed to replace order: {result.Error.Message}");
+            return new OrderModificationResult(false, request.OrderId, result.Error.Message);
         }
-        catch (RestApiException ex)
-        {
-            return new OrderModificationResult(false, request.OrderId, $"API Error: {ex.StatusCode} - {ex.ResponseContent}");
-        }
+
+        return new OrderModificationResult(true, result.Data.OrderId);
     }
 
     public async Task<OrderModificationResult> SendCancelOrderAsync(CancelOrderRequest request, CancellationToken cancellationToken = default)
     {
         var payload = new Dictionary<string, object> { { "orderID", request.OrderId } };
 
-        try
+        // BitMEX 취소 응답은 배열 형태
+        var result = await _apiClient.SendPrivateRequestAsync<List<BitmexOrderResponse>>(
+            HttpMethod.Delete, "/api/v1/order", queryParams: null, bodyParams: payload, cancellationToken);
+        if (!result.IsSuccess)
         {
-            // BitMEX 취소 응답은 배열 형태
-            var response = await _apiClient.SendPrivateRequestAsync<List<BitmexOrderResponse>>(
-                HttpMethod.Delete, "/api/v1/order", queryParams: null, bodyParams: payload, cancellationToken);
+            _logger.LogWarningWithCaller($"Failed to cancel order: {result.Error.Message}");
+            return new OrderModificationResult(false, request.OrderId, result.Error.Message);
+        }
 
-            return new OrderModificationResult(true, request.OrderId);
-        }
-        catch (RestApiException ex)
-        {
-            return new OrderModificationResult(false, request.OrderId, $"API Error: {ex.StatusCode} - {ex.ResponseContent}");
-        }
+        return new OrderModificationResult(true, request.OrderId);
     }
 
     // Helper to map exchange-specific response to our standard DTO

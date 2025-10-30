@@ -171,7 +171,8 @@ public class Program
                                     provider.GetRequiredService<ILogger<BinanceRestApiClient>>(),
                                     provider.GetRequiredService<IInstrumentRepository>(),
                                     provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BinanceRestApiClient)),
-                                    productType));
+                                    productType,
+                                    ExecutionMode.Testnet));
                                 services.AddSingleton<IFeedAdapter>(provider => new BinanceAdapter(
                                     provider.GetRequiredService<ILogger<BinanceAdapter>>(), productType,
                                     provider.GetRequiredService<IInstrumentRepository>()
@@ -182,7 +183,8 @@ public class Program
                                     provider.GetRequiredService<ILogger<BitmexRestApiClient>>(),
                                     provider.GetRequiredService<IInstrumentRepository>(),
                                     provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BitmexRestApiClient)),
-                                    productType));
+                                    productType,
+                                    ExecutionMode.Testnet));
                                 services.AddSingleton<IFeedAdapter>(provider => new BitmexAdapter(
                                     provider.GetRequiredService<ILogger<BitmexAdapter>>(), productType,
                                     provider.GetRequiredService<IInstrumentRepository>()
