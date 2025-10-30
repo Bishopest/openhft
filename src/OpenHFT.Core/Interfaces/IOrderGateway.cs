@@ -36,4 +36,10 @@ public interface IOrderGateway
     /// <param name="cancellationToken">A token for cancelling the request.</param>
     /// <returns>A result object indicating the outcome of the cancellation attempt.</returns>
     Task<OrderModificationResult> SendCancelOrderAsync(CancelOrderRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cancels all open orders for a specific symbol.
+    /// Primarily used for cleanup in integration tests or emergency stops.
+    /// </summary>
+    Task CancelAllOrdersAsync(string symbol, CancellationToken cancellationToken = default);
 }

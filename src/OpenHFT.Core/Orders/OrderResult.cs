@@ -9,15 +9,15 @@ namespace OpenHFT.Core.Orders;
 public readonly struct OrderPlacementResult
 {
     public readonly bool IsSuccess { get; }
-    public readonly long ClientOrderId { get; }
+    public readonly string? OrderId { get; }
     public readonly string? FailureReason { get; }
     // The initial OrderStatusReport can be included here if the exchange provides one immediately.
     public readonly OrderStatusReport? InitialReport { get; }
 
-    public OrderPlacementResult(bool isSuccess, long clientOrderId, string? failureReason = null, OrderStatusReport? initialReport = null)
+    public OrderPlacementResult(bool isSuccess, string? orderId, string? failureReason = null, OrderStatusReport? initialReport = null)
     {
         IsSuccess = isSuccess;
-        ClientOrderId = clientOrderId;
+        OrderId = orderId;
         FailureReason = failureReason;
         InitialReport = initialReport;
     }
@@ -29,13 +29,13 @@ public readonly struct OrderPlacementResult
 public readonly struct OrderModificationResult
 {
     public readonly bool IsSuccess { get; }
-    public readonly long ClientOrderId { get; }
+    public readonly string OrderId { get; }
     public readonly string? FailureReason { get; }
 
-    public OrderModificationResult(bool isSuccess, long clientOrderId, string? failureReason = null)
+    public OrderModificationResult(bool isSuccess, string orderId, string? failureReason = null)
     {
         IsSuccess = isSuccess;
-        ClientOrderId = clientOrderId;
+        OrderId = orderId;
         FailureReason = failureReason;
     }
 }

@@ -45,7 +45,29 @@ public class Order : IOrder, IOrderUpdatable
     }
 
     // --- Action Methods ---
-    public Task SubmitAsync(CancellationToken cancellationToken = default) { /* ... implementation ... */ return Task.CompletedTask; }
+    public async Task SubmitAsync(CancellationToken cancellationToken = default)
+    {
+        // Update internal state first to prevent race conditions
+        Status = OrderStatus.NewRequest;
+
+        var request = new NewOrderRequest(InstrumentId, ClientOrderId, Side, Price, Quantity, OrderType);
+        var result = await _gateway.SendNewOrderAsync(request, cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            // If the request fails immediately, create a rejection report.
+            var failureReport = new OrderStatusReport(
+                ClientOrderId, null, InstrumentId, OrderStatus.Rejected, Price, Quantity, Quantity,
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), result.FailureReason);
+            OnStatusReportReceived(failureReport);
+        }
+        else if (result.InitialReport.HasValue)
+        {
+            // If the gateway returns an immediate report, process it.
+            OnStatusReportReceived(result.InitialReport.Value);
+        }
+        // If successful but no immediate report, we wait for the WebSocket stream to provide updates.
+    }
     public Task ReplaceAsync(Price price, OrderType orderType, CancellationToken cancellationToken = default) { /* ... implementation ... */ return Task.CompletedTask; }
     public Task CancelAsync(CancellationToken cancellationToken = default) { /* ... implementation ... */ return Task.CompletedTask; }
 

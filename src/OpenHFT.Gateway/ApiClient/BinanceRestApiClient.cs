@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -118,5 +119,38 @@ public class BinanceRestApiClient : BaseRestApiClient
         // The BaseRestApiClient needs to be extended with a SendPrivateRequestAsync method.
         // return SendPrivateRequestAsync<BinanceListenKeyResponse>(HttpMethod.Post, "/fapi/v1/listenKey", null, ct);
         return Task.FromResult(new BinanceListenKeyResponse()); // Placeholder 
+    }
+
+    protected override void AddSignatureToRequest(HttpRequestMessage request, string? queryString, Dictionary<string, object>? bodyParams)
+    {
+        // 1. API 키 헤더 추가
+        request.Headers.Add("X-MBX-APIKEY", ApiKey);
+
+        // 2. 서명할 전체 파라미터 문자열 생성 (totalParams)
+        string bodyString = bodyParams != null ? BuildQueryString(bodyParams) : string.Empty;
+
+        // Binance 규칙: 쿼리 스트링과 본문 스트링을 '&' 없이 그냥 붙임
+        string totalParams = queryString + bodyString;
+
+        // 3. 시그니처 생성
+        string signature = CreateHmacSha256Signature(totalParams);
+
+        // 4. 요청에 시그니처 추가 (쿼리 또는 본문에)
+        string signatureParam = $"&signature={signature}";
+
+        if (request.Method == HttpMethod.Post || request.Method == HttpMethod.Put || request.Method == HttpMethod.Delete)
+        {
+            // 본문이 있는 경우, application/x-www-form-urlencoded 형식으로 재구성
+            var finalBody = string.IsNullOrEmpty(bodyString)
+                ? $"signature={signature}"
+                : $"{bodyString}&signature={signature}";
+            request.Content = new StringContent(finalBody, Encoding.UTF8, "application/x-www-form-urlencoded");
+        }
+        else // GET 등
+        {
+            // 기존 쿼리 스트링에 시그니처 추가
+            var newUri = new Uri(request.RequestUri!.ToString() + signatureParam);
+            request.RequestUri = newUri;
+        }
     }
 }

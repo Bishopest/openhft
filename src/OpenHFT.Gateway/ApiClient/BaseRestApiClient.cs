@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -85,7 +86,7 @@ public abstract class BaseRestApiClient : IDisposable
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The deserialized response object.</returns>
     /// <exception cref="RestApiException">Thrown when the API returns an error or the request fails.</exception>
-    protected async Task<T> SendRequestAsync<T>(
+    public async Task<T> SendRequestAsync<T>(
         HttpMethod method,
         string endpoint,
         object? payload = null,
@@ -138,6 +139,75 @@ public abstract class BaseRestApiClient : IDisposable
             _logger.LogError(ex, "Failed to parse JSON response from {Uri}.", request.RequestUri);
             throw new RestApiException($"JSON parsing error: {ex.Message}", ex);
         }
+    }
+
+    /// <summary>
+    /// Sends a signed, private HTTP request. This is a template method.
+    /// </summary>
+    public async Task<T> SendPrivateRequestAsync<T>(
+        HttpMethod method,
+        string endpoint,
+        Dictionary<string, object>? queryParams = null,
+        Dictionary<string, object>? bodyParams = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(ApiKey) || string.IsNullOrEmpty(ApiSecret))
+            throw new InvalidOperationException("API credentials must be set.");
+
+        // 1. creat query & body
+        string queryString = queryParams != null ? BuildQueryString(queryParams) : string.Empty;
+        string fullEndpoint = string.IsNullOrEmpty(queryString) ? endpoint : $"{endpoint}?{queryString}";
+
+        using var request = new HttpRequestMessage(method, fullEndpoint.TrimStart('/'));
+
+        // 2. add signature(abstract method) 
+        AddSignatureToRequest(request, queryString, bodyParams);
+
+        // 3. send request & handle responses
+        try
+        {
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new RestApiException($"API Error: {response.StatusCode}", response.StatusCode, responseContent);
+            }
+
+            var result = JsonSerializer.Deserialize<T>(responseContent);
+            if (result == null) throw new RestApiException("Failed to deserialize response.", response.StatusCode, responseContent);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            throw new RestApiException($"Request failed: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Derived classes must implement this method to add their specific authentication
+    /// headers or parameters to the request.
+    /// </summary>
+    protected abstract void AddSignatureToRequest(
+        HttpRequestMessage request,
+        string? queryString,
+        Dictionary<string, object>? bodyParams);
+
+    // Helper to build URL-encoded query strings
+    protected string BuildQueryString(Dictionary<string, object> parameters)
+    {
+        return string.Join("&", parameters.Select(kvp => $"{kvp.Key}={Uri.EscapeDataString(kvp.Value.ToString())}"));
+    }
+
+    // Helper for HMAC-SHA256 signing
+    protected string CreateHmacSha256Signature(string message)
+    {
+        var keyBytes = Encoding.UTF8.GetBytes(ApiSecret!);
+        var messageBytes = Encoding.UTF8.GetBytes(message);
+        using var hmac = new HMACSHA256(keyBytes);
+        var hash = hmac.ComputeHash(messageBytes);
+        return Convert.ToHexString(hash).ToLower();
     }
 
     public void Dispose()

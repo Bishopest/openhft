@@ -1,4 +1,6 @@
 using System;
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
@@ -40,8 +42,11 @@ public class BitmexRestApiClient : BaseRestApiClient
 
     public override ExchangeEnum SourceExchange => ExchangeEnum.BITMEX;
 
-    public BitmexRestApiClient(ILogger<BitmexRestApiClient> logger, IInstrumentRepository instrumentRepository, HttpClient httpClient, ProductType productType)
-        : base(logger, instrumentRepository, httpClient, productType) { }
+    public BitmexRestApiClient(ILogger<BitmexRestApiClient> logger,
+        IInstrumentRepository instrumentRepository,
+        HttpClient httpClient, ProductType productType,
+        string? apiSecret = null, string? apiKey = null)
+        : base(logger, instrumentRepository, httpClient, productType, apiSecret, apiKey) { }
 
     public override async Task<long> GetServerTimeAsync(CancellationToken cancellationToken = default)
     {
@@ -52,5 +57,27 @@ public class BitmexRestApiClient : BaseRestApiClient
 
         var firstLevel = response.FirstOrDefault() ?? throw new InvalidOperationException("BitMEX server time response was empty.");
         return firstLevel.Timestamp.ToUnixTimeMilliseconds();
+    }
+
+    protected override void AddSignatureToRequest(HttpRequestMessage request, string? queryString, Dictionary<string, object>? bodyParams)
+    {
+        var expires = DateTimeOffset.UtcNow.AddSeconds(60).ToUnixTimeSeconds();
+        string data = bodyParams != null
+            ? JsonSerializer.Serialize(bodyParams)
+            : string.Empty;
+
+        // BitMEX 서명: verb + path(with query) + expires + data
+        string signatureString = request.Method.Method.ToUpper() + request.RequestUri!.PathAndQuery + expires + data;
+        string signature = CreateHmacSha256Signature(signatureString); // Base class helper
+
+        request.Headers.Add("Accept", "application/json");
+        request.Headers.Add("api-key", ApiKey);
+        request.Headers.Add("api-expires", expires.ToString());
+        request.Headers.Add("api-signature", signature);
+
+        if (bodyParams != null)
+        {
+            request.Content = new StringContent(data, null, "application/json");
+        }
     }
 }
