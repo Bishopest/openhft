@@ -15,7 +15,7 @@ public class FeedHandler : IFeedHandler
     private readonly ILogger<FeedHandler> _logger;
     private readonly IEnumerable<IFeedAdapter> _adapters;
     private readonly RingBuffer<MarketDataEventWrapper> _ringBuffer;
-    private RingBuffer<OrderStatusReportWrapper> _orderUpdateRingBuffer;
+    private readonly RingBuffer<OrderStatusReportWrapper> _orderUpdateRingBuffer;
     public event EventHandler<FeedErrorEventArgs>? FeedError;
     public event EventHandler<ConnectionStateChangedEventArgs>? AdapterConnectionStateChanged;
     public event EventHandler<AuthenticationEventArgs>? AdapterAuthenticationStateChanged;

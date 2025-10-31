@@ -542,6 +542,11 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         MarketDataReceived?.Invoke(this, e);
     }
 
+    protected virtual void OnOrderUpdateReceived(OrderStatusReport e)
+    {
+        OrderUpdateReceived?.Invoke(this, e);
+    }
+
     private void CleanupConnection()
     {
         lock (_connectionLock)

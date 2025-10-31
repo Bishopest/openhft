@@ -111,6 +111,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             try
             {
                 var report = ParseExecution(exeJson);
+                OnOrderUpdateReceived(report);
             }
             catch (Exception ex)
             {
