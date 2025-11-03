@@ -125,28 +125,72 @@ public class BitmexAdapter : BaseAuthFeedAdapter
     }
     private OrderStatusReport ParseExecution(JsonElement exeJson)
     {
-        var symbol = exeJson.GetProperty("symbol").GetString();
-        if (symbol == null)
+        // --- 1. 필수 필드 추출 및 검증 ---
+        var symbol = exeJson.TryGetProperty("symbol", out var symEl) ? symEl.GetString() : null;
+        if (string.IsNullOrEmpty(symbol))
         {
-            throw new FeedParseException(SourceExchange, "Invalid symbol in execution message", null, null, BitmexTopic.Execution.TopicId);
+            throw new FeedParseException(SourceExchange, $"Symbol not found in execution message({exeJson}).", null, null);
         }
 
         var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
         if (instrument == null)
         {
-            throw new FeedParseException(SourceExchange, $"Invalid instrument(symbol: {symbol}) in execution message", null, null, BitmexTopic.Execution.TopicId);
+            throw new FeedParseException(SourceExchange, $"Unknown instrument symbol '{symbol}' in execution message({exeJson}).", null, null);
         }
 
-        var execType = exeJson.GetProperty("execType").GetString();
-        var orderStatus = execType switch
+        var clOrdIDString = exeJson.TryGetProperty("clOrdID", out var clOrdEl) ? clOrdEl.GetString() : null;
+        if (string.IsNullOrEmpty(clOrdIDString) || !long.TryParse(clOrdIDString, out var clientOrderId))
+        {
+            throw new FeedParseException(SourceExchange, $"clOrdID not found or invalid in execution message({exeJson}).", null, null);
+        }
+
+        // --- 2. 상태 및 데이터 필드 추출 ---
+        var exchangeOrderId = exeJson.TryGetProperty("orderID", out var exOrdEl) ? exOrdEl.GetString() : null;
+        var ordStatusStr = exeJson.TryGetProperty("ordStatus", out var statEl) ? statEl.GetString() : null;
+        var timestampStr = exeJson.TryGetProperty("timestamp", out var tsEl) ? tsEl.GetString() : null;
+
+        // --- 3. 값 변환 ---
+        var status = ordStatusStr switch
         {
             "New" => OrderStatus.New,
             "Filled" => OrderStatus.Filled,
             "PartiallyFilled" => OrderStatus.PartiallyFilled,
-            _ => OrderStatus.New
+            "Canceled" => OrderStatus.Cancelled,
+            "Rejected" => OrderStatus.Rejected,
+            _ => OrderStatus.Pending // Or log a warning for unknown status
         };
 
-        var report = new OrderStatusReport();
+        var timestamp = !string.IsNullOrEmpty(timestampStr)
+            ? DateTimeOffset.Parse(timestampStr).ToUnixTimeMilliseconds()
+            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        // GetProperty는 실패 시 예외를 던지므로, TryGetProperty를 사용하는 것이 더 안전합니다.
+        exeJson.TryGetProperty("price", out var priceEl);
+        exeJson.TryGetProperty("orderQty", out var qtyEl);
+        exeJson.TryGetProperty("leavesQty", out var leavesEl);
+        exeJson.TryGetProperty("lastQty", out var lastQtyEl);
+
+        var price = Price.FromDecimal(priceEl.ValueKind == JsonValueKind.Number ? priceEl.GetDecimal() : 0);
+        var quantity = Quantity.FromDecimal(qtyEl.ValueKind == JsonValueKind.Number ? qtyEl.GetDecimal() : 0);
+        var leavesQuantity = Quantity.FromDecimal(leavesEl.ValueKind == JsonValueKind.Number ? leavesEl.GetDecimal() : 0);
+        var lastQuantity = lastQtyEl.ValueKind == JsonValueKind.Number ? (Quantity?)Quantity.FromDecimal(lastQtyEl.GetDecimal()) : null;
+
+        var rejectReason = exeJson.TryGetProperty("text", out var textEl) ? textEl.GetString() : null;
+
+        // --- 4. 최종 OrderStatusReport 객체 생성 ---
+        var report = new OrderStatusReport(
+            clientOrderId: clientOrderId,
+            exchangeOrderId: exchangeOrderId,
+            instrumentId: instrument.InstrumentId,
+            status: status,
+            price: price,
+            quantity: quantity,
+            leavesQuantity: leavesQuantity,
+            timestamp: timestamp,
+            rejectReason: rejectReason,
+            lastQuantity: lastQuantity
+        );
+
         return report;
     }
 

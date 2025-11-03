@@ -85,7 +85,7 @@ public class BitmexOrderGatewayTests
         _btcUsdt = _instrumentRepo.FindBySymbol("XBTUSDT", ProductType.PerpetualFuture, ExchangeEnum.BITMEX);
     }
 
-    public async Task<IReadOnlyList<BitmexOrderBookL2>> GetOrderBookL2Async(BitmexRestApiClient client, string symbol, int depth = 1, CancellationToken cancellationToken = default)
+    public static async Task<IReadOnlyList<BitmexOrderBookL2>> GetOrderBookL2Async(BitmexRestApiClient client, string symbol, int depth = 1, CancellationToken cancellationToken = default)
     {
         var endpoint = $"/api/v1/orderbook/L2?symbol={symbol.ToUpper()}&depth={depth}";
         var result = await client.SendRequestAsync<IReadOnlyList<BitmexOrderBookL2>>(HttpMethod.Get, endpoint, cancellationToken: cancellationToken);

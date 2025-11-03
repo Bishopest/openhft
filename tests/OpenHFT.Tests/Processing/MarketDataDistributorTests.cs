@@ -69,7 +69,7 @@ BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         _btcConsumer = new TestConsumer(new NullLogger<TestConsumer>(), _btc, "BTC_Consumer", _testTopic);
         _ethConsumer = new TestConsumer(new NullLogger<TestConsumer>(), _eth, "ETH_Consumer", _testTopic);
 
-        _mockAdapter = new MockAdapter(new NullLogger<MockAdapter>(), ProductType.PerpetualFuture, instrumentRepository);
+        _mockAdapter = new MockAdapter(new NullLogger<MockAdapter>(), ProductType.PerpetualFuture, instrumentRepository, ExecutionMode.Testnet);
         services.AddSingleton<IFeedAdapter>(_mockAdapter);
         services.AddSingleton<MarketDataDistributor>();
         services.AddSingleton<IOrderRouter, OrderRouter>();
@@ -170,7 +170,7 @@ public class TestConsumer : BaseMarketDataConsumer
 
 public class MockAdapter : BaseFeedAdapter
 {
-    public MockAdapter(ILogger logger, ProductType type, IInstrumentRepository instrumentRepository) : base(logger, type, instrumentRepository)
+    public MockAdapter(ILogger logger, ProductType type, IInstrumentRepository instrumentRepository, ExecutionMode executionMode) : base(logger, type, instrumentRepository, executionMode)
     {
     }
 

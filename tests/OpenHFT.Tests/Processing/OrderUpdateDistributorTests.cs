@@ -30,7 +30,7 @@ public class OrderUpdateDistributorTests
         services.AddLogging(builder => builder.AddConsole());
         services.AddSingleton<IOrderRouter, OrderRouter>();
 
-        _mockAdapter = new MockAdapter(new NullLogger<MockAdapter>(), ProductType.PerpetualFuture, null);
+        _mockAdapter = new MockAdapter(new NullLogger<MockAdapter>(), ProductType.PerpetualFuture, null, ExecutionMode.Testnet);
         services.AddSingleton<IFeedAdapter>(_mockAdapter);
         services.AddSingleton<IFeedAdapterRegistry, FeedAdapterRegistry>();
         services.AddSingleton<IOrderUpdateHandler, OrderUpdateDistributor>();

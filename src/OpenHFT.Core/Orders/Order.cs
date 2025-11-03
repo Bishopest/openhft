@@ -94,7 +94,6 @@ public class Order : IOrder, IOrderUpdatable
 
         // 2. Update internal state to 'ReplaceRequest'
         Status = OrderStatus.ReplaceRequest;
-        Price = newPrice;
 
         // 3. Create request and call the gateway
         var request = new ReplaceOrderRequest(ExchangeOrderId, newPrice);
@@ -152,6 +151,8 @@ public class Order : IOrder, IOrderUpdatable
     public void OnStatusReportReceived(in OrderStatusReport report)
     {
         Status = report.Status;
+        Price = report.Price;
+        Quantity = report.Quantity;
         LeavesQuantity = report.LeavesQuantity;
         LastUpdateTime = report.Timestamp;
         LatestReport = report;
