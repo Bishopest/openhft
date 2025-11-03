@@ -14,7 +14,7 @@ using DotNetEnv;
 namespace OpenHFT.Tests.Gateway;
 
 [TestFixture, Category("Integration")]
-public class BitmexOrderGateway_IntegrationTests
+public class BitmexOrderGatewayTests
 {
     private ServiceProvider _serviceProvider = null!;
     private string _testDirectory = null!;
