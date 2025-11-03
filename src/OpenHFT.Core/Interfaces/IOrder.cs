@@ -59,6 +59,12 @@ public interface IOrder
     /// </summary>
     event EventHandler<OrderStatusReport> StatusChanged;
 
+    /// <summary>
+    /// Fired whenever a part of the order is filled.
+    /// This event provides detailed execution information.
+    /// </summary>
+    event EventHandler<Fill> OrderFilled;
+
     // --- Action Methods ---
 
     /// <summary>

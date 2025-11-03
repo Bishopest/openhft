@@ -145,6 +145,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
         }
 
         // --- 2. 상태 및 데이터 필드 추출 ---
+        var executionId = exeJson.TryGetProperty("trdMatchID", out var trdMatchEl) ? trdMatchEl.GetString() : null;
         var exchangeOrderId = exeJson.TryGetProperty("orderID", out var exOrdEl) ? exOrdEl.GetString() : null;
         var ordStatusStr = exeJson.TryGetProperty("ordStatus", out var statEl) ? statEl.GetString() : null;
         var timestampStr = exeJson.TryGetProperty("timestamp", out var tsEl) ? tsEl.GetString() : null;
@@ -181,6 +182,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
         var report = new OrderStatusReport(
             clientOrderId: clientOrderId,
             exchangeOrderId: exchangeOrderId,
+            executionId: executionId,
             instrumentId: instrument.InstrumentId,
             status: status,
             price: price,

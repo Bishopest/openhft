@@ -137,7 +137,7 @@ public class BitmexOrderGateway_E2E_Tests
         await adapter.SubscribeToPrivateTopicsAsync(CancellationToken.None);
     }
 
-    [Test, Order(1)]
+    [Test, Order(1), Category("E2E_Lifecycle")]
     public async Task E2E_OrderLifecycle_ShouldReceiveStatusUpdatesViaWebSocket()
     {
         // --- 1. 신규 주문 (Submit) 및 'New' 상태 수신 대기 ---
@@ -182,4 +182,59 @@ public class BitmexOrderGateway_E2E_Tests
         order.Status.Should().Be(OrderStatus.Cancelled, "because the cancellation request should be confirmed via WebSocket.");
         TestContext.WriteLine("Order successfully cancelled.");
     }
+
+    /// <summary>
+    /// Tests that a taker order is immediately filled and the Order object's state
+    /// is correctly updated via the WebSocket feedback loop.
+    /// </summary>
+    // [Test, Order(2), Category("E2E_Execution")]
+    // public async Task E2E_TakerOrder_ShouldUpdateStatusToFilled()
+    // {
+    //     // --- Arrange ---
+    //     var orderBuilder = new OrderBuilder(_orderFactory, _btcUsdt.InstrumentId, Side.Buy);
+
+    //     // 시장의 매도 호가보다 높은 가격에 매수 주문을 넣어 즉시 체결(Taker)되도록 합니다.
+    //     var apiClient = _serviceProvider.GetRequiredService<BitmexRestApiClient>();
+    //     var book = await BitmexOrderGatewayTests.GetOrderBookL2Async(apiClient, _btcUsdt.Symbol);
+    //     var takerBidPrice = Price.FromDecimal(book.First(l => l.Side == "Sell").Price);
+    //     var orderQuantity = Quantity.FromDecimal(100m); // BitMEX XBTUSDT의 최소 주문 수량
+
+    //     // IOrderBuilder를 사용하여 Order 객체 생성
+    //     var order = (Order)orderBuilder
+    //         .WithPrice(takerBidPrice)
+    //         .WithQuantity(orderQuantity)
+    //         .WithOrderType(OrderType.Limit)
+    //         .Build();
+
+    //     TestContext.WriteLine($"Step 1: Submitting TAKER order to be filled. CID: {order.ClientOrderId}, Price: {takerBidPrice}, Qty: {orderQuantity}");
+
+    //     // --- Act ---
+    //     await order.SubmitAsync();
+
+    //     await Task.Delay(3000);
+
+    //     // --- Assert ---
+    //     // --- Assert ---
+    //     TestContext.WriteLine($"Asserting order status after waiting. Current state: {order}");
+
+    //     // 1. 체결 내역이 하나 이상 있는지 확인합니다.
+    //     order.Fills.Should().NotBeEmpty("because the taker order should have been at least partially filled.");
+
+    //     // 2. 누적 체결량이 0보다 큰지 확인합니다.
+    //     var cumFills = order.Fills.Sum(a => a.Quantity.ToDecimal());
+    //     cumFills.Should().BeGreaterThan(0m, "because at least one fill should have occurred.");
+
+    //     // 3. 주문 상태가 PartiallyFilled 또는 Filled 인지 확인합니다.
+    //     order.Status.Should().BeOneOf(OrderStatus.PartiallyFilled, OrderStatus.Filled);
+
+    //     TestContext.WriteLine($" -> Success. Received {order.Fills.Count} fill(s). " +
+    //                           $"Cumulative Qty: {cumFills}, Final Status: '{order.Status}'.");
+
+    //     // 테스트 정리: 남은 주문이 있다면 취소
+    //     if (order.Status == OrderStatus.PartiallyFilled)
+    //     {
+    //         await order.CancelAsync();
+    //         await Task.Delay(2000); // 취소 확인 대기
+    //     }
+    // }
 }

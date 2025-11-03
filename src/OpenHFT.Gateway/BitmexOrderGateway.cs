@@ -112,6 +112,7 @@ public class BitmexOrderGateway : IOrderGateway
         return new OrderStatusReport(
             clientOrderId: long.TryParse(response.ClOrdId, out var cid) ? cid : 0,
             exchangeOrderId: response.OrderId,
+            executionId: null,
             instrumentId: instrumentId,
             status: status,
             price: Price.FromDecimal(response.Price ?? 0),

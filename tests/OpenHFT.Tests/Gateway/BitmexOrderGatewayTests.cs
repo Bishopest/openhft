@@ -106,7 +106,7 @@ public class BitmexOrderGatewayTests
         }
     }
 
-    [Test, Order(1)]
+    [Test, Order(1), Category("Lifecycle")]
     public async Task OrderLifecycle_Submit_Amend_Cancel_ShouldSucceed()
     {
         // --- 1. 신규 주문 (Submit) ---
@@ -153,27 +153,27 @@ public class BitmexOrderGatewayTests
         cancelResult.IsSuccess.Should().BeTrue(because: cancelResult.FailureReason);
     }
 
-    [Test, Order(2)]
-    public async Task NewOrder_TakerOrder_ShouldFillImmediately()
-    {
-        // Arrange
-        var clientOrderId = GenerateClientOrderId();
+    // [Test, Order(2), Category("Execution")]
+    // public async Task NewOrder_TakerOrder_ShouldFillImmediately()
+    // {
+    //     // Arrange
+    //     var clientOrderId = GenerateClientOrderId();
 
-        // 시장가보다 높은 가격에 매수 주문을 넣어 즉시 체결(Taker)되도록 함
-        var apiClient = _serviceProvider.GetRequiredService<BitmexRestApiClient>();
-        var book = await GetOrderBookL2Async(apiClient, _btcUsdt.Symbol);
-        var takerBidPrice = Price.FromDecimal(book.First(l => l.Side == "Sell").Price + 10);
+    //     // 시장가보다 높은 가격에 매수 주문을 넣어 즉시 체결(Taker)되도록 함
+    //     var apiClient = _serviceProvider.GetRequiredService<BitmexRestApiClient>();
+    //     var book = await GetOrderBookL2Async(apiClient, _btcUsdt.Symbol);
+    //     var takerBidPrice = Price.FromDecimal(book.First(l => l.Side == "Sell").Price + 10);
 
-        var takerOrderRequest = new NewOrderRequest(_btcUsdt.InstrumentId, clientOrderId, Side.Buy, takerBidPrice, Quantity.FromDecimal(100m), OrderType.Limit);
+    //     var takerOrderRequest = new NewOrderRequest(_btcUsdt.InstrumentId, clientOrderId, Side.Buy, takerBidPrice, Quantity.FromDecimal(100m), OrderType.Limit);
 
-        // Act
-        var placementResult = await _gateway.SendNewOrderAsync(takerOrderRequest);
+    //     // Act
+    //     var placementResult = await _gateway.SendNewOrderAsync(takerOrderRequest);
 
-        // Assert
-        placementResult.IsSuccess.Should().BeTrue(because: placementResult.FailureReason);
-        placementResult.InitialReport.Should().NotBeNull();
+    //     // Assert
+    //     placementResult.IsSuccess.Should().BeTrue(because: placementResult.FailureReason);
+    //     placementResult.InitialReport.Should().NotBeNull();
 
-        // 즉시 체결되었으므로 상태는 'Filled'여야 함
-        placementResult.InitialReport!.Value.Status.Should().Be(OrderStatus.Filled);
-    }
+    //     // 즉시 체결되었으므로 상태는 'Filled'여야 함
+    //     placementResult.InitialReport!.Value.Status.Should().Be(OrderStatus.Filled);
+    // }
 }

@@ -21,6 +21,11 @@ public readonly struct OrderStatusReport
     public readonly string? ExchangeOrderId { get; }
 
     /// <summary>
+    /// A unique identifier for this specific execution, assigned by the exchange.
+    /// </summary>
+    public readonly string? ExecutionId { get; }
+
+    /// <summary>
     /// The unique identifier for the instrument.
     /// </summary>
     public readonly int InstrumentId { get; }
@@ -60,10 +65,11 @@ public readonly struct OrderStatusReport
     /// </summary>
     public readonly string? RejectReason { get; }
 
-    public OrderStatusReport(long clientOrderId, string? exchangeOrderId, int instrumentId, OrderStatus status, Price price, Quantity quantity, Quantity leavesQuantity, long timestamp, string? rejectReason = null, Quantity? lastQuantity = null)
+    public OrderStatusReport(long clientOrderId, string? exchangeOrderId, string? executionId, int instrumentId, OrderStatus status, Price price, Quantity quantity, Quantity leavesQuantity, long timestamp, string? rejectReason = null, Quantity? lastQuantity = null)
     {
         ClientOrderId = clientOrderId;
         ExchangeOrderId = exchangeOrderId;
+        ExecutionId = executionId;
         InstrumentId = instrumentId;
         Status = status;
         Price = price;

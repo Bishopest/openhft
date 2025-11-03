@@ -28,7 +28,24 @@ public class Order : IOrder, IOrderUpdatable
     public long LastUpdateTime { get; internal set; }
     public OrderStatusReport? LatestReport { get; internal set; }
 
+    private readonly List<Fill> _fills = new List<Fill>();
+    private readonly object _stateLock = new();
+
+    /// <summary>
+    /// A read-only list of all executions for this order.
+    /// </summary>
+    public IReadOnlyList<Fill> Fills
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _fills.ToList().AsReadOnly();
+            }
+        }
+    }
     public event EventHandler<OrderStatusReport>? StatusChanged;
+    public event EventHandler<Fill>? OrderFilled;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Order"/> class.
@@ -60,7 +77,7 @@ public class Order : IOrder, IOrderUpdatable
         {
             // If the request fails immediately, create a rejection report.
             var failureReport = new OrderStatusReport(
-                ClientOrderId, null, InstrumentId, OrderStatus.Rejected, Price, Quantity, Quantity,
+                ClientOrderId, null, null, InstrumentId, OrderStatus.Rejected, Price, Quantity, Quantity,
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), result.FailureReason);
             OnStatusReportReceived(failureReport);
         }
@@ -103,7 +120,7 @@ public class Order : IOrder, IOrderUpdatable
         if (!result.IsSuccess)
         {
             var failureReport = new OrderStatusReport(
-                ClientOrderId, ExchangeOrderId, InstrumentId, Status, Price, Quantity, LeavesQuantity,
+                ClientOrderId, ExchangeOrderId, null, InstrumentId, Status, Price, Quantity, LeavesQuantity,
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), result.FailureReason);
             OnStatusReportReceived(failureReport);
         }
@@ -139,7 +156,7 @@ public class Order : IOrder, IOrderUpdatable
         if (!result.IsSuccess)
         {
             var failureReport = new OrderStatusReport(
-                ClientOrderId, ExchangeOrderId, InstrumentId, OrderStatus.Rejected, Price, Quantity, LeavesQuantity,
+                ClientOrderId, ExchangeOrderId, null, InstrumentId, OrderStatus.Rejected, Price, Quantity, LeavesQuantity,
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), result.FailureReason);
             OnStatusReportReceived(failureReport);
         }
@@ -150,26 +167,52 @@ public class Order : IOrder, IOrderUpdatable
 
     public void OnStatusReportReceived(in OrderStatusReport report)
     {
-        Status = report.Status;
-        Price = report.Price;
-        Quantity = report.Quantity;
-        LeavesQuantity = report.LeavesQuantity;
-        LastUpdateTime = report.Timestamp;
-        LatestReport = report;
-        if (!string.IsNullOrEmpty(report.ExchangeOrderId))
+        lock (_stateLock)
         {
-            ExchangeOrderId = report.ExchangeOrderId;
-        }
+            if (report.Timestamp < this.LastUpdateTime) return;
 
-        StatusChanged?.Invoke(this, report);
+            Status = report.Status;
+            Price = report.Price;
+            Quantity = report.Quantity;
+            LeavesQuantity = report.LeavesQuantity;
+            LastUpdateTime = report.Timestamp;
+            LatestReport = report;
+            if (!string.IsNullOrEmpty(report.ExchangeOrderId))
+            {
+                ExchangeOrderId = report.ExchangeOrderId;
+            }
 
-        switch (report.Status)
-        {
-            case OrderStatus.Filled:
-            case OrderStatus.Cancelled:
-            case OrderStatus.Rejected:
-                _router.DeregisterOrder(this);
-                break;
+            if (report.LastQuantity.HasValue && report.ExecutionId != null && report.LastQuantity.Value.ToDecimal() > 0m)
+            {
+                var fill = new Fill(
+                    instrumentId: InstrumentId,
+                    clientOrderId: ClientOrderId,
+                    exchangeOrderId: report.ExchangeOrderId ?? ExchangeOrderId ?? string.Empty,
+                    executionId: report.ExecutionId,
+                    side: Side,
+                    price: report.Price,
+                    quantity: report.LastQuantity.Value,
+                    timestamp: report.Timestamp
+                );
+
+                if (!_fills.Any(f => f.ExecutionId == fill.ExecutionId))
+                {
+                    _fills.Add(fill);
+                    OrderFilled?.Invoke(this, fill);
+                }
+            }
+
+            StatusChanged?.Invoke(this, report);
+
+
+            switch (report.Status)
+            {
+                case OrderStatus.Filled:
+                case OrderStatus.Cancelled:
+                case OrderStatus.Rejected:
+                    _router.DeregisterOrder(this);
+                    break;
+            }
         }
     }
 
