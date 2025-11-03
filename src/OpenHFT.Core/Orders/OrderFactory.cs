@@ -1,4 +1,5 @@
 using System;
+using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 
@@ -12,16 +13,18 @@ public class OrderFactory : IOrderFactory
 {
     private readonly IOrderRouter _orderRouter;
     private readonly IOrderGatewayRegistry _gatewayRegistry;
+    private readonly ILogger<Order> _orderLogger;
 
     /// <summary>
     /// Initializes a new instance of the OrderFactory.
     /// </summary>
     /// <param name="orderRouter">The central router for order status updates.</param>
     /// <param name="gatewayRegistry">The registry to find the correct order gateway for an instrument.</param>
-    public OrderFactory(IOrderRouter orderRouter, IOrderGatewayRegistry gatewayRegistry)
+    public OrderFactory(IOrderRouter orderRouter, IOrderGatewayRegistry gatewayRegistry, ILogger<Order> orderLogger)
     {
         _orderRouter = orderRouter ?? throw new ArgumentNullException(nameof(orderRouter));
         _gatewayRegistry = gatewayRegistry ?? throw new ArgumentNullException(nameof(gatewayRegistry));
+        _orderLogger = orderLogger ?? throw new ArgumentNullException(nameof(orderLogger));
     }
 
     /// <summary>
@@ -42,7 +45,8 @@ public class OrderFactory : IOrderFactory
             instrumentId,
             side,
             _orderRouter,
-            orderGateway
+            orderGateway,
+            _orderLogger
         );
 
         return order;

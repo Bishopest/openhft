@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using NUnit.Framework;
 using OpenHFT.Core.Interfaces;
@@ -11,6 +13,7 @@ public class OrderBuilderTests
     private Mock<IOrderFactory> _mockOrderFactory;
     private Mock<IOrderRouter> _mockOrderRouter;
     private Mock<IOrderGateway> _mockOrderGateway;
+    private ILogger<Order> _logger;
 
     private const int InstrumentId = 1;
     private const Side TestSide = Side.Buy;
@@ -19,14 +22,14 @@ public class OrderBuilderTests
     public void SetUp()
     {
         _mockOrderFactory = new Mock<IOrderFactory>();
-
         _mockOrderRouter = new Mock<IOrderRouter>();
         _mockOrderGateway = new Mock<IOrderGateway>();
+        _logger = new NullLogger<Order>();
     }
 
     private Order CreateOrderShell()
     {
-        return new Order(InstrumentId, TestSide, _mockOrderRouter.Object, _mockOrderGateway.Object);
+        return new Order(InstrumentId, TestSide, _mockOrderRouter.Object, _mockOrderGateway.Object, _logger);
     }
 
     [Test]

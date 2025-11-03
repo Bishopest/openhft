@@ -1,6 +1,8 @@
 using System;
+using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.Utils;
 
 namespace OpenHFT.Core.Orders;
 
@@ -8,6 +10,7 @@ namespace OpenHFT.Core.Orders;
 // Note how properties are mutable (public set) for the builder to use.
 public class Order : IOrder, IOrderUpdatable
 {
+    private readonly ILogger _logger;
     private readonly IOrderRouter _router;
     private readonly IOrderGateway _gateway;
     public long ClientOrderId { get; }
@@ -31,7 +34,7 @@ public class Order : IOrder, IOrderUpdatable
     /// Initializes a new instance of the <see cref="Order"/> class.
     /// Public for testing and direct instantiation, but in production, creation via IOrderFactory is recommended.
     /// </summary>
-    public Order(int instrumentId, Side side, IOrderRouter router, IOrderGateway gateway)
+    public Order(int instrumentId, Side side, IOrderRouter router, IOrderGateway gateway, ILogger<Order> logger)
     {
         InstrumentId = instrumentId;
         Side = side;
@@ -40,7 +43,7 @@ public class Order : IOrder, IOrderUpdatable
 
         _router = router;
         _gateway = gateway;
-
+        _logger = logger;
         _router.RegisterOrder(this);
     }
 
@@ -68,10 +71,83 @@ public class Order : IOrder, IOrderUpdatable
         }
         // If successful but no immediate report, we wait for the WebSocket stream to provide updates.
     }
-    public Task ReplaceAsync(Price price, OrderType orderType, CancellationToken cancellationToken = default) { /* ... implementation ... */ return Task.CompletedTask; }
-    public Task CancelAsync(CancellationToken cancellationToken = default) { /* ... implementation ... */ return Task.CompletedTask; }
 
-    private static long GenerateClientId() => DateTimeOffset.UtcNow.Ticks; // Placeholder
+    /// <summary>
+    /// Submits a request to replace the active order with a new price.
+    /// </summary>
+    public async Task ReplaceAsync(Price newPrice, OrderType orderType, CancellationToken cancellationToken = default)
+    {
+        // 1. Check if the order is in a state that can be replaced.
+        if (Status != OrderStatus.New && Status != OrderStatus.PartiallyFilled)
+        {
+            // Or log a warning and return.
+            _logger.LogWarningWithCaller($"Cannot replace order in '{Status}' state. Info => {ToString()}");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(ExchangeOrderId))
+        {
+            // This can happen if the 'New' confirmation from the exchange hasn't arrived yet.
+            _logger.LogWarningWithCaller($"Cannot replace order: ExchangeOrderId is not yet known. Info => {ToString()}");
+            return;
+        }
+
+        // 2. Update internal state to 'ReplaceRequest'
+        Status = OrderStatus.ReplaceRequest;
+        Price = newPrice;
+
+        // 3. Create request and call the gateway
+        var request = new ReplaceOrderRequest(ExchangeOrderId, newPrice);
+        var result = await _gateway.SendReplaceOrderAsync(request, cancellationToken);
+
+        // 4. Handle immediate failure
+        if (!result.IsSuccess)
+        {
+            var failureReport = new OrderStatusReport(
+                ClientOrderId, ExchangeOrderId, InstrumentId, Status, Price, Quantity, LeavesQuantity,
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), result.FailureReason);
+            OnStatusReportReceived(failureReport);
+        }
+        // On success, we wait for a WebSocket update to confirm the replacement.
+    }
+
+    /// <summary>
+    /// Submits a request to cancel the active order.
+    /// </summary>
+    public async Task CancelAsync(CancellationToken cancellationToken = default)
+    {
+        // 1. Check if the order is in a cancellable state.
+        if (Status is OrderStatus.Cancelled or OrderStatus.Filled or OrderStatus.Rejected or OrderStatus.CancelRequest)
+        {
+            // Already terminal or cancellation is in-flight.
+            _logger.LogWarningWithCaller($"Cannot cancel order in '{Status}' state. Info => {ToString()}");
+            return;
+        }
+        if (string.IsNullOrEmpty(ExchangeOrderId))
+        {
+            _logger.LogWarningWithCaller($"Cannot cancel order: ExchangeOrderId is not yet known. Info => {ToString()}");
+            return;
+        }
+
+        // 2. Update internal state to 'CancelRequest'
+        Status = OrderStatus.CancelRequest;
+
+        // 3. Create request and call the gateway
+        var request = new CancelOrderRequest(ExchangeOrderId);
+        var result = await _gateway.SendCancelOrderAsync(request, cancellationToken);
+
+        // 4. Handle immediate failure
+        if (!result.IsSuccess)
+        {
+            var failureReport = new OrderStatusReport(
+                ClientOrderId, ExchangeOrderId, InstrumentId, OrderStatus.Rejected, Price, Quantity, LeavesQuantity,
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), result.FailureReason);
+            OnStatusReportReceived(failureReport);
+        }
+        // On success, we wait for a WebSocket update to confirm the cancellation.
+    }
+
+    private static long GenerateClientId() => DateTimeOffset.UtcNow.Ticks;
 
     public void OnStatusReportReceived(in OrderStatusReport report)
     {
@@ -95,4 +171,21 @@ public class Order : IOrder, IOrderUpdatable
                 break;
         }
     }
+
+    /// <summary>
+    /// Provides a concise, human-readable string representation of the order's current state.
+    /// </summary>
+    /// <returns>A string summarizing the order.</returns>
+    public override string ToString()
+    {
+        // Example output:
+        // [CID: 12345] BUY 1.5 BTC/USDT @ 50000.50 [New] (Leaves: 1.5) EXO: xyz-789
+        // [CID: 12346] SELL 0.5 ETH/USDT @ 3000.25 [Filled] (Leaves: 0)
+        string exoIdPart = string.IsNullOrEmpty(ExchangeOrderId) ? "" : $" EXO: {ExchangeOrderId}";
+
+        return $"[CID: {ClientOrderId}] {Side.ToString().ToUpper()} {Quantity.ToDecimal()} " +
+               $"(ID:{InstrumentId}) @ {Price.ToDecimal()} [{Status}] " +
+               $"(Leaves: {LeavesQuantity.ToDecimal()}){exoIdPart}";
+    }
+
 }
