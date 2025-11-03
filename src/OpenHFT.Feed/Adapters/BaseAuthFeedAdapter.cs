@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
+using OpenHFT.Core.Models;
 using OpenHFT.Feed.Interfaces;
 
 namespace OpenHFT.Feed.Adapters;
@@ -16,8 +17,8 @@ public abstract class BaseAuthFeedAdapter : BaseFeedAdapter
     protected string? ApiKey { get; private set; }
     protected string? ApiSecret { get; private set; }
     public event EventHandler<AuthenticationEventArgs>? AuthenticationStateChanged;
-    protected BaseAuthFeedAdapter(ILogger logger, ProductType type, IInstrumentRepository instrumentRepository)
-        : base(logger, type, instrumentRepository)
+    protected BaseAuthFeedAdapter(ILogger logger, ProductType type, IInstrumentRepository instrumentRepository, ExecutionMode executionMode)
+        : base(logger, type, instrumentRepository, executionMode)
     {
     }
 

@@ -2,11 +2,19 @@
   "subscriptions": [
     {
       "exchange": "bitmex",
+      "executionMode": {
+        "api": "live",
+        "feed": "live"
+      },
       "productType": "perpetualfuture",
       "symbols": [ "XBTUSD"]
     },
     {
       "exchange": "binance",
+      "executionMode": {
+        "api": "live",
+        "feed": "live"
+      },
       "productType": "perpetualfuture",
       "symbols": [ "BTCUSDT"]
     }

@@ -1,19 +1,39 @@
 {
+  "subscriptions": [
+    {
+      "exchange": "bitmex",
+      "executionMode": {
+        "api": "testnet",
+        "feed": "live"
+      },
+      "productType": "perpetualfuture",
+      "symbols": [ "LTCUSDT"]
+    },
+    {
+      "exchange": "binance",
+      "executionMode": {
+        "api": "testnet",
+        "feed": "live"
+      },
+      "productType": "perpetualfuture",
+      "symbols": [ "LTCUSDT"]
+    }
+  ],
   "quoting" : {
     "exchange": "bitmex",
     "productType": "perpetualfuture",
-    "symbol": "XBTUSD",
+    "symbol": "LTCUSDT",
     "quoterType": "log",
     "fairValue": {
       "model": "bestMidp",
       "params": {
         "exchange": "binance",
         "productType": "perpetualfuture",
-        "symbol": "BTCUSDT"
+        "symbol": "LTCUSDT"
       }
     },
-    "spreadBp": 1.0,
-    "skewBp": 0.5,
+    "spreadBp": 33.0,
+    "skewBp": 3.0,
     "size": 1000,
     "depth": 1
   },

@@ -69,6 +69,8 @@ public class Program
             })
             .ConfigureServices((hostContext, services) =>
             {
+                services.Configure<SubscriptionConfig>(hostContext.Configuration);
+                services.AddSingleton(provider => provider.GetRequiredService<IOptions<SubscriptionConfig>>().Value);
                 services.Configure<QuotingConfig>(hostContext.Configuration);
                 services.AddSingleton(provider => provider.GetRequiredService<IOptions<QuotingConfig>>().Value);
                 services.AddHttpClient();
@@ -107,6 +109,7 @@ public class Program
                 services.AddSingleton<IOrderGatewayRegistry, OrderGatewayRegistry>();
                 services.AddSingleton<IOrderFactory, OrderFactory>();
                 services.AddSingleton<QuoteDebugger>();
+
                 // --- 3-1. Adapter 및 RestApiClient 등록 ---
                 var subscriptionTupLists = new List<(string Exchange, string ProductType)>();
                 var quotingConfig = hostContext.Configuration.GetSection("quoting").Get<QuotingConfig>();
@@ -116,54 +119,14 @@ public class Program
                 }
                 services.AddSingleton<QuotingConfig>(quotingConfig);
                 services.AddSingleton(new QuotingConfig[] { quotingConfig });
-                services.AddSingleton(provider =>
+
+                var subscriptionGroups = hostContext.Configuration.GetSection("subscriptions").Get<List<SubscriptionGroup>>() ?? new();
+                foreach (var group in subscriptionGroups.DistinctBy(g => new { g.Exchange, g.ProductType }))
                 {
-                    var qc = provider.GetRequiredService<QuotingConfig>();
-                    var subscriptionConfig = new SubscriptionConfig();
-
-                    var mainGroup = new SubscriptionGroup
+                    if (Enum.TryParse<ExchangeEnum>(group.Exchange, true, out var exchange) &&
+                        Enum.TryParse<ProductType>(group.ProductType, true, out var productType))
                     {
-                        Exchange = qc.Exchange,
-                        ProductType = qc.ProductType,
-                        Symbols = new string[] { qc.Symbol }
-                    };
-                    subscriptionConfig.Subscriptions.Add(mainGroup);
-
-                    var fvGroup = new SubscriptionGroup
-                    {
-                        Exchange = qc.FairValue.Params.Exchange,
-                        ProductType = qc.FairValue.Params.ProductType,
-                        Symbols = new string[] { qc.FairValue.Params.Symbol }
-                    };
-
-                    var existing = subscriptionConfig.Subscriptions
-                        .FirstOrDefault(g => g.Exchange.Equals(fvGroup.Exchange, StringComparison.OrdinalIgnoreCase) &&
-                                             g.ProductType.Equals(fvGroup.ProductType, StringComparison.OrdinalIgnoreCase));
-
-                    if (existing != null)
-                    {
-                        if (!existing.Symbols.Contains(fvGroup.Symbols[0]))
-                        {
-                            existing.Symbols = existing.Symbols.Concat(fvGroup.Symbols).ToArray();
-                        }
-
-                    }
-                    else
-                    {
-                        subscriptionConfig.Subscriptions.Add(fvGroup);
-                    }
-                    return subscriptionConfig;
-                });
-
-                var quotingSubscriptionTup = (quotingConfig.Exchange, quotingConfig.ProductType);
-                var fvSubscriptionTup = (quotingConfig.FairValue.Params.Exchange, quotingConfig.FairValue.Params.ProductType);
-                subscriptionTupLists.Add(quotingSubscriptionTup);
-                subscriptionTupLists.Add(fvSubscriptionTup);
-                foreach (var tup in subscriptionTupLists)
-                {
-                    if (Enum.TryParse<ExchangeEnum>(tup.Item1, true, out var exchange) &&
-                        Enum.TryParse<ProductType>(tup.Item2, true, out var productType))
-                    {
+                        var executionConfig = group.Execution;
                         switch (exchange)
                         {
                             case ExchangeEnum.BINANCE:
@@ -172,10 +135,11 @@ public class Program
                                     provider.GetRequiredService<IInstrumentRepository>(),
                                     provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BinanceRestApiClient)),
                                     productType,
-                                    ExecutionMode.Testnet));
+                                    executionConfig.Api));
                                 services.AddSingleton<IFeedAdapter>(provider => new BinanceAdapter(
                                     provider.GetRequiredService<ILogger<BinanceAdapter>>(), productType,
-                                    provider.GetRequiredService<IInstrumentRepository>()
+                                    provider.GetRequiredService<IInstrumentRepository>(),
+                                    executionConfig.Feed
                                 ));
                                 break;
                             case ExchangeEnum.BITMEX:
@@ -184,10 +148,11 @@ public class Program
                                     provider.GetRequiredService<IInstrumentRepository>(),
                                     provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BitmexRestApiClient)),
                                     productType,
-                                    ExecutionMode.Testnet));
+                                    executionConfig.Api));
                                 services.AddSingleton<IFeedAdapter>(provider => new BitmexAdapter(
                                     provider.GetRequiredService<ILogger<BitmexAdapter>>(), productType,
-                                    provider.GetRequiredService<IInstrumentRepository>()
+                                    provider.GetRequiredService<IInstrumentRepository>(),
+                                    executionConfig.Feed
                                 ));
                                 break;
                         }

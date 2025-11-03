@@ -107,6 +107,8 @@ public class Program
                     if (Enum.TryParse<ExchangeEnum>(group.Exchange, true, out var exchange) &&
                         Enum.TryParse<ProductType>(group.ProductType, true, out var productType))
                     {
+
+                        var executionConfig = group.Execution;
                         switch (exchange)
                         {
                             case ExchangeEnum.BINANCE:
@@ -114,11 +116,11 @@ public class Program
                                     provider.GetRequiredService<ILogger<BinanceRestApiClient>>(),
                                     provider.GetRequiredService<IInstrumentRepository>(),
                                     provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BinanceRestApiClient)),
-                                    productType,
-                                    ExecutionMode.Testnet));
+                                    productType, executionConfig.Api
+                                    ));
                                 services.AddSingleton<IFeedAdapter>(provider => new BinanceAdapter(
                                     provider.GetRequiredService<ILogger<BinanceAdapter>>(), productType,
-                                    provider.GetRequiredService<IInstrumentRepository>()
+                                    provider.GetRequiredService<IInstrumentRepository>(), executionConfig.Feed
                                 ));
                                 break;
                             case ExchangeEnum.BITMEX:
@@ -127,10 +129,10 @@ public class Program
                                     provider.GetRequiredService<IInstrumentRepository>(),
                                     provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BitmexRestApiClient)),
                                     productType,
-                                    ExecutionMode.Testnet));
+                                    executionConfig.Api));
                                 services.AddSingleton<IFeedAdapter>(provider => new BitmexAdapter(
                                     provider.GetRequiredService<ILogger<BitmexAdapter>>(), productType,
-                                    provider.GetRequiredService<IInstrumentRepository>()
+                                    provider.GetRequiredService<IInstrumentRepository>(), executionConfig.Feed
                                 ));
                                 break;
                         }

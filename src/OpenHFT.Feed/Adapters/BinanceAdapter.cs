@@ -23,7 +23,7 @@ public class BinanceAdapter : BaseAuthFeedAdapter
     private string _listenKey;
     public override ExchangeEnum SourceExchange => ExchangeEnum.BINANCE;
 
-    public BinanceAdapter(ILogger<BinanceAdapter> logger, ProductType type, IInstrumentRepository instrumentRepository) : base(logger, type, instrumentRepository)
+    public BinanceAdapter(ILogger<BinanceAdapter> logger, ProductType type, IInstrumentRepository instrumentRepository, ExecutionMode executionMode) : base(logger, type, instrumentRepository, executionMode)
     {
     }
 

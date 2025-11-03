@@ -23,6 +23,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     private volatile int _reconnectionInProgress;
 
     protected readonly ILogger _logger;
+    protected readonly ExecutionMode _executionMode;
     protected readonly IInstrumentRepository _instrumentRepository;
     protected ClientWebSocket? _webSocket;
     private CancellationTokenSource? _cancellationTokenSource;
@@ -50,11 +51,12 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
     public ProductType ProdType { get; }
 
-    protected BaseFeedAdapter(ILogger logger, ProductType type, IInstrumentRepository instrumentRepository)
+    protected BaseFeedAdapter(ILogger logger, ProductType type, IInstrumentRepository instrumentRepository, ExecutionMode executionMode)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _instrumentRepository = instrumentRepository;
         ProdType = type;
+        _executionMode = executionMode;
     }
 
     #region Public Methods (IFeedAdapter Implementation)

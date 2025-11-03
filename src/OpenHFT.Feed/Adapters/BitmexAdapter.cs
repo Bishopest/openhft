@@ -13,19 +13,23 @@ namespace OpenHFT.Feed.Adapters;
 
 public class BitmexAdapter : BaseAuthFeedAdapter
 {
-    private const string DefaultBaseUrl = "wss://ws.bitmex.com/realtime";
 
     public override ExchangeEnum SourceExchange => ExchangeEnum.BITMEX;
 
     protected override bool IsHeartbeatEnabled => true;
 
-    public BitmexAdapter(ILogger<BitmexAdapter> logger, ProductType type, IInstrumentRepository instrumentRepository) : base(logger, type, instrumentRepository)
+    public BitmexAdapter(ILogger<BitmexAdapter> logger, ProductType type, IInstrumentRepository instrumentRepository, ExecutionMode executionMode) : base(logger, type, instrumentRepository, executionMode)
     {
     }
 
     protected override string GetBaseUrl()
     {
-        return DefaultBaseUrl;
+        return _executionMode switch
+        {
+            ExecutionMode.Live => "wss://ws.bitmex.com/realtime",
+            ExecutionMode.Testnet => "wss://ws.testnet.bitmex.com/realtime", // BitMEX Testnet WebSocket URL
+            _ => throw new ArgumentOutOfRangeException(nameof(_executionMode), $"Unsupported execution mode: {_executionMode}")
+        };
     }
 
     protected override void ConfigureWebsocket(ClientWebSocket websocket)
@@ -35,7 +39,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
 
     protected override async Task DoAuthenticateAsync(CancellationToken cancellationToken)
     {
-        var expires = DateTimeOffset.UtcNow.AddSeconds(30).ToUnixTimeSeconds();
+        var expires = DateTimeOffset.UtcNow.AddSeconds(60).ToUnixTimeSeconds();
 
         var signatureString = $"GET/realtime{expires}";
         var signature = CreateSignature(signatureString); // Uses helper from BaseAuthFeedAdapter
@@ -358,7 +362,15 @@ public class BitmexAdapter : BaseAuthFeedAdapter
         {
             using var document = await JsonDocument.ParseAsync(messageStream);
             var root = document.RootElement;
+            if (root.TryGetProperty("error", out var errorElement))
+            {
+                var errorMessage = errorElement.GetString() ?? "Unknown error.";
+                var statusCode = root.TryGetProperty("status", out var statusElement) && statusElement.TryGetInt32(out int code)
+                    ? code
+                    : 0;
 
+                _logger.LogWarningWithCaller($"BitMEX WebSocket API Error (Status {statusCode}): {errorMessage}");
+            }
             // Subscription response, ignore it.
             if (root.TryGetProperty("success", out _) || root.TryGetProperty("subscribe", out _))
             {
