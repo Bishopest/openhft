@@ -10,14 +10,14 @@ public interface IQuotingInstanceManager
     /// </summary>
     /// <param name="parameters">The quoting parameters for the new strategy.</param>
     /// <returns>True if deployment was successful, false otherwise.</returns>
-    bool DeployStrategy(QuotingParameters parameters);
+    bool DeployInstance(QuotingParameters parameters);
 
     /// <summary>
     /// Stops and removes the strategy for a given instrument.
     /// </summary>
     /// <param name="instrumentId">The ID of the instrument whose strategy should be retired.</param>
     /// <returns>True if a strategy was found and retired, false otherwise.</returns>
-    bool RetireStrategy(int instrumentId);
+    bool RetireInstance(int instrumentId);
 
     /// <summary>
     /// Gets the status or instance of the currently active strategy for an instrument.

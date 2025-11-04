@@ -35,7 +35,7 @@ public class RetireInstanceCommandHandler : IWebSocketCommandHandler
             var id = JsonSerializer.Deserialize<int>(payloadElement.GetRawText(), _jsonOptions);
 
             _logger.LogInformationWithCaller("Handling RETIRE_INSTANCE command.");
-            var success = _manager.RetireStrategy(id);
+            var success = _manager.RetireInstance(id);
             var message = success ? "Strategy retired successfully." : "Failed to retire strategy.";
 
             var ackEvent = new AcknowledgmentEvent(correlationId ?? string.Empty, success, message);

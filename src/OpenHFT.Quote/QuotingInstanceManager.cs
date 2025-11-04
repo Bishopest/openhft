@@ -34,53 +34,59 @@ public class QuotingInstanceManager : IQuotingInstanceManager
     }
 
     // --- IQuotingInstanceManager Implementation ---
-    public bool DeployStrategy(QuotingParameters parameters)
+    public bool DeployInstance(QuotingParameters parameters)
     {
         var instrumentId = parameters.InstrumentId;
         if (_activeInstances.ContainsKey(instrumentId))
         {
-            _logger.LogWarningWithCaller($"Quoting strategy already deployed for instrument ID {instrumentId}. Retiring it before deploying the new one.");
-            RetireStrategy(instrumentId);
+            _logger.LogWarningWithCaller($"Quoting instance already deployed for instrument ID {instrumentId}. Retiring it before deploying the new one.");
+            RetireInstance(instrumentId);
             return false;
         }
 
         var instrument = _instrumentRepository.GetById(instrumentId);
         if (instrument == null)
         {
-            _logger.LogWarningWithCaller($"Cannot deploy quoting strategy. Instrument ID {instrumentId} not found.");
+            _logger.LogWarningWithCaller($"Cannot deploy quoting instance. Instrument ID {instrumentId} not found.");
             return false;
         }
 
         try
         {
-            _logger.LogInformationWithCaller($"Deploying new quoting strategy for instrument ID {instrumentId}.");
+            _logger.LogInformationWithCaller($"Deploying new quoting instance for instrument ID {instrumentId}.");
             var instance = _factory.Create(parameters);
+
+            if (instance == null)
+            {
+                _logger.LogWarningWithCaller($"Failed to create quoting instance instance for instrument ID {instrumentId}.");
+                return false;
+            }
 
             if (_activeInstances.TryAdd(instrumentId, instance))
             {
                 instance.Start(_marketDataManager);
-                _logger.LogInformationWithCaller($"Successfully deployed quoting strategy for instrument {instrument.Symbol}.");
+                _logger.LogInformationWithCaller($"Successfully deployed quoting instance for instrument {instrument.Symbol}.");
                 return true;
             }
             else
             {
-                _logger.LogWarningWithCaller($"Failed to add quoting strategy instance to active instances for instrument ID {instrumentId}.");
+                _logger.LogWarningWithCaller($"Failed to add quoting instance instance to active instances for instrument ID {instrumentId}.");
                 return false;
             }
         }
         catch (Exception ex)
         {
-            _logger.LogErrorWithCaller(ex, $"Error deploying quoting strategy for instrument {instrument.Symbol}.");
+            _logger.LogErrorWithCaller(ex, $"Error deploying quoting instance for instrument {instrument.Symbol}.");
             return false;
         }
     }
 
-    public void UpdateStrategyParameters(QuotingParameters newParameters)
+    public void UpdateInstanceParameters(QuotingParameters newParameters)
     {
         var instrumentId = newParameters.InstrumentId;
         if (!_activeInstances.TryGetValue(instrumentId, out var instance))
         {
-            _logger.LogWarningWithCaller($"Cannot update parameters: No active strategy for InstrumentId {instrumentId}.");
+            _logger.LogWarningWithCaller($"Cannot update parameters: No active instance for InstrumentId {instrumentId}.");
             return;
         }
 
@@ -99,10 +105,10 @@ public class QuotingInstanceManager : IQuotingInstanceManager
             newParameters.FairValueSourceInstrumentId != currentParameters.FairValueSourceInstrumentId ||
             newParameters.Type != currentParameters.Type)
         {
-            _logger.LogInformationWithCaller($"Core parameters changed for InstrumentId {instrumentId}. Redeploying strategy.");
+            _logger.LogInformationWithCaller($"Core parameters changed for InstrumentId {instrumentId}. Redeploying instance.");
             // Redeploy by retiring the old instance and deploying a new one.
-            RetireStrategy(instrumentId);
-            DeployStrategy(newParameters);
+            RetireInstance(instrumentId);
+            DeployInstance(newParameters);
         }
         else
         {
@@ -123,7 +129,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager
         return instance;
     }
 
-    public bool RetireStrategy(int instrumentId)
+    public bool RetireInstance(int instrumentId)
     {
         if (!_activeInstances.TryRemove(instrumentId, out var instance))
         {
