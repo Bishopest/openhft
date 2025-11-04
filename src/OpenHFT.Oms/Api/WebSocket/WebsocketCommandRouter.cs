@@ -56,6 +56,8 @@ public class WebSocketCommandRouter : IWebSocketCommandRouter
         catch (Exception ex)
         {
             _logger.LogErrorWithCaller(ex, "Error routing WebSocket message.");
+            var errorEvent = new ErrorEvent(ex.Message);
+            await _channel.SendAsync(errorEvent);
         }
     }
 }

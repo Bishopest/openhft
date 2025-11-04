@@ -7,9 +7,19 @@
     <EnablePreviewFeatures>True</EnablePreviewFeatures>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  
+  <ItemGroup>
+    <Content Include="config.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Sinks.File" />
     <ProjectReference Include="../OpenHFT.Quote/OpenHFT.Quoting.csproj" />
+    <ProjectReference Include="../OpenHFT.Service/OpenHFT.Service.csproj" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
