@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using OpenHFT.Core.Models;
 
 namespace OpenHFT.Quoting;
@@ -51,6 +52,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     /// <param name="size">The quantity for each quote level.</param>
     /// <param name="depth">The number of quote levels on each side.</param>
     /// <param name="type">The type of quoter to be used.</param>
+    [JsonConstructor]
     public QuotingParameters(int instrumentId, FairValueModel fvModel, int fairValueSourceInstrumentId, decimal spreadBp, decimal skewBp, Quantity size, int depth, QuoterType type)
     {
         InstrumentId = instrumentId;
