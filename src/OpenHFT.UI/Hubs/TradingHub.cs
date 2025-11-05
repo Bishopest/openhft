@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.SignalR;
-using OpenHFT.Strategy.Advanced;
 using OpenHFT.Core.Models;
 
 namespace OpenHFT.UI.Hubs;
@@ -11,13 +10,10 @@ namespace OpenHFT.UI.Hubs;
 public class TradingHub : Hub
 {
     private readonly ILogger<TradingHub> _logger;
-    private readonly IAdvancedStrategyManager? _strategyManager;
 
     public TradingHub(ILogger<TradingHub> logger, IServiceProvider serviceProvider)
     {
         _logger = logger;
-        // Get strategy manager if available (optional dependency)
-        _strategyManager = serviceProvider.GetService<IAdvancedStrategyManager>();
     }
 
     /// <summary>
@@ -83,17 +79,6 @@ public class TradingHub : Hub
     {
         try
         {
-            if (_strategyManager != null)
-            {
-                var stats = await _strategyManager.GetPortfolioStatistics();
-                return new
-                {
-                    Success = true,
-                    Data = stats,
-                    Timestamp = DateTime.UtcNow
-                };
-            }
-
             return new
             {
                 Success = false,
@@ -120,18 +105,6 @@ public class TradingHub : Hub
     {
         try
         {
-            if (_strategyManager != null)
-            {
-                var stats = _strategyManager.GetStrategyStatistics(strategyName);
-                return new
-                {
-                    Success = true,
-                    Data = stats,
-                    StrategyName = strategyName,
-                    Timestamp = DateTime.UtcNow
-                };
-            }
-
             return new
             {
                 Success = false,
@@ -159,21 +132,6 @@ public class TradingHub : Hub
     {
         try
         {
-            if (_strategyManager != null)
-            {
-                await _strategyManager.SetStrategyEnabled(strategyName, enabled);
-
-                // Notify all clients about the strategy status change
-                await Clients.Group("TradingUpdates").SendAsync("StrategyStatusChanged", new
-                {
-                    StrategyName = strategyName,
-                    Enabled = enabled,
-                    Timestamp = DateTime.UtcNow
-                });
-
-                _logger.LogInformation("Strategy {StrategyName} {Status} by client {ConnectionId}",
-                    strategyName, enabled ? "enabled" : "disabled", Context.ConnectionId);
-            }
         }
         catch (Exception ex)
         {
@@ -197,21 +155,6 @@ public class TradingHub : Hub
     {
         try
         {
-            if (_strategyManager != null)
-            {
-                await _strategyManager.EmergencyStopAsync(reason);
-
-                // Notify all clients about emergency stop
-                await Clients.Group("TradingUpdates").SendAsync("EmergencyStop", new
-                {
-                    Reason = reason,
-                    Timestamp = DateTime.UtcNow,
-                    InitiatedBy = Context.ConnectionId
-                });
-
-                _logger.LogWarning("Emergency stop initiated by client {ConnectionId}. Reason: {Reason}",
-                    Context.ConnectionId, reason);
-            }
         }
         catch (Exception ex)
         {
@@ -233,29 +176,6 @@ public class TradingHub : Hub
     {
         try
         {
-            if (_strategyManager != null)
-            {
-                // Send current portfolio statistics
-                var portfolioStats = await _strategyManager.GetPortfolioStatistics();
-                await Clients.Caller.SendAsync("PortfolioStatistics", portfolioStats);
-
-                // Send individual strategy statistics
-                var strategies = new[] { "TriangularArbitrage", "OptimalMarketMaking", "MLMomentum" };
-
-                foreach (var strategyName in strategies)
-                {
-                    var strategyStats = _strategyManager.GetStrategyStatistics(strategyName);
-                    if (strategyStats != null)
-                    {
-                        await Clients.Caller.SendAsync("StrategyStatistics", new
-                        {
-                            StrategyName = strategyName,
-                            Statistics = strategyStats
-                        });
-                    }
-                }
-            }
-
             // Send system status
             await Clients.Caller.SendAsync("SystemStatus", new
             {

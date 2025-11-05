@@ -1,4 +1,3 @@
-using OpenHFT.Strategy.Advanced;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,14 +26,8 @@ public class StrategyInitializationService : IHostedService
 
         try
         {
-            var strategyManager = _serviceProvider.GetService<IAdvancedStrategyManager>();
-            if (strategyManager == null)
-            {
-                _logger.LogWarning("AdvancedStrategyManager not available, skipping strategy initialization");
-                return;
-            }
-
-            _logger.LogInformation("Successfully initialized all advanced trading strategies");
+            _logger.LogWarning("AdvancedStrategyManager not available, skipping strategy initialization");
+            return;
         }
         catch (Exception ex)
         {

@@ -4,8 +4,6 @@ using OpenHFT.Core.Models;
 using OpenHFT.Core.Collections;
 using OpenHFT.Feed.Interfaces;
 using OpenHFT.Book.Core;
-using OpenHFT.Strategy.Interfaces;
-using OpenHFT.Strategy.Advanced;
 using OpenHFT.UI.Hubs;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Instruments;
@@ -22,8 +20,6 @@ public class HftEngine : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly IFeedHandler _feedHandler;
     private readonly IInstrumentRepository _repository;
-    private readonly IStrategyEngine _strategyEngine;
-    private readonly IAdvancedStrategyManager _advancedStrategyManager;
     private readonly IHubContext<TradingHub> _hubContext;
 
     // Core data structures
@@ -42,8 +38,6 @@ public class HftEngine : BackgroundService
         ILogger<HftEngine> logger,
         IConfiguration configuration,
         IFeedHandler feedHandler,
-        IStrategyEngine strategyEngine,
-        IAdvancedStrategyManager advancedStrategyManager,
         IHubContext<TradingHub> hubContext,
         IInstrumentRepository repository)
     {
@@ -51,16 +45,11 @@ public class HftEngine : BackgroundService
         _configuration = configuration;
         _feedHandler = feedHandler;
         _repository = repository;
-        _strategyEngine = strategyEngine;
-        _advancedStrategyManager = advancedStrategyManager;
         _hubContext = hubContext;
 
         // Initialize market data queue with high capacity for bursts
         var queueSize = configuration.GetValue<int>("Engine:MarketDataQueueSize", 65536);
         _marketDataQueue = new LockFreeRingBuffer<MarketDataEvent>(queueSize);
-
-        // Wire up event handlers
-        _strategyEngine.OrderGenerated += OnStrategyOrderGenerated;
     }
 
     public bool IsRunning => _isRunning;
@@ -126,9 +115,6 @@ public class HftEngine : BackgroundService
             _logger.LogWarning(ex, "Failed to start feed handler - running in offline mode");
         }
 
-        // Initialize strategy engine
-        await _strategyEngine.StartAsync();
-
         _isRunning = true;
         _logger.LogInformation("HFT Engine initialization complete. Processing {SymbolCount} symbols.", symbols.Length);
     }
@@ -163,12 +149,6 @@ public class HftEngine : BackgroundService
                 // Periodic timer processing for strategies
                 if (DateTimeOffset.UtcNow - processingStats.LastTimerRun > TimeSpan.FromMilliseconds(100))
                 {
-                    var timerOrders = _strategyEngine.ProcessTimer(DateTimeOffset.UtcNow);
-                    foreach (var order in timerOrders)
-                    {
-                        await ProcessOrderIntent(order);
-                    }
-
                     processingStats.LastTimerRun = DateTimeOffset.UtcNow;
                 }
 
@@ -227,22 +207,6 @@ public class HftEngine : BackgroundService
                 _logger.LogDebug(ex, "Failed to broadcast market data update");
             }
         }
-
-        // Process through basic strategies
-        var basicOrderIntents = _strategyEngine.ProcessMarketData(marketDataEvent, orderBook);
-
-        // Process through advanced strategies
-        var advancedOrderIntents = await _advancedStrategyManager.ProcessMarketDataAsync(marketDataEvent, orderBook);
-
-        // Combine all order intents
-        var allOrderIntents = basicOrderIntents.Concat(advancedOrderIntents);
-
-        // Send orders to execution
-        foreach (var orderIntent in allOrderIntents)
-        {
-            await ProcessOrderIntent(orderIntent);
-            Interlocked.Increment(ref _ordersGenerated);
-        }
     }
 
     private async Task ProcessOrderIntent(OrderIntent orderIntent)
@@ -261,12 +225,6 @@ public class HftEngine : BackgroundService
         {
             _logger.LogError(ex, "Error processing order intent: {OrderIntent}", orderIntent);
         }
-    }
-
-    private void OnStrategyOrderGenerated(object? sender, StrategyOrderEventArgs e)
-    {
-        _logger.LogDebug("Strategy {StrategyName} generated order: {OrderIntent}",
-            e.StrategyName, e.OrderIntent);
     }
 
     private void LogStatistics()
@@ -320,8 +278,6 @@ public class HftEngine : BackgroundService
 
         try
         {
-            await _strategyEngine.StopAsync();
-
             _marketDataQueue.Dispose();
 
             _logger.LogInformation("HFT Engine shutdown complete. Total events processed: {EventsProcessed:N0}", _eventsProcessed);

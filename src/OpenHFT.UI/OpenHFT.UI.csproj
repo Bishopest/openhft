@@ -17,31 +17,30 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../OpenHFT.Processing/OpenHFT.Processing.csproj" />
     <ProjectReference Include="..\OpenHFT.Core\OpenHFT.Core.csproj" />
     <ProjectReference Include="..\OpenHFT.Feed\OpenHFT.Feed.csproj" />
     <ProjectReference Include="..\OpenHFT.Book\OpenHFT.Book.csproj" />
-    <ProjectReference Include="..\OpenHFT.Strategy\OpenHFT.Strategy.csproj" />
-    <ProjectReference Include="..\OpenHFT.Strategy.Advanced\OpenHFT.Strategy.Advanced.csproj" />
     <ProjectReference Include="..\OpenHFT.Gateway\OpenHFT.Gateway.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server"/>
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly"/>
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client"/>
-    <PackageReference Include="MudBlazor"/>
-    <PackageReference Include="Plotly.Blazor"/>
-    <PackageReference Include="Microsoft.AspNetCore.SpaServices.Extensions"/>
-    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine"/>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
-    <PackageReference Include="Serilog.AspNetCore"/>
-    <PackageReference Include="Serilog.Sinks.Console"/>
-    <PackageReference Include="Serilog.Sinks.File"/>
-    <PackageReference Include="prometheus-net.AspNetCore"/>
-    <PackageReference Include="Swashbuckle.AspNetCore"/>
-    <PackageReference Include="System.Net.Http"/>
-    <PackageReference Include="System.Net.Security"/>
-    <PackageReference Include="System.Text.RegularExpressions"/>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+    <PackageReference Include="MudBlazor" />
+    <PackageReference Include="Plotly.Blazor" />
+    <PackageReference Include="Microsoft.AspNetCore.SpaServices.Extensions" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.CommandLine" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Sinks.File" />
+    <PackageReference Include="prometheus-net.AspNetCore" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="System.Net.Http" />
+    <PackageReference Include="System.Net.Security" />
+    <PackageReference Include="System.Text.RegularExpressions" />
   </ItemGroup>
 
   <ItemGroup>

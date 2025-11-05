@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenHFT.UI.Services;
-using OpenHFT.Strategy.Interfaces;
 
 namespace OpenHFT.UI.Controllers;
 
@@ -9,13 +8,11 @@ namespace OpenHFT.UI.Controllers;
 public class EngineController : ControllerBase
 {
     private readonly HftEngine _engine;
-    private readonly IStrategyEngine _strategyEngine;
     private readonly ILogger<EngineController> _logger;
 
-    public EngineController(HftEngine engine, IStrategyEngine strategyEngine, ILogger<EngineController> logger)
+    public EngineController(HftEngine engine, ILogger<EngineController> logger)
     {
         _engine = engine;
-        _strategyEngine = strategyEngine;
         _logger = logger;
     }
 
@@ -72,43 +69,19 @@ public class EngineController : ControllerBase
     [HttpGet("strategies")]
     public IActionResult GetStrategies()
     {
-        var strategies = _strategyEngine.GetStrategies()
-            .Select(s => new
-            {
-                Name = s.Name,
-                IsEnabled = s.IsEnabled,
-                Symbols = s.Symbols,
-                State = s.GetState()
-            })
-            .ToArray();
-
-        return Ok(strategies);
+        return Ok();
     }
 
     [HttpPost("strategies/{name}/enable")]
     public IActionResult EnableStrategy(string name)
     {
-        var strategy = _strategyEngine.GetStrategies().FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-        if (strategy == null)
-        {
-            return NotFound($"Strategy '{name}' not found");
-        }
-
-        strategy.IsEnabled = true;
-        return Ok(new { Message = $"Strategy '{name}' enabled" });
+        return NotFound($"Strategy '{name}' not found");
     }
 
     [HttpPost("strategies/{name}/disable")]
     public IActionResult DisableStrategy(string name)
     {
-        var strategy = _strategyEngine.GetStrategies().FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-        if (strategy == null)
-        {
-            return NotFound($"Strategy '{name}' not found");
-        }
-
-        strategy.IsEnabled = false;
-        return Ok(new { Message = $"Strategy '{name}' disabled" });
+        return NotFound($"Strategy '{name}' not found");
     }
 
     [HttpGet("statistics")]
@@ -125,7 +98,6 @@ public class EngineController : ControllerBase
                 Uptime = _engine.Uptime,
                 EventsPerSecond = _engine.EventsProcessed / Math.Max(1, _engine.Uptime.TotalSeconds)
             },
-            Strategies = _strategyEngine.GetStatistics(),
             OrderBooks = _engine.GetOrderBooks().Select(book => new
             {
                 Symbol = book.Symbol,
