@@ -49,7 +49,7 @@ public class QuotingInstanceFactory : IQuotingInstanceFactory
             askQuoter,
             validator);
         var fvProvider = _fairValueProviderFactory.CreateProvider(parameters.FvModel, parameters.FairValueSourceInstrumentId);
-        var engine = new QuotingEngine(_loggerFactory.CreateLogger<QuotingEngine>(), instrument, mm, fvProvider, parameters);
+        var engine = new QuotingEngine(_loggerFactory.CreateLogger<QuotingEngine>(), instrument, mm, fvProvider, parameters, _marketDataManager);
 
         return new QuotingInstance(engine);
     }

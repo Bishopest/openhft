@@ -38,7 +38,7 @@ public class UpdateParametersCommandHandler : IWebSocketCommandHandler
             var parameters = JsonSerializer.Deserialize<QuotingParameters>(payloadElement.GetRawText(), _jsonOptions);
 
             _logger.LogInformationWithCaller("Handling UPDATE_PARAMETERS command.");
-            var success = _manager.DeployInstance(parameters);
+            var success = _manager.UpdateInstanceParameters(parameters);
             var message = success ? "Strategy deployed successfully." : "Failed to deploy strategy.";
 
             var ackEvent = new AcknowledgmentEvent(correlationId ?? string.Empty, success, message);

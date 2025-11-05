@@ -5,12 +5,12 @@ namespace OpenHFT.Quoting.Interfaces;
 public interface IQuotingInstanceManager
 {
     /// <summary>
-    /// Deploys and starts a new strategy for a given instrument.
-    /// If a strategy for the instrument already exists, it will be replaced.
+    /// update quoting parameters for a given instrument.
+    /// if a instance for the instrument already exists, activate(equal params) or re deploy(different params))
     /// </summary>
-    /// <param name="parameters">The quoting parameters for the new strategy.</param>
-    /// <returns>True if deployment was successful, false otherwise.</returns>
-    bool DeployInstance(QuotingParameters parameters);
+    /// <param name="newParameters"></param>
+    /// <returns>True if parameters were updated, false otherwise.</returns>
+    bool UpdateInstanceParameters(QuotingParameters newParameters);
 
     /// <summary>
     /// Stops and removes the strategy for a given instrument.

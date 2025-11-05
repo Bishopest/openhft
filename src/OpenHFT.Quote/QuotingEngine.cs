@@ -13,6 +13,7 @@ namespace OpenHFT.Quoting;
 public class QuotingEngine : IQuotingEngine
 {
     private readonly ILogger _logger;
+    private readonly MarketDataManager _marketDataManager;
     private readonly MarketMaker _marketMaker;
     private readonly object _lock = new();
     private IFairValueProvider? _fairValueProvider;
@@ -20,28 +21,34 @@ public class QuotingEngine : IQuotingEngine
     public event EventHandler<QuotePair>? QuotePairCalculated;
     public Instrument QuotingInstrument { get; }
     public QuotingParameters CurrentParameters => _parameters;
+    public bool IsActive { get; private set; }
 
     public QuotingEngine(
         ILogger logger,
         Instrument instrument,
         MarketMaker marketMaker,
         IFairValueProvider fairValueProvider,
-        QuotingParameters initialParameters)
+        QuotingParameters initialParameters,
+        MarketDataManager marketDataManager)
     {
         _logger = logger;
         QuotingInstrument = instrument;
         _marketMaker = marketMaker;
         _fairValueProvider = fairValueProvider;
         _parameters = initialParameters;
+        _marketDataManager = marketDataManager;
+
     }
 
-    public void Start(MarketDataManager marketDataManager)
+    public void Start()
     {
         if (_fairValueProvider == null)
         {
             _logger.LogWarningWithCaller($"Please set fair value provider first for {QuotingInstrument.Symbol}");
             return;
         }
+
+        IsActive = false;
 
         _logger.LogInformationWithCaller($"Starting QuotingEngine for {QuotingInstrument.Symbol}.");
         _fairValueProvider.FairValueChanged += OnFairValueChanged;
@@ -52,11 +59,11 @@ public class QuotingEngine : IQuotingEngine
         {
             case IOrderBookConsumerProvider obProvider:
                 _logger.LogInformationWithCaller("Subscribing to full OrderBook for fair value calculation");
-                marketDataManager.SubscribeOrderBook(fvInstrumentId, subscriptionKey, (sender, book) => obProvider.Update(book));
+                _marketDataManager.SubscribeOrderBook(fvInstrumentId, subscriptionKey, (sender, book) => obProvider.Update(book));
                 break;
             case IBestOrderBookConsumerProvider bobProvider:
                 _logger.LogInformationWithCaller("Subscribing to Best OrderBook for fair value calculation");
-                marketDataManager.SubscribeBestOrderBook(fvInstrumentId, subscriptionKey, (sender, bob) => bobProvider.Update(bob));
+                _marketDataManager.SubscribeBestOrderBook(fvInstrumentId, subscriptionKey, (sender, bob) => bobProvider.Update(bob));
                 break;
             default:
                 _logger.LogWarningWithCaller($"FairValueProvider for {_fairValueProvider.Model} does not implement a known data consumer interface.");
@@ -64,10 +71,9 @@ public class QuotingEngine : IQuotingEngine
         }
     }
 
-    public void Stop(MarketDataManager marketDataManager)
+    public void Stop()
     {
-        _logger.LogInformationWithCaller($"Stopping QuotingEngine for {QuotingInstrument.Symbol}.");
-        _ = _marketMaker.CancelAllQuotesAsync(); // Fire and forget cancel
+        Deactivate();
 
         if (_fairValueProvider == null)
         {
@@ -80,11 +86,11 @@ public class QuotingEngine : IQuotingEngine
         {
             case IOrderBookConsumerProvider obProvider:
                 _logger.LogInformationWithCaller("Unsubscribing to full OrderBook for fair value calculation");
-                marketDataManager.UnsubscribeOrderBook(fvInstrumentId, subscriptionKey);
+                _marketDataManager.UnsubscribeOrderBook(fvInstrumentId, subscriptionKey);
                 break;
             case IBestOrderBookConsumerProvider bobProvider:
                 _logger.LogInformationWithCaller("Unsubscribing to Best OrderBook for fair value calculation");
-                marketDataManager.UnsubscribeBestOrderBook(fvInstrumentId, subscriptionKey);
+                _marketDataManager.UnsubscribeBestOrderBook(fvInstrumentId, subscriptionKey);
                 break;
             default:
                 _logger.LogWarningWithCaller($"FairValueProvider for {_fairValueProvider.Model} does not implement a known data consumer interface.");
@@ -92,6 +98,19 @@ public class QuotingEngine : IQuotingEngine
         }
 
         _fairValueProvider.FairValueChanged -= OnFairValueChanged;
+    }
+
+    public void Deactivate()
+    {
+        _logger.LogInformationWithCaller($"Pausing QuotingEngine for {QuotingInstrument.Symbol}.");
+        IsActive = false;
+        _ = _marketMaker.CancelAllQuotesAsync(); // Fire and forget cancel
+    }
+
+    public void Activate()
+    {
+        _logger.LogInformationWithCaller($"Resume QuotingEngine for {QuotingInstrument.Symbol}.");
+        IsActive = true;
     }
 
     public void UpdateParameters(QuotingParameters newParameters)
@@ -159,6 +178,10 @@ public class QuotingEngine : IQuotingEngine
         // Delegate execution to the MarketMaker
         // This is a fire-and-forget call to avoid blocking the fair value update thread.
         QuotePairCalculated?.Invoke(this, targetQuotePair);
-        _ = _marketMaker.UpdateQuoteTargetAsync(targetQuotePair);
+
+        if (IsActive)
+        {
+            _ = _marketMaker.UpdateQuoteTargetAsync(targetQuotePair);
+        }
     }
 }

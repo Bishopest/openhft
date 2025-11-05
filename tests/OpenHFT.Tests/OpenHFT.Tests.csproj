@@ -39,8 +39,4 @@
     <ProjectReference Include="..\..\src\OpenHFT.Strategy\OpenHFT.Strategy.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Quoting/" />
-  </ItemGroup>
-
 </Project>

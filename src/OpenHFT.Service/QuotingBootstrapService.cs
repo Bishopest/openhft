@@ -78,7 +78,16 @@ public class QuotingBootstrapService : IHostedService
                 Enum.TryParse<QuoterType>(config.QuoterType, true, out var qType) ? qType : QuoterType.Log
             );
 
-            _instanceManager.DeployInstance(parameters);
+            if (_instanceManager.UpdateInstanceParameters(parameters))
+            {
+                _logger.LogInformationWithCaller($"Successfully deployed quoting strategy for {config.Symbol}.");
+                _instanceManager.UpdateInstanceParameters(parameters);
+            }
+            else
+            {
+                _logger.LogWarningWithCaller($"Failed to deploy quoting strategy for {config.Symbol}.");
+                continue;
+            }
         }
 
         _logger.LogInformationWithCaller("All initial quoting strategies have been deployed.");

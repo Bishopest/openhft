@@ -18,37 +18,34 @@ public class QuotingInstanceManager : IQuotingInstanceManager
     private readonly IQuotingInstanceFactory _factory;
     private readonly ConcurrentDictionary<int, QuotingInstance> _activeInstances = new();
     private readonly IInstrumentRepository _instrumentRepository;
-    private readonly MarketDataManager _marketDataManager;
 
     public QuotingInstanceManager(
         ILogger<QuotingInstanceManager> logger,
         IQuotingInstanceFactory factory,
-        IInstrumentRepository instrumentRepository,
-        MarketDataManager marketDataManager
+        IInstrumentRepository instrumentRepository
         )
     {
         _logger = logger;
         _factory = factory;
         _instrumentRepository = instrumentRepository;
-        _marketDataManager = marketDataManager;
     }
 
     // --- IQuotingInstanceManager Implementation ---
-    public bool DeployInstance(QuotingParameters parameters)
+    private QuotingInstance? DeployInstance(QuotingParameters parameters)
     {
         var instrumentId = parameters.InstrumentId;
         if (_activeInstances.ContainsKey(instrumentId))
         {
             _logger.LogWarningWithCaller($"Quoting instance already deployed for instrument ID {instrumentId}. Retiring it before deploying the new one.");
             RetireInstance(instrumentId);
-            return false;
+            return null;
         }
 
         var instrument = _instrumentRepository.GetById(instrumentId);
         if (instrument == null)
         {
             _logger.LogWarningWithCaller($"Cannot deploy quoting instance. Instrument ID {instrumentId} not found.");
-            return false;
+            return null;
         }
 
         try
@@ -59,45 +56,41 @@ public class QuotingInstanceManager : IQuotingInstanceManager
             if (instance == null)
             {
                 _logger.LogWarningWithCaller($"Failed to create quoting instance instance for instrument ID {instrumentId}.");
-                return false;
+                return null;
             }
 
             if (_activeInstances.TryAdd(instrumentId, instance))
             {
-                instance.Start(_marketDataManager);
+                instance.Start();
                 _logger.LogInformationWithCaller($"Successfully deployed quoting instance for instrument {instrument.Symbol}.");
-                return true;
+                return instance;
             }
             else
             {
                 _logger.LogWarningWithCaller($"Failed to add quoting instance instance to active instances for instrument ID {instrumentId}.");
-                return false;
+                return null;
             }
         }
         catch (Exception ex)
         {
             _logger.LogErrorWithCaller(ex, $"Error deploying quoting instance for instrument {instrument.Symbol}.");
-            return false;
+            return null;
         }
     }
 
-    public void UpdateInstanceParameters(QuotingParameters newParameters)
+    public bool UpdateInstanceParameters(QuotingParameters newParameters)
     {
         var instrumentId = newParameters.InstrumentId;
         if (!_activeInstances.TryGetValue(instrumentId, out var instance))
         {
-            _logger.LogWarningWithCaller($"Cannot update parameters: No active instance for InstrumentId {instrumentId}.");
-            return;
+            _logger.LogInformationWithCaller($"No instance found for {instrumentId}. Deploying and activating new instance.");
+            var newInstance = DeployInstance(newParameters); // 새 인스턴스 생성 (비활성 상태)
+            return newInstance != null;
         }
 
         // Get the current parameters from the engine.
         // This requires QuotingEngine to expose its current parameters.
-        if (!instance.TryGetEngine(out var engine))
-        {
-            _logger.LogWarningWithCaller($"Cannot update parameters: Engine for InstrumentId {instrumentId} not found from instance.");
-            return;
-        }
-
+        var engine = instance.Engine;
         var currentParameters = engine.CurrentParameters;
 
         // Check if core, immutable parameters have changed.
@@ -106,8 +99,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager
             newParameters.Type != currentParameters.Type)
         {
             _logger.LogInformationWithCaller($"Core parameters changed for InstrumentId {instrumentId}. Redeploying instance.");
-            // Redeploy by retiring the old instance and deploying a new one.
-            RetireInstance(instrumentId);
+            DestroyInstance(instrumentId);
             DeployInstance(newParameters);
         }
         else
@@ -115,7 +107,10 @@ public class QuotingInstanceManager : IQuotingInstanceManager
             _logger.LogInformationWithCaller($"Tunable parameters changed for InstrumentId {instrumentId}. Updating in-place.");
             // Only tunable parameters changed, so update the existing engine.
             engine.UpdateParameters(newParameters);
+            engine.Activate();
         }
+
+        return true;
     }
 
     public IReadOnlyCollection<QuotingInstance> GetAllInstances()
@@ -131,14 +126,24 @@ public class QuotingInstanceManager : IQuotingInstanceManager
 
     public bool RetireInstance(int instrumentId)
     {
-        if (!_activeInstances.TryRemove(instrumentId, out var instance))
+        if (!_activeInstances.TryGetValue(instrumentId, out var instance))
         {
             _logger.LogWarningWithCaller($"No active quoting strategy found for instrument ID {instrumentId} to retire.");
             return false;
         }
 
-        instance.Stop(_marketDataManager);
-        _logger.LogInformationWithCaller($"Successfully retired quoting strategy for instrument ID {instrumentId}.");
+        instance.Deactivate();
+        _logger.LogInformationWithCaller($"Successfully deactivate quoting strategy for instrument ID {instrumentId}.");
         return true;
+    }
+
+    private bool DestroyInstance(int instrumentId)
+    {
+        if (_activeInstances.TryRemove(instrumentId, out var instance))
+        {
+            instance.Stop();
+            return true;
+        }
+        return false;
     }
 }

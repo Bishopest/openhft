@@ -19,7 +19,6 @@ public class MarketDataManager
     private readonly ConcurrentDictionary<int, OrderBookConsumer> _consumers = new();
     private readonly ConcurrentDictionary<int, BestOrderBookConsumer> _bestOrderBookConsumers = new();
 
-
     public MarketDataManager(
         ILogger<MarketDataManager> logger,
         MarketDataDistributor distributor,

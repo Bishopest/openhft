@@ -7,27 +7,26 @@ namespace OpenHFT.Quoting;
 public class QuotingInstance
 {
     private readonly IQuotingEngine _engine;
+    public IQuotingEngine Engine => _engine;
 
     public int InstrumentId => _engine.QuotingInstrument.InstrumentId;
+    public bool IsActive => Engine.IsActive;
 
     public QuotingInstance(IQuotingEngine engine)
     {
         _engine = engine;
     }
 
-    public void Start(MarketDataManager marketDataManager)
+    public void Start()
     {
-        _engine.Start(marketDataManager);
+        _engine.Start();
     }
 
-    public void Stop(MarketDataManager marketDataManager)
+    public void Stop()
     {
-        _engine.Stop(marketDataManager);
+        _engine.Stop();
     }
 
-    public bool TryGetEngine(out IQuotingEngine engine)
-    {
-        engine = _engine;
-        return engine != null;
-    }
+    public void Activate() => _engine.Activate();
+    public void Deactivate() => _engine.Deactivate();
 }

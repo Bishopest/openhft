@@ -46,14 +46,12 @@ public class QuoteDebugger
             return Task.CompletedTask;
         }
 
-        if (instance.TryGetEngine(out var engine))
-        {
-            _instrumentToMonitor = engine.QuotingInstrument;
-            engine.QuotePairCalculated += OnQuotePairCalculated;
-            _marketDataManager.SubscribeOrderBook(_instrumentToMonitor.InstrumentId, "QuoteDebugger_{_instrumentToMonitor.Symbol}", OnOrderBookUpdate);
+        var engine = instance.Engine;
+        _instrumentToMonitor = engine.QuotingInstrument;
+        engine.QuotePairCalculated += OnQuotePairCalculated;
+        _marketDataManager.SubscribeOrderBook(_instrumentToMonitor.InstrumentId, "QuoteDebugger_{_instrumentToMonitor.Symbol}", OnOrderBookUpdate);
 
-            _logger.LogInformationWithCaller($"Quote Debugger started. Monitoring {_instrumentToMonitor.Symbol}");
-        }
+        _logger.LogInformationWithCaller($"Quote Debugger started. Monitoring {_instrumentToMonitor.Symbol}");
 
         return Task.CompletedTask;
     }

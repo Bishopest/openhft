@@ -108,7 +108,7 @@ public class WebSocketHostTests
 
         // --- Assert ---
         _mockManager.Verify(
-            manager => manager.DeployInstance(It.Is<QuotingParameters>(p =>
+            manager => manager.UpdateInstanceParameters(It.Is<QuotingParameters>(p =>
                 p.InstrumentId == 123 &&
                 p.FvModel == FairValueModel.Midp
             )),
@@ -143,7 +143,7 @@ public class WebSocketHostTests
     public async Task When_UpdateParametersCommandHandled_Should_ReceiveAcknowledgment()
     {
         // Arrange
-        _mockManager.Setup(m => m.DeployInstance(It.IsAny<QuotingParameters>())).Returns(true);
+        _mockManager.Setup(m => m.UpdateInstanceParameters(It.IsAny<QuotingParameters>())).Returns(true);
         var command = new UpdateParametersCommand(new QuotingParameters(123, FairValueModel.Midp, 124, 1m, 1m, Quantity.FromDecimal(2m), 1, QuoterType.Single));
         var commandJson = JsonSerializer.Serialize(command);
         var commandBytes = Encoding.UTF8.GetBytes(commandJson);
