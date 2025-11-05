@@ -35,6 +35,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Service", "src\Open
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Oms", "src\OpenHFT.Oms\OpenHFT.Oms.csproj", "{B80D4D34-E306-495D-9B57-16FED6FFABF3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.GUI", "src\OpenHFT.GUI\OpenHFT.GUI.csproj", "{EE26A72D-DFAA-46A1-8029-977B36A59210}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -93,6 +95,10 @@ Global
 		{B80D4D34-E306-495D-9B57-16FED6FFABF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B80D4D34-E306-495D-9B57-16FED6FFABF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B80D4D34-E306-495D-9B57-16FED6FFABF3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EE26A72D-DFAA-46A1-8029-977B36A59210}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EE26A72D-DFAA-46A1-8029-977B36A59210}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EE26A72D-DFAA-46A1-8029-977B36A59210}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EE26A72D-DFAA-46A1-8029-977B36A59210}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
