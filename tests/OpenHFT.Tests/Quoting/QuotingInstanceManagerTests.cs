@@ -42,9 +42,9 @@ public class QuotingInstanceManagerTests_Integration
         // --- 2. InstrumentRepository 설정 (요청사항 반영) ---
         _testDirectory = Path.Combine(Path.GetTempPath(), "QuotingInstanceManagerTests", Guid.NewGuid().ToString());
         Directory.CreateDirectory(_testDirectory);
-        var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
-BITMEX,XBTUSD,PerpetualFuture,XBT,USD,0.5,1,1,1
-BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.01,0.001,1,0.001";
+        var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
+1,BITMEX,XBTUSD,PerpetualFuture,XBT,USD,0.5,1,1,1
+2,BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.01,0.001,1,0.001";
         File.WriteAllText(Path.Combine(_testDirectory, "instruments.csv"), csvContent);
 
         var inMemoryConfig = new Dictionary<string, string> { { "dataFolder", _testDirectory } };

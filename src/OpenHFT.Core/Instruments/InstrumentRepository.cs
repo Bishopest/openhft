@@ -20,8 +20,6 @@ public class InstrumentRepository : IInstrumentRepository
     // Secondary index for fast lookup by symbol, type, and exchange
     private readonly Dictionary<(string, ProductType, ExchangeEnum), Instrument> _instrumentsByDetails = new();
 
-    private int _nextInstrumentId = 1;
-
     public InstrumentRepository(ILogger<InstrumentRepository> logger, IConfiguration configuration)
     {
         _logger = logger;
@@ -65,6 +63,13 @@ public class InstrumentRepository : IInstrumentRepository
         {
             try
             {
+                string idString = (string)record.instrument_id;
+                if (!int.TryParse(idString, out var instrumentId))
+                {
+                    _logger.LogWarningWithCaller($"Invalid or missing instrument_id in CSV record. Skipping record.");
+                    continue;
+                }
+
                 var market = Enum.Parse<ExchangeEnum>(record.market, true);
                 var symbol = (string)record.symbol;
                 Enum.TryParse<ProductType>(record.type, true, out ProductType productType);
@@ -84,7 +89,6 @@ public class InstrumentRepository : IInstrumentRepository
                     minOrderSize = lotSize;
                 }
 
-                var instrumentId = _nextInstrumentId++;
                 Instrument newInstrument;
 
                 switch (productType)
@@ -99,6 +103,12 @@ public class InstrumentRepository : IInstrumentRepository
                     default:
                         _logger.LogWarningWithCaller($"Unsupported product type '{record.type}' for symbol {symbol}. Skipping.");
                         continue;
+                }
+
+                if (_instrumentsById.ContainsKey(newInstrument.InstrumentId))
+                {
+                    _logger.LogWarningWithCaller($"Duplicate InstrumentId '{newInstrument.InstrumentId}' found in CSV for symbol {newInstrument.Symbol}. Skipping.");
+                    continue;
                 }
 
                 _instrumentsById[newInstrument.InstrumentId] = newInstrument;

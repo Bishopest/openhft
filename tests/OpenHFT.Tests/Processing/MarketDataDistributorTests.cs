@@ -40,11 +40,11 @@ public class MarketDataDistributorTests
     {
         _testDirectory = Path.Combine(Path.GetTempPath(), "InstrumentRepositoryTests", Guid.NewGuid().ToString());
         Directory.CreateDirectory(_testDirectory);
-        var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
-BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10
-BINANCE,ETHUSDT,Spot,ETH,USDT,0.01,0.0001,1,10
-BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001
-BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
+        var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
+1,BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10
+2,BINANCE,ETHUSDT,Spot,ETH,USDT,0.01,0.0001,1,10
+3,BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001
+4,BINANCE,ETHUSDT,PerpetualFuture,ETH,USDT,0.01,0.0001,1,0.001";
         File.WriteAllText(Path.Combine(_testDirectory, "instruments.csv"), csvContent);
         var inMemorySettings = new Dictionary<string, string>
         {

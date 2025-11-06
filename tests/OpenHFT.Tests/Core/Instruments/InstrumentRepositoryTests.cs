@@ -60,10 +60,10 @@ public class InstrumentRepositoryTests
     public void LoadFromCsv_ValidFile_LoadsInstrumentsCorrectly()
     {
         // Arrange
-        var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
-BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10
-BINANCE,ETHUSDT,Spot,ETH,USDT,0.01,0.0001,1,10
-BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001";
+        var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
+1, BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10
+2, BINANCE,ETHUSDT,Spot,ETH,USDT,0.01,0.0001,1,10
+3, BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001";
         SetupRepositoryWithContent(csvContent);
 
         // Act
@@ -117,9 +117,9 @@ BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001";
     public void LoadFromCsv_MalformedRecord_SkipsRecordAndLoadsValidOnes()
     {
         // Arrange
-        var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
-BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10
-BINANCE,ETHUSDT,Spot,ETH,USDT,invalid_decimal,0.0001,1,10"; // Malformed record
+        var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
+1,BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10
+2,BINANCE,ETHUSDT,Spot,ETH,USDT,invalid_decimal,0.0001,1,10"; // Malformed record
         SetupRepositoryWithContent(csvContent);
 
         // Act
@@ -134,8 +134,8 @@ BINANCE,ETHUSDT,Spot,ETH,USDT,invalid_decimal,0.0001,1,10"; // Malformed record
     public void FindBySymbol_ExistingInstrument_ReturnsCorrectInstrument()
     {
         // Arrange
-        var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
-BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001";
+        var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
+1,BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001";
         SetupRepositoryWithContent(csvContent);
         // Act
         var found = _repository.FindBySymbol("BTCUSDT", ProductType.PerpetualFuture, ExchangeEnum.BINANCE);
@@ -150,8 +150,8 @@ BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.1,0.001,1,0.001";
     public void FindBySymbol_CaseInsensitive_ReturnsCorrectInstrument()
     {
         // Arrange
-        var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
-BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10";
+        var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
+1,BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10";
         SetupRepositoryWithContent(csvContent);
 
         // Act
@@ -166,8 +166,8 @@ BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10";
     public void FindBySymbol_NonExistentInstrument_ReturnsNull()
     {
         // Arrange
-        var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
-BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10";
+        var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
+1,BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10";
         SetupRepositoryWithContent(csvContent);
 
         // Act
@@ -181,8 +181,8 @@ BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10";
     public void GetById_ReturnsCorrectInstrument()
     {
         // Arrange
-        var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
-BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10";
+        var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
+1,BINANCE,BTCUSDT,Spot,BTC,USDT,0.01,0.00001,1,10";
         SetupRepositoryWithContent(csvContent);
 
         var instrument = _repository.FindBySymbol("BTCUSDT", ProductType.Spot, ExchangeEnum.BINANCE);

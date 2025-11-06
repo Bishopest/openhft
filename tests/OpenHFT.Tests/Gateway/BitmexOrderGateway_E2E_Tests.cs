@@ -57,8 +57,8 @@ public class BitmexOrderGateway_E2E_Tests
         Directory.CreateDirectory(_testDirectory);
 
         var filePath = Path.Combine(_testDirectory, "instruments.csv");
-        var csvContent = @"market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
-    BITMEX,XBTUSDT,perpetualfuture,XBTUSDT,USDT,1,0.1,100,XBTUSDT,0.0001";
+        var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
+    1,BITMEX,XBTUSDT,perpetualfuture,XBTUSDT,USDT,1,0.1,100,XBTUSDT,0.0001";
         File.WriteAllText(filePath, csvContent);
 
         var inMemorySettings = new Dictionary<string, string>
