@@ -1,0 +1,8 @@
+{
+  "oms": [
+    {
+      "name": "LOCAL",
+      "url": "http://localhost:5000"
+    }
+  ]
+}

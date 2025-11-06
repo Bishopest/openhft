@@ -9,6 +9,9 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
 builder.Services.AddScoped<IOrderBookManager, MockOrderBookManager>();
+builder.Services.AddSingleton<IOmsConnectorService, OmsConnectorService>();
+builder.Configuration.AddJsonFile("config.json", optional: false, reloadOnChange: false);
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

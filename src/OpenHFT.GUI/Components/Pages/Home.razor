@@ -3,7 +3,10 @@
 @using OpenHFT.GUI.Services
 @using OpenHFT.Core.Instruments
 @using OpenHFT.Core.Models
-@inject IOrderBookManager OrderBookManager
+
+@inherits ComponentBase
+
+@namespace OpenHFT.GUI.Components.Pages
 
 <PageTitle>Home</PageTitle>
 
@@ -14,6 +17,11 @@
       available vertical space within the MainLayout.
 *@
 <MudContainer MaxWidth="MaxWidth.ExtraLarge">
+    @* --- OMS Connection Component --- *@
+    @* We pass down the server list and current status, and listen for connect/disconnect events *@
+    <OmsConnectionManager Servers="_omsServers" CurrentStatus="_currentStatus" OnConnect="HandleConnectRequest"
+        OnDisconnect="HandleDisconnectRequest" />
+
     @if (_testInstrument is not null)
     {
         @*
@@ -28,33 +36,3 @@
         </MudGrid>
     }
 </MudContainer>
-
-
-@code {
-    private Instrument? _testInstrument;
-
-    protected override void OnInitialized()
-    {
-        // Create the instrument object ahead of time so the component can render initially.
-        _testInstrument = new CryptoPerpetual(
-        instrumentId: 1001,
-        symbol: "BTCUSDT",
-        exchange: ExchangeEnum.BINANCE,
-        baseCurrency: Currency.BTC,
-        quoteCurrency: Currency.USDT,
-        tickSize: Price.FromDecimal(0.1m),
-        lotSize: Quantity.FromDecimal(0.001m),
-        multiplier: 1m,
-        minOrderSize: Quantity.FromDecimal(0.001m)
-        );
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            await OrderBookManager.ConnectAndSubscribeAsync(_testInstrument.InstrumentId);
-        }
-    }
-
-}
