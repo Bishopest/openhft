@@ -1,0 +1,16 @@
+/* 
+    The '::deep' combinator is crucial here. It allows this component's scoped styles
+    to penetrate the child components (like MudSimpleTable) and style their inner HTML elements.
+*/
+::deep .price-ladder th,
+::deep .price-ladder td {
+    /* Reduce vertical padding significantly. This is the most impactful change. */
+    padding-top: 2px;
+    padding-bottom: 2px;
+
+    /* Make the font smaller for a denser look. */
+    font-size: 0.75rem; /* 1rem is the default, this is 25% smaller */
+
+    /* Adjust line height to match the smaller font size. */
+    line-height: 1.2;
+}

@@ -1,0 +1,73 @@
+﻿@using OpenHFT.Book.Core;
+@using OpenHFT.Core;
+
+@namespace OpenHFT.GUI.Components.Shared
+
+<MudPaper Class="pa-0 d-flex flex-column" Elevation="3" Style="height:80vh; font-family: monospace;">
+    @* Added a dedicated header div with its own padding to keep the title looking good. *@
+    <div class="px-2 pt-2">
+        <MudText Typo="Typo.h6" Align="Align.Center" GutterBottom="true">@DisplayInstrument.Symbol</MudText>
+    </div>
+    
+    @if (_displayLevels.Any())
+    {
+        <div class="table-container">
+            <MudSimpleTable Dense="true" Hover="true" Class="price-ladder">
+                <thead>
+                    <tr>
+                        <th style="width: 15%;">My Bid</th>
+                        <th style="width: 25%; text-align: right;">Ask Size</th>
+                        <th style="width: 20%; text-align: center;">Price</th>
+                        <th style="width: 25%; text-align: left;">Bid Size</th>
+                        <th style="width: 15%;">My Ask</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var level in _displayLevels)
+                    {
+                        var (bestBid, _) = _currentOrderBook.GetBestBid();
+                        var (bestAsk, _) = _currentOrderBook.GetBestAsk();
+
+                        // Highlight the best bid and ask rows for clarity
+                        string rowStyle = "";
+                        if (level.Price == bestBid) rowStyle = "background-color: rgba(0, 128, 0, 0.15);";
+                        if (level.Price == bestAsk) rowStyle = "background-color: rgba(255, 0, 0, 0.15);";
+                        
+                        // Highlight the spread area
+                        if (level.Price < bestAsk && level.Price > bestBid) rowStyle = "background-color: rgba(245, 245, 220, 0.5);";
+
+                        <tr style="@rowStyle">
+                            <!-- Column 1: My Quote (Bid) - Empty for now -->
+                            <td></td>
+
+                            <!-- Column 2: Ask Size -->
+                            <td style="text-align: right; color: #E57373;">
+                                @(level.AskQuantity?.ToDecimal().ToString("N4"))
+                            </td>
+
+                            <!-- Column 3: Price (Center) -->
+                            <td style="font-weight: bold; text-align: center; border-left: 1px solid var(--mud-palette-divider); border-right: 1px solid var(--mud-palette-divider);">
+                                @level.Price.ToDecimal().ToString("F2")
+                            </td>
+
+                            <!-- Column 4: Bid Size -->
+                            <td style="text-align: left; color: #81C784;">
+                                @(level.BidQuantity?.ToDecimal().ToString("N4"))
+                            </td>
+
+                            <!-- Column 5: My Quote (Ask) - Empty for now -->
+                            <td></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex flex-column justify-center align-center" style="height: 100%;">
+            <MudText>Awaiting data for @DisplayInstrument.Symbol...</MudText>
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+        </div>
+    }
+</MudPaper>

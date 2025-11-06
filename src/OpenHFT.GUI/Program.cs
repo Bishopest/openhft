@@ -1,5 +1,6 @@
 using OpenHFT.GUI.Components;
 using MudBlazor.Services;
+using OpenHFT.GUI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,7 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
-
+builder.Services.AddScoped<IOrderBookManager, MockOrderBookManager>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

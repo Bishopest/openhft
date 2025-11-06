@@ -1,7 +1,62 @@
 ﻿@page "/"
+@using OpenHFT.GUI.Components.Shared
+@using OpenHFT.GUI.Services
+@using OpenHFT.Core.Instruments
+@using OpenHFT.Core.Models
+@inject IOrderBookManager OrderBookManager
 
 <PageTitle>Home</PageTitle>
 
-<h1>Hello, world!</h1>
+@*
+    CHANGE 1: This MudContainer becomes a full-height, column-oriented flex container.
+    - 'd-flex flex-column': Turns it into a flex container.
+    - 'flex-grow-1': This is the KEY. It makes the container expand to fill all
+      available vertical space within the MainLayout.
+*@
+<MudContainer MaxWidth="MaxWidth.ExtraLarge">
+    <h1>OrderBook Display Test</h1>
 
-Welcome to your new app.
+    @if (_testInstrument is not null)
+    {
+        @*
+            CHANGE 2: This MudGrid also becomes a growing flex item.
+            It will now fill all the space NOT taken by the h1 and MudText above it.
+            'AlignItems.Stretch' ensures the MudItems inside it also stretch vertically.
+        *@
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <OrderBookDisplay DisplayInstrument="@_testInstrument" />
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+
+@code {
+    private Instrument? _testInstrument;
+
+    protected override void OnInitialized()
+    {
+        // Create the instrument object ahead of time so the component can render initially.
+        _testInstrument = new CryptoPerpetual(
+        instrumentId: 1001,
+        symbol: "BTCUSDT",
+        exchange: ExchangeEnum.BINANCE,
+        baseCurrency: Currency.BTC,
+        quoteCurrency: Currency.USDT,
+        tickSize: Price.FromDecimal(0.1m),
+        lotSize: Quantity.FromDecimal(0.001m),
+        multiplier: 1m,
+        minOrderSize: Quantity.FromDecimal(0.001m)
+        );
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await OrderBookManager.ConnectAndSubscribeAsync(_testInstrument.InstrumentId);
+        }
+    }
+
+}
