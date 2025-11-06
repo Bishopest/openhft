@@ -14,3 +14,9 @@
     /* Adjust line height to match the smaller font size. */
     line-height: 1.2;
 }
+
+.table-container {
+    flex-grow: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
