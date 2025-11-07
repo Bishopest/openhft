@@ -7,6 +7,7 @@ using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Adapters;
 using OpenHFT.Feed.Interfaces;
+using OpenHFT.Feed.Models;
 
 namespace OpenHFT.GUI.Services;
 
@@ -43,7 +44,8 @@ public class ExchangeFeedManager : IExchangeFeedManager, IAsyncDisposable
 
         if (_activeAdapters.TryGetValue(adapterKey, out var adapter) && adapter.IsConnected)
         {
-            await adapter.SubscribeAsync(new List<Instrument> { instrument });
+            var topics = GetOrderBookTopicsForExchange(instrument.SourceExchange);
+            await adapter.SubscribeAsync(new List<Instrument> { instrument }, topics);
         }
         else
         {
@@ -56,7 +58,14 @@ public class ExchangeFeedManager : IExchangeFeedManager, IAsyncDisposable
         var instrument = _instrumentRepository.GetById(instrumentId);
         if (instrument is null || !_activeAdapters.TryGetValue((instrument.SourceExchange, instrument.ProductType), out var adapter))
             return;
-        await adapter.UnsubscribeAsync(new List<Instrument> { instrument });
+
+        if (!adapter.IsConnected)
+        {
+            _logger.LogWarningWithCaller($"Adapter for {instrument.SourceExchange}/{instrument.ProductType} is not connected. Cannot unsubscribe.");
+            return;
+        }
+        var topics = GetOrderBookTopicsForExchange(instrument.SourceExchange);
+        await adapter.UnsubscribeAsync(new List<Instrument> { instrument }, topics);
     }
 
     private Task GetOrCreateConnectionTask((ExchangeEnum, ProductType) adapterKey)
@@ -103,6 +112,19 @@ public class ExchangeFeedManager : IExchangeFeedManager, IAsyncDisposable
         OnMarketDataReceived?.Invoke(sender, marketDataEvent);
     }
 
+    /// <summary>
+    /// A helper method to get the default market data topics for a given exchange.
+    /// </summary>
+    private IEnumerable<ExchangeTopic> GetOrderBookTopicsForExchange(ExchangeEnum exchange)
+    {
+        return exchange switch
+        {
+            ExchangeEnum.BINANCE => new List<BinanceTopic> { BinanceTopic.DepthUpdate },
+            ExchangeEnum.BITMEX => new List<BitmexTopic> { BitmexTopic.OrderBook10 },
+            // Add other exchanges here
+            _ => Enumerable.Empty<ExchangeTopic>()
+        };
+    }
 
     public async ValueTask DisposeAsync()
     {
