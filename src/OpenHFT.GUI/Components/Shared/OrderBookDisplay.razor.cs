@@ -23,7 +23,7 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     private IJSRuntime JSRuntime { get; set; } = default!;
 
     [Parameter]
-    public int DisplayDepth { get; set; } = 20; // Number of ticks to show above and below the center
+    public int DisplayDepth { get; set; } = 40; // Number of ticks to show above and below the center
     private decimal PriceGrouping => DisplayInstrument is not null ? DisplayInstrument.TickSize.ToDecimal() * _groupingMultipliers[_selectedMultiplierIndex] : 0.01m;
 
     // --- Parameters ---
@@ -124,27 +124,27 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
         var bestBidPrice = groupedBids.Keys.DefaultIfEmpty(0).Max();
         var bestAskPrice = groupedAsks.Keys.DefaultIfEmpty(0).Min();
 
-        decimal centerPriceDecimal;
-        if (bestAskPrice > 0 && bestBidPrice > 0)
+        Price centerPriceDecimal;
+        if (bestAskPrice > 0)
         {
-            centerPriceDecimal = (bestBidPrice + bestAskPrice) / 2;
+            centerPriceDecimal = Price.FromDecimal(bestAskPrice);
         }
         else
         {
-            centerPriceDecimal = bestAskPrice > 0 ? bestAskPrice : bestBidPrice;
+            centerPriceDecimal = Price.FromDecimal(bestBidPrice);
         }
-        if (centerPriceDecimal <= 0) return; // No valid data to display
+        if (centerPriceDecimal.ToDecimal() <= 0) return; // No valid data to display
 
         // --- 3. Build the Display Grid using PriceGrouping as the step ---
         var newLevels = new List<DisplayLevel>();
         var groupingAsPrice = Price.FromDecimal(PriceGrouping);
 
         // Round the center price to the nearest grouping interval to keep the grid stable
-        var centerPrice = Price.FromDecimal(Math.Round(centerPriceDecimal / PriceGrouping) * PriceGrouping);
+        // var centerPrice = Price.FromDecimal(Math.Round(centerPriceDecimal / PriceGrouping) * PriceGrouping);
 
         for (int i = DisplayDepth; i >= -DisplayDepth; i--)
         {
-            var currentPrice = Price.FromTicks(centerPrice.ToTicks() + (groupingAsPrice.ToTicks() * i));
+            var currentPrice = Price.FromTicks(centerPriceDecimal.ToTicks() + (groupingAsPrice.ToTicks() * i));
             var currentPriceDecimal = currentPrice.ToDecimal();
 
             groupedBids.TryGetValue(currentPriceDecimal, out var bidQty);
