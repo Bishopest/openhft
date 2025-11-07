@@ -24,7 +24,11 @@ public partial class QuotingParametersController
     [Parameter]
     public EventCallback<Instrument> OnInstrumentSelected { get; set; }
 
-
+    /// <summary>
+    /// Receives a boolean from the parent indicating if the strategy is active.
+    /// </summary>
+    [Parameter]
+    public bool IsStrategyActive { get; set; }
     private MudForm _form = new();
     private ParameterFormModel _model = new(); // A temporary model for form binding
 
@@ -61,6 +65,28 @@ public partial class QuotingParametersController
         _selectedInstrument = _availableInstruments.FirstOrDefault();
     }
 
+    /// <summary>
+    /// Public method that can be called by a parent component to update the form's data.
+    /// </summary>
+    public async Task UpdateParametersAsync(QuotingParameters newParameters)
+    {
+        _model = new ParameterFormModel
+        {
+            FvModel = newParameters.FvModel,
+            SpreadBp = newParameters.SpreadBp,
+            SkewBp = newParameters.SkewBp,
+            Size = newParameters.Size.ToDecimal(),
+            Depth = newParameters.Depth,
+            Type = newParameters.Type
+        };
+
+        // We need to update the instrument selection as well
+        _selectedInstrument = _availableInstruments.FirstOrDefault(i => i.InstrumentId == newParameters.InstrumentId);
+        _selectedFvSourceInstrument = _availableInstruments.FirstOrDefault(i => i.InstrumentId == newParameters.FairValueSourceInstrumentId);
+
+        // Notify Blazor that the state has changed and the UI needs to re-render
+        await InvokeAsync(StateHasChanged);
+    }
     /// <summary>
     /// This function is called by the MudAutocomplete component whenever the user types.
     /// It filters the list of available instruments based on the search text.

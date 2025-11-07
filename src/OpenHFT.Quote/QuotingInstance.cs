@@ -11,6 +11,8 @@ public class QuotingInstance
 
     public int InstrumentId => _engine.QuotingInstrument.InstrumentId;
     public bool IsActive => Engine.IsActive;
+    public QuotingParameters CurrentParameters => Engine.CurrentParameters;
+
 
     public QuotingInstance(IQuotingEngine engine)
     {

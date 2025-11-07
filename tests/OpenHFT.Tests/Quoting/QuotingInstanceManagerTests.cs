@@ -21,7 +21,7 @@ using Disruptor.Dsl;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenHFT.Gateway;
 
-namespace OpenHFT.Tests.Processing;
+namespace OpenHFT.Tests.Quoting;
 
 [TestFixture, Category("Integration")]
 public class QuotingInstanceManagerTests_Integration

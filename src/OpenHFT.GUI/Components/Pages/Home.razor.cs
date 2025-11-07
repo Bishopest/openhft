@@ -6,6 +6,7 @@ using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
+using OpenHFT.GUI.Components.Shared;
 using OpenHFT.GUI.Services;
 using OpenHFT.Oms.Api.WebSocket;
 using OpenHFT.Quoting;
@@ -32,6 +33,15 @@ public partial class Home : ComponentBase, IDisposable
     private List<OmsServerConfig> _omsServers = new();
     private ConnectionStatus _currentStatus = ConnectionStatus.Disconnected;
     private Instrument? _displayInstrument;
+    /// <summary>
+    /// A reference to the child QuotingParameterController component instance.
+    /// </summary>
+    private QuotingParametersController? _quotingController;
+    /// <summary>
+    /// Stores the active quoting parameters for each instrument ID.
+    /// Key: InstrumentId, Value: QuotingParameters
+    /// </summary>
+    private Dictionary<int, QuotingParameters> _activeInstances = new();
 
     // --- Lifecycle Methods ---
     protected override void OnInitialized()
@@ -48,6 +58,7 @@ public partial class Home : ComponentBase, IDisposable
 
         // Subscribe to the connector's status changes to keep our UI in sync
         OmsConnector.OnConnectionStatusChanged += HandleStatusChange;
+        OmsConnector.OnInstanceStatusReceived += HandleInstanceStatusUpdate;
     }
 
     private async Task HandleInstrumentSelected(Instrument instrument)
@@ -66,6 +77,27 @@ public partial class Home : ComponentBase, IDisposable
         {
             await FeedManager.SubscribeToInstrumentAsync(_displayInstrument.InstrumentId);
         }
+    }
+
+    private async void HandleInstanceStatusUpdate(InstanceStatusEvent statusEvent)
+    {
+        var payload = statusEvent.Payload;
+        Logger.LogInformationWithCaller($"Received status update for Instrument ID: {payload.InstrumentId}, Active: {payload.IsActive}");
+        if (payload.IsActive)
+        {
+            _activeInstances[payload.InstrumentId] = payload.Parameters;
+
+            if (_quotingController != null && _displayInstrument?.InstrumentId == payload.InstrumentId)
+            {
+                await _quotingController.UpdateParametersAsync(payload.Parameters);
+            }
+        }
+        else
+        {
+            _activeInstances.Remove(payload.InstrumentId);
+        }
+
+        await InvokeAsync(StateHasChanged);
     }
 
     // --- Event Handlers for OmsConnectionManager ---
@@ -91,7 +123,7 @@ public partial class Home : ComponentBase, IDisposable
     /// <summary>
     /// This method is called when the QuotingParameterController's OnSubmit event is fired.
     /// </summary>
-    private async Task HandleDeployStrategy(QuotingParameters parameters)
+    private async Task HandleSubmitParameters(QuotingParameters parameters)
     {
         if (OmsConnector.CurrentStatus != ConnectionStatus.Connected)
         {
@@ -99,7 +131,7 @@ public partial class Home : ComponentBase, IDisposable
             return;
         }
 
-        Logger.LogInformationWithCaller($"Deploying strategy for Instrument ID: {parameters.InstrumentId}");
+        Logger.LogInformationWithCaller($"Deploying quoting instance for Instrument ID: {parameters.InstrumentId}");
 
         // Wrap the parameters in the command object
         var command = new UpdateParametersCommand(parameters);
@@ -113,6 +145,7 @@ public partial class Home : ComponentBase, IDisposable
     // --- Cleanup ---
     public void Dispose()
     {
+        OmsConnector.OnInstanceStatusReceived -= HandleInstanceStatusUpdate;
         OmsConnector.OnConnectionStatusChanged -= HandleStatusChange;
     }
 }

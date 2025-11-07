@@ -1,8 +1,24 @@
 using System;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using OpenHFT.Core.FixedPoint;
 
 namespace OpenHFT.Core.Models;
 
+public class QuantityJsonConverter : JsonConverter<Quantity>
+{
+    public override Quantity Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        return Quantity.FromDecimal(reader.GetDecimal());
+    }
+
+    public override void Write(Utf8JsonWriter writer, Quantity value, JsonSerializerOptions options)
+    {
+        writer.WriteNumberValue(value.ToDecimal());
+    }
+}
+
+[JsonConverter(typeof(QuantityJsonConverter))]
 public readonly struct Quantity : IEquatable<Quantity>, IComparable<Quantity>
 {
     private readonly FixedPoint<QuantityScale> _value;

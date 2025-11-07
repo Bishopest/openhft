@@ -34,8 +34,9 @@
                 <OrderBookDisplay DisplayInstrument="@_displayInstrument" />
             </MudItem>
             <MudItem xs="12" md="6">
-                <QuotingParametersController OnSubmit="HandleDeployStrategy"
-                    OnInstrumentSelected="HandleInstrumentSelected" />
+                <QuotingParametersController @ref="_quotingController" OnSubmit="HandleSubmitParameters"
+                    OnInstrumentSelected="HandleInstrumentSelected"
+                    IsStrategyActive="@(_displayInstrument != null && _activeInstances.ContainsKey(_displayInstrument.InstrumentId))" />
             </MudItem>
         </MudGrid>
     }

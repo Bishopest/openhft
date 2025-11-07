@@ -1,5 +1,6 @@
 using System;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Utils;
 using OpenHFT.Quoting;
@@ -12,7 +13,11 @@ public class UpdateParametersCommandHandler : IWebSocketCommandHandler
     private readonly ILogger<UpdateParametersCommandHandler> _logger;
     private readonly IQuotingInstanceManager _manager;
     private readonly IWebSocketChannel _channel;
-    private readonly JsonSerializerOptions _jsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    private readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new JsonStringEnumConverter() }
+    };
 
     public string CommandType => "UPDATE_PARAMETERS";
 
@@ -38,11 +43,23 @@ public class UpdateParametersCommandHandler : IWebSocketCommandHandler
             var parameters = JsonSerializer.Deserialize<QuotingParameters>(payloadElement.GetRawText(), _jsonOptions);
 
             _logger.LogInformationWithCaller("Handling UPDATE_PARAMETERS command.");
-            var success = _manager.UpdateInstanceParameters(parameters);
-            var message = success ? "Strategy deployed successfully." : "Failed to deploy strategy.";
-
-            var ackEvent = new AcknowledgmentEvent(correlationId ?? string.Empty, success, message);
-            await _channel.SendAsync(ackEvent);
+            var resultInstance = _manager.UpdateInstanceParameters(parameters);
+            if (resultInstance != null)
+            {
+                var payload = new InstanceStatusPayload
+                {
+                    InstrumentId = resultInstance.InstrumentId,
+                    IsActive = resultInstance.IsActive,
+                    Parameters = resultInstance.CurrentParameters
+                };
+                var statusEvent = new InstanceStatusEvent(payload);
+                await _channel.SendAsync(statusEvent);
+            }
+            else
+            {
+                var ackEvent = new AcknowledgmentEvent(correlationId ?? string.Empty, false, "Failed to deploy or update strategy instance.");
+                await _channel.SendAsync(ackEvent);
+            }
         }
         catch (Exception ex)
         {

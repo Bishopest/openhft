@@ -1,9 +1,27 @@
 using System;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using OpenHFT.Core.FixedPoint;
 
 namespace OpenHFT.Core.Models;
 
+public class PriceJsonConverter : JsonConverter<Price>
+{
+    public override Price Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        // When reading from JSON, convert the decimal value to a Price struct.
+        return Price.FromDecimal(reader.GetDecimal());
+    }
+
+    public override void Write(Utf8JsonWriter writer, Price value, JsonSerializerOptions options)
+    {
+        // When writing to JSON, convert the Price struct to its decimal representation.
+        writer.WriteNumberValue(value.ToDecimal());
+    }
+}
+
 // Price is a fixed-point number with PriceScale precision.
+[JsonConverter(typeof(PriceJsonConverter))]
 public readonly struct Price : IEquatable<Price>, IComparable<Price>
 {
     private readonly FixedPoint<PriceScale> _value;

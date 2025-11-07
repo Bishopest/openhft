@@ -78,14 +78,14 @@ public class QuotingInstanceManager : IQuotingInstanceManager
         }
     }
 
-    public bool UpdateInstanceParameters(QuotingParameters newParameters)
+    public QuotingInstance? UpdateInstanceParameters(QuotingParameters newParameters)
     {
         var instrumentId = newParameters.InstrumentId;
         if (!_activeInstances.TryGetValue(instrumentId, out var instance))
         {
             _logger.LogInformationWithCaller($"No instance found for {instrumentId}. Deploying and activating new instance.");
             var newInstance = DeployInstance(newParameters); // 새 인스턴스 생성 (비활성 상태)
-            return newInstance != null;
+            return newInstance;
         }
 
         // Get the current parameters from the engine.
@@ -100,17 +100,15 @@ public class QuotingInstanceManager : IQuotingInstanceManager
         {
             _logger.LogInformationWithCaller($"Core parameters changed for InstrumentId {instrumentId}. Redeploying instance.");
             DestroyInstance(instrumentId);
-            DeployInstance(newParameters);
-        }
-        else
-        {
-            _logger.LogInformationWithCaller($"Tunable parameters changed for InstrumentId {instrumentId}. Updating in-place.");
-            // Only tunable parameters changed, so update the existing engine.
-            engine.UpdateParameters(newParameters);
-            engine.Activate();
+            var newInstance = DeployInstance(newParameters);
+            return newInstance;
         }
 
-        return true;
+        _logger.LogInformationWithCaller($"Tunable parameters changed for InstrumentId {instrumentId}. Updating in-place.");
+        // Only tunable parameters changed, so update the existing engine.
+        engine.UpdateParameters(newParameters);
+        engine.Activate();
+        return instance;
     }
 
     public IReadOnlyCollection<QuotingInstance> GetAllInstances()
@@ -137,13 +135,13 @@ public class QuotingInstanceManager : IQuotingInstanceManager
         return true;
     }
 
-    private bool DestroyInstance(int instrumentId)
+    private QuotingInstance? DestroyInstance(int instrumentId)
     {
         if (_activeInstances.TryRemove(instrumentId, out var instance))
         {
             instance.Stop();
-            return true;
+            return instance;
         }
-        return false;
+        return null;
     }
 }

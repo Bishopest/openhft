@@ -181,16 +181,6 @@ public class MockAdapter : BaseFeedAdapter
         throw new NotImplementedException();
     }
 
-    protected override Task DoSubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
-    {
-        throw new NotImplementedException();
-    }
-
-    protected override Task DoUnsubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
-    {
-        throw new NotImplementedException();
-    }
-
     protected override string GetBaseUrl()
     {
         throw new NotImplementedException();
@@ -216,6 +206,16 @@ public class MockAdapter : BaseFeedAdapter
     }
 
     protected override bool IsPongMessage(MemoryStream messageStream)
+    {
+        throw new NotImplementedException();
+    }
+
+    protected override Task DoSubscribeAsync(IDictionary<Instrument, List<ExchangeTopic>> subscriptions, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+
+    protected override Task DoUnsubscribeAsync(IDictionary<Instrument, List<ExchangeTopic>> subscriptions, CancellationToken cancellationToken)
     {
         throw new NotImplementedException();
     }

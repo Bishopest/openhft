@@ -9,8 +9,8 @@ public interface IQuotingInstanceManager
     /// if a instance for the instrument already exists, activate(equal params) or re deploy(different params))
     /// </summary>
     /// <param name="newParameters"></param>
-    /// <returns>True if parameters were updated, false otherwise.</returns>
-    bool UpdateInstanceParameters(QuotingParameters newParameters);
+    /// <returns>updated instance if success, otherwise null.</returns>
+    QuotingInstance? UpdateInstanceParameters(QuotingParameters newParameters);
 
     /// <summary>
     /// Stops and removes the strategy for a given instrument.
