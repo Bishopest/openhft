@@ -17,6 +17,15 @@
     <Routes @rendermode="RenderMode.InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js?v=@(MudBlazor.Metadata.Version)"></script>
+    <script>
+        window.scrollToCenter = (elementId) => {
+            const element = document.getElementById(elementId);
+            if (element) {
+                // Scroll to the vertical middle of the element's content.
+                element.scrollTop = (element.scrollHeight / 2) - (element.clientHeight / 2);
+            }
+        };
+    </script>
 </body>
 
 </html>

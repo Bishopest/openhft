@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using Microsoft.AspNetCore.Components;
+using Microsoft.JSInterop;
 using OpenHFT.Book.Core;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
@@ -18,6 +19,8 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     // Services are injected here using the [Inject] attribute.
     [Inject]
     private IOrderBookManager OrderBookManager { get; set; } = default!;
+    [Inject]
+    private IJSRuntime JSRuntime { get; set; } = default!;
 
     [Parameter]
     public int DisplayDepth { get; set; } = 30; // Number of ticks to show above and below the center
@@ -28,6 +31,11 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     public Instrument DisplayInstrument { get; set; }
     private string _priceFormat = "F2"; // Default format
     private string _quantityFormat = "N4"; // Default format
+
+    // --- STATE MANAGEMENT FOR AUTO-SCROLL ---
+    private bool _shouldScrollToCenter = true; // Start with true for the initial load
+    private int _previousInstrumentId = 0;
+    private readonly string _scrollContainerId = $"scroll-container-{Guid.NewGuid()}";
 
     // --- State ---
     // Private fields and properties that hold the component's state.
@@ -108,12 +116,33 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     {
         if (DisplayInstrument != null)
         {
+            // --- CHANGE DETECTION LOGIC ---
+            // Check if the instrument has actually changed.
+            if (DisplayInstrument.InstrumentId != _previousInstrumentId)
+            {
+                _previousInstrumentId = DisplayInstrument.InstrumentId;
+                _shouldScrollToCenter = true; // Set the flag to scroll on next render
+
+                // Clear old data immediately to show the "Awaiting data..." message
+                // This prevents showing stale data from the previous instrument.
+                _currentOrderBook = null;
+                _displayLevels.Clear();
+            }
             // Calculate and store the format strings based on the instrument's properties.
             _priceFormat = $"F{GetDecimalPlaces(DisplayInstrument.TickSize.ToDecimal())}";
             _quantityFormat = $"N{GetDecimalPlaces(DisplayInstrument.LotSize.ToDecimal())}";
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // If the flag is set and we have data to display, scroll to center.
+        if (_shouldScrollToCenter && _displayLevels.Any())
+        {
+            await JSRuntime.InvokeVoidAsync("scrollToCenter", _scrollContainerId);
+            _shouldScrollToCenter = false; // Reset the flag
+        }
+    }
     /// <summary>
     /// Calculates the number of decimal places in a decimal value.
     /// </summary>
