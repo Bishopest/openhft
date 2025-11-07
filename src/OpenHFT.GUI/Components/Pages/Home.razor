@@ -16,7 +16,7 @@
     - 'flex-grow-1': This is the KEY. It makes the container expand to fill all
       available vertical space within the MainLayout.
 *@
-<MudContainer MaxWidth="MaxWidth.ExtraLarge">
+<MudPaper Class="pa-4" Elevation="2">
     @* --- OMS Connection Component --- *@
     @* We pass down the server list and current status, and listen for connect/disconnect events *@
     <OmsConnectionManager Servers="_omsServers" CurrentStatus="_currentStatus" OnConnect="HandleConnectRequest"
@@ -29,10 +29,13 @@
             It will now fill all the space NOT taken by the h1 and MudText above it.
             'AlignItems.Stretch' ensures the MudItems inside it also stretch vertically.
         *@
-        <MudGrid>
+        <MudGrid Spacing="0">
             <MudItem xs="12" md="6">
                 <OrderBookDisplay DisplayInstrument="@_testInstrument" />
             </MudItem>
+            <MudItem xs="12" md="6">
+                <QuotingParametersController OnSubmit="HandleDeployStrategy" />
+            </MudItem>
         </MudGrid>
     }
-</MudContainer>
+</MudPaper>

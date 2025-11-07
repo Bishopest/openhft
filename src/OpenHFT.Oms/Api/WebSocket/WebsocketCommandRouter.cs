@@ -16,7 +16,6 @@ public class WebSocketCommandRouter : IWebSocketCommandRouter
     private readonly IReadOnlyDictionary<string, IWebSocketCommandHandler> _handlers;
     private readonly IWebSocketChannel _channel;
 
-
     public WebSocketCommandRouter(
         ILogger<WebSocketCommandRouter> logger,
         IEnumerable<IWebSocketCommandHandler> handlers,

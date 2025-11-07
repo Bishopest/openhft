@@ -2,7 +2,8 @@
   "oms": [
     {
       "name": "LOCAL",
-      "url": "http://localhost:5000"
+      "url": "ws://localhost:5001"
     }
-  ]
+  ],
+  "dataFolder": "/Users/jskim/workspace/openhft/data"
 }

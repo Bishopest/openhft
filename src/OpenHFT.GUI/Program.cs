@@ -1,6 +1,8 @@
 using OpenHFT.GUI.Components;
 using MudBlazor.Services;
 using OpenHFT.GUI.Services;
+using OpenHFT.Core.Interfaces;
+using OpenHFT.Core.Instruments;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +12,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddMudServices();
 builder.Services.AddScoped<IOrderBookManager, MockOrderBookManager>();
 builder.Services.AddSingleton<IOmsConnectorService, OmsConnectorService>();
+builder.Services.AddSingleton<IInstrumentRepository, InstrumentRepository>();
 builder.Configuration.AddJsonFile("config.json", optional: false, reloadOnChange: false);
 
 var app = builder.Build();

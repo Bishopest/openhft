@@ -1,16 +1,22 @@
 using System;
 using Microsoft.AspNetCore.Components;
+using MudBlazor;
 using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Instruments;
+using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.GUI.Services;
+using OpenHFT.Oms.Api.WebSocket;
+using OpenHFT.Quoting;
 
 namespace OpenHFT.GUI.Components.Pages;
 
 public partial class Home : ComponentBase, IDisposable
 {
     // --- Dependencies ---
+    [Inject]
+    private ISnackbar Snackbar { get; set; } = default!;
     [Inject]
     private IConfiguration Configuration { get; set; } = default!;
     [Inject]
@@ -77,6 +83,28 @@ public partial class Home : ComponentBase, IDisposable
         _currentStatus = newStatus;
         // Notify Blazor that the state has changed and the UI needs to re-render
         await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// This method is called when the QuotingParameterController's OnSubmit event is fired.
+    /// </summary>
+    private async Task HandleDeployStrategy(QuotingParameters parameters)
+    {
+        if (OmsConnector.CurrentStatus != ConnectionStatus.Connected)
+        {
+            Snackbar.Add("Cannot deploy strategy, not connected to OMS.", Severity.Error);
+            return;
+        }
+
+        Logger.LogInformationWithCaller($"Deploying strategy for Instrument ID: {parameters.InstrumentId}");
+
+        // Wrap the parameters in the command object
+        var command = new UpdateParametersCommand(parameters);
+
+        // Send the command via the service
+        await OmsConnector.SendCommandAsync(command);
+
+        Snackbar.Add($"Deploy command sent for Instrument ID {parameters.InstrumentId}.", Severity.Success);
     }
 
     // --- Cleanup ---
