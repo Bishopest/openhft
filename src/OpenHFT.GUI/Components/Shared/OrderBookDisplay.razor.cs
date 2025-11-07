@@ -23,7 +23,8 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     private IJSRuntime JSRuntime { get; set; } = default!;
 
     [Parameter]
-    public int DisplayDepth { get; set; } = 30; // Number of ticks to show above and below the center
+    public int DisplayDepth { get; set; } = 20; // Number of ticks to show above and below the center
+    private decimal PriceGrouping => DisplayInstrument is not null ? DisplayInstrument.TickSize.ToDecimal() * _groupingMultipliers[_selectedMultiplierIndex] : 0.01m;
 
     // --- Parameters ---
     // Data passed from parent components is defined here.
@@ -31,6 +32,23 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     public Instrument DisplayInstrument { get; set; }
     private string _priceFormat = "F2"; // Default format
     private string _quantityFormat = "N4"; // Default format
+
+
+    // --- SLIDER STATE MANAGEMENT ---
+    private readonly int[] _groupingMultipliers = { 1, 10, 50, 100 };
+    private int _selectedMultiplierIndex = 0;
+    private int SelectedMultiplierIndex
+    {
+        get => _selectedMultiplierIndex;
+        set
+        {
+            if (_selectedMultiplierIndex != value)
+            {
+                _selectedMultiplierIndex = value;
+                UpdateDisplayGrid();
+            }
+        }
+    }
 
     // --- STATE MANAGEMENT FOR AUTO-SCROLL ---
     private bool _shouldScrollToCenter = true; // Start with true for the initial load
@@ -72,35 +90,65 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     /// </summary>
     private void UpdateDisplayGrid()
     {
-        if (_currentOrderBook is null || DisplayInstrument is null) return;
+        if (_currentOrderBook is null || DisplayInstrument is null || PriceGrouping <= 0) return;
 
-        // 1. For fast lookups, convert the book's levels into dictionaries.
-        var bidLookup = _currentOrderBook.Bids.ToDictionary(l => l.Price, l => l.TotalQuantity);
-        var askLookup = _currentOrderBook.Asks.ToDictionary(l => l.Price, l => l.TotalQuantity);
+        // --- 1. Grouping and Aggregation Logic ---
+        var groupedBids = new Dictionary<decimal, Quantity>();
+        var groupedAsks = new Dictionary<decimal, Quantity>();
 
-        // 2. Determine the center price for our display grid.
-        var (bestBid, _) = _currentOrderBook.GetBestBid();
-        var (bestAsk, _) = _currentOrderBook.GetBestAsk();
+        // Group Bids by flooring the price
+        foreach (var level in _currentOrderBook.Bids)
+        {
+            var price = level.Price.ToDecimal();
+            var groupedPrice = Math.Floor(price / PriceGrouping) * PriceGrouping;
 
-        Price centerPrice;
-        if (bestAsk.ToTicks() > 0)
-            centerPrice = bestAsk; // Center around the best ask to keep it in view
-        else if (bestBid.ToTicks() > 0)
-            centerPrice = bestBid;
+            if (!groupedBids.TryAdd(groupedPrice, level.TotalQuantity))
+            {
+                groupedBids[groupedPrice] += level.TotalQuantity;
+            }
+        }
+
+        // Group Asks by ceiling the price
+        foreach (var level in _currentOrderBook.Asks)
+        {
+            var price = level.Price.ToDecimal();
+            var groupedPrice = Math.Ceiling(price / PriceGrouping) * PriceGrouping;
+
+            if (!groupedAsks.TryAdd(groupedPrice, level.TotalQuantity))
+            {
+                groupedAsks[groupedPrice] += level.TotalQuantity;
+            }
+        }
+
+        // --- 2. Determine Center Price from GROUPED data ---
+        var bestBidPrice = groupedBids.Keys.DefaultIfEmpty(0).Max();
+        var bestAskPrice = groupedAsks.Keys.DefaultIfEmpty(0).Min();
+
+        decimal centerPriceDecimal;
+        if (bestAskPrice > 0 && bestBidPrice > 0)
+        {
+            centerPriceDecimal = (bestBidPrice + bestAskPrice) / 2;
+        }
         else
-            return; // No book data to display
+        {
+            centerPriceDecimal = bestAskPrice > 0 ? bestAskPrice : bestBidPrice;
+        }
+        if (centerPriceDecimal <= 0) return; // No valid data to display
 
-        var tickSize = DisplayInstrument.TickSize;
+        // --- 3. Build the Display Grid using PriceGrouping as the step ---
         var newLevels = new List<DisplayLevel>();
+        var groupingAsPrice = Price.FromDecimal(PriceGrouping);
 
-        // 3. Build the grid from top (highest price) to bottom (lowest price).
+        // Round the center price to the nearest grouping interval to keep the grid stable
+        var centerPrice = Price.FromDecimal(Math.Round(centerPriceDecimal / PriceGrouping) * PriceGrouping);
+
         for (int i = DisplayDepth; i >= -DisplayDepth; i--)
         {
-            var currentPrice = Price.FromTicks(centerPrice.ToTicks() + (tickSize.ToTicks() * i));
+            var currentPrice = Price.FromTicks(centerPrice.ToTicks() + (groupingAsPrice.ToTicks() * i));
+            var currentPriceDecimal = currentPrice.ToDecimal();
 
-            // Find matching quantities from our lookups
-            bidLookup.TryGetValue(currentPrice, out var bidQty);
-            askLookup.TryGetValue(currentPrice, out var askQty);
+            groupedBids.TryGetValue(currentPriceDecimal, out var bidQty);
+            groupedAsks.TryGetValue(currentPriceDecimal, out var askQty);
 
             newLevels.Add(new DisplayLevel(currentPrice, bidQty.ToTicks() > 0 ? bidQty : null, askQty.ToTicks() > 0 ? askQty : null));
         }
@@ -122,15 +170,15 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
             {
                 _previousInstrumentId = DisplayInstrument.InstrumentId;
                 _shouldScrollToCenter = true; // Set the flag to scroll on next render
-
+                _selectedMultiplierIndex = 0;
                 // Clear old data immediately to show the "Awaiting data..." message
                 // This prevents showing stale data from the previous instrument.
                 _currentOrderBook = null;
                 _displayLevels.Clear();
             }
             // Calculate and store the format strings based on the instrument's properties.
-            _priceFormat = $"F{GetDecimalPlaces(DisplayInstrument.TickSize.ToDecimal())}";
-            _quantityFormat = $"N{GetDecimalPlaces(DisplayInstrument.LotSize.ToDecimal())}";
+            _priceFormat = $"F{GetDecimalPlaces(PriceGrouping)}";
+            _quantityFormat = $"N{GetDecimalPlaces(PriceGrouping)}";
         }
     }
 

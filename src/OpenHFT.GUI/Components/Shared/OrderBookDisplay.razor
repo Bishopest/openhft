@@ -8,6 +8,16 @@
     <div class="px-2 pt-2">
         <MudText Typo="Typo.h6" Align="Align.Center" GutterBottom="true">@DisplayInstrument.Symbol</MudText>
     </div>
+    <div class="px-4 pb-2">
+    
+        <MudText Typo="Typo.caption">Grouping: @PriceGrouping.ToString(_priceFormat)</MudText>
+        <MudSlider @bind-Value="SelectedMultiplierIndex" 
+                   Min="0" 
+                   Max="@(_groupingMultipliers.Length - 1)" 
+                   Step="1">
+            TickSize x @_groupingMultipliers[SelectedMultiplierIndex]
+        </MudSlider>
+    </div> 
     
     @if (_displayLevels.Any())
     {
