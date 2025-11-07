@@ -15,6 +15,8 @@ namespace OpenHFT.Book.Core;
 /// </summary>
 public class OrderBook
 {
+    private readonly object _lock = new();
+
     private readonly ILogger<OrderBook>? _logger;
     private readonly Instrument _instrument;
     private readonly BookSide _bids;
@@ -36,12 +38,30 @@ public class OrderBook
     /// <summary>
     /// Provides read-only access to all price levels on the bid side, sorted best to worst.
     /// </summary>
-    public IEnumerable<PriceLevel> Bids => _bids.GetAllLevels();
-
+    public IEnumerable<PriceLevel> Bids
+    {
+        get
+        {
+            lock (_lock)
+            {
+                // Return a COPY of the data, not the live collection.
+                return _bids.GetAllLevels().ToList();
+            }
+        }
+    }
     /// <summary>
     /// Provides read-only access to all price levels on the ask side, sorted best to worst.
     /// </summary>
-    public IEnumerable<PriceLevel> Asks => _asks.GetAllLevels();
+    public IEnumerable<PriceLevel> Asks
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _asks.GetAllLevels().ToList();
+            }
+        }
+    }
 
     public OrderBook(Instrument instrument, ILogger<OrderBook>? logger = null, bool enableL3 = false)
     {
@@ -73,57 +93,61 @@ public class OrderBook
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool ApplyEvent(in MarketDataEvent mdEvent)
     {
-        // Validate symbol
-        if (mdEvent.InstrumentId != InstrumentId)
+        lock (_lock)
         {
-            _logger?.LogWarningWithCaller($"Symbol mismatch: expected {Symbol}, got {mdEvent.InstrumentId}");
-            return false;
-        }
 
-        // Check sequence order (basic gap detection)
-        if (_lastSequence > 0 && mdEvent.Sequence < _lastSequence)
-        {
-            _logger?.LogWarningWithCaller($"Out of order sequence for {Symbol}: current={_lastSequence}, received={mdEvent.Sequence}");
-            return false;
-        }
-
-        // Update book state
-        _lastSequence = mdEvent.Sequence;
-        _lastUpdateTimestamp = mdEvent.Timestamp;
-        _updateCount++;
-
-        // Apply the event based on its kind
-        // The new MarketDataEvent is a batch, so we loop through the updates.
-        switch (mdEvent.Kind)
-        {
-            case EventKind.Trade:
-                ProcessTrade(in mdEvent);
-                return true;
-
-            case EventKind.Snapshot:
-                ProcessSnapshot(in mdEvent);
-                return true;
-
-            // DepthUpdate, Add, Update, Delete are all handled as incremental updates.
-            case EventKind.Add:
-            case EventKind.Update:
-                for (int i = 0; i < mdEvent.UpdateCount; i++)
-                {
-                    var update = mdEvent.Updates[i];
-                    UpdateLevel(update.Side, Price.FromDecimal(update.PriceTicks), Quantity.FromDecimal(update.Quantity), mdEvent.Sequence, mdEvent.Timestamp);
-                }
-                return true;
-            case EventKind.Delete:
-                for (int i = 0; i < mdEvent.UpdateCount; i++)
-                {
-                    var update = mdEvent.Updates[i];
-                    UpdateLevel(update.Side, Price.FromDecimal(update.PriceTicks), Quantity.FromDecimal(0), mdEvent.Sequence, mdEvent.Timestamp);
-                }
-                return true;
-
-            default:
-                _logger?.LogWarningWithCaller($"Unknown event kind: {mdEvent.Kind}");
+            // Validate symbol
+            if (mdEvent.InstrumentId != InstrumentId)
+            {
+                _logger?.LogWarningWithCaller($"Symbol mismatch: expected {Symbol}, got {mdEvent.InstrumentId}");
                 return false;
+            }
+
+            // Check sequence order (basic gap detection)
+            if (_lastSequence > 0 && mdEvent.Sequence < _lastSequence)
+            {
+                _logger?.LogWarningWithCaller($"Out of order sequence for {Symbol}: current={_lastSequence}, received={mdEvent.Sequence}");
+                return false;
+            }
+
+            // Update book state
+            _lastSequence = mdEvent.Sequence;
+            _lastUpdateTimestamp = mdEvent.Timestamp;
+            _updateCount++;
+
+            // Apply the event based on its kind
+            // The new MarketDataEvent is a batch, so we loop through the updates.
+            switch (mdEvent.Kind)
+            {
+                case EventKind.Trade:
+                    ProcessTrade(in mdEvent);
+                    return true;
+
+                case EventKind.Snapshot:
+                    ProcessSnapshot(in mdEvent);
+                    return true;
+
+                // DepthUpdate, Add, Update, Delete are all handled as incremental updates.
+                case EventKind.Add:
+                case EventKind.Update:
+                    for (int i = 0; i < mdEvent.UpdateCount; i++)
+                    {
+                        var update = mdEvent.Updates[i];
+                        UpdateLevel(update.Side, Price.FromDecimal(update.PriceTicks), Quantity.FromDecimal(update.Quantity), mdEvent.Sequence, mdEvent.Timestamp);
+                    }
+                    return true;
+                case EventKind.Delete:
+                    for (int i = 0; i < mdEvent.UpdateCount; i++)
+                    {
+                        var update = mdEvent.Updates[i];
+                        UpdateLevel(update.Side, Price.FromDecimal(update.PriceTicks), Quantity.FromDecimal(0), mdEvent.Sequence, mdEvent.Timestamp);
+                    }
+                    return true;
+
+                default:
+                    _logger?.LogWarningWithCaller($"Unknown event kind: {mdEvent.Kind}");
+                    return false;
+            }
         }
     }
 
@@ -171,8 +195,11 @@ public class OrderBook
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public (Price price, Quantity quantity) GetBestBid()
     {
-        var bestBid = _bids.GetBestLevel();
-        return bestBid != null ? (bestBid.Price, bestBid.TotalQuantity) : (Price.FromTicks(0), Quantity.FromTicks(0));
+        lock (_lock)
+        {
+            var bestBid = _bids.GetBestLevel();
+            return bestBid != null ? (bestBid.Price, bestBid.TotalQuantity) : (Price.FromTicks(0), Quantity.FromTicks(0));
+        }
     }
 
     /// <summary>
@@ -181,8 +208,11 @@ public class OrderBook
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public (Price price, Quantity quantity) GetBestAsk()
     {
-        var bestAsk = _asks.GetBestLevel();
-        return bestAsk != null ? (bestAsk.Price, bestAsk.TotalQuantity) : (Price.FromTicks(0), Quantity.FromTicks(0));
+        lock (_lock)
+        {
+            var bestAsk = _asks.GetBestLevel();
+            return bestAsk != null ? (bestAsk.Price, bestAsk.TotalQuantity) : (Price.FromTicks(0), Quantity.FromTicks(0));
+        }
     }
 
     /// <summary>
@@ -270,22 +300,25 @@ public class OrderBook
     /// </summary>
     public BookSnapshot GetSnapshot(int levels = 10)
     {
-        var bidLevels = _bids.GetTopLevels(levels).Select(l =>
-            new BookLevel(l.Price.ToTicks(), l.TotalQuantity.ToTicks(), l.OrderCount)).ToArray();
-
-        var askLevels = _asks.GetTopLevels(levels).Select(l =>
-            new BookLevel(l.Price.ToTicks(), l.TotalQuantity.ToTicks(), l.OrderCount)).ToArray();
-
-        return new BookSnapshot
+        lock (_lock)
         {
-            Symbol = _instrument.Symbol,
-            Timestamp = _lastUpdateTimestamp,
-            Sequence = _lastSequence,
-            Bids = bidLevels,
-            Asks = askLevels,
-            UpdateCount = _updateCount,
-            TradeCount = _tradeCount
-        };
+            var bidLevels = _bids.GetTopLevels(levels).Select(l =>
+                new BookLevel(l.Price.ToTicks(), l.TotalQuantity.ToTicks(), l.OrderCount)).ToArray();
+
+            var askLevels = _asks.GetTopLevels(levels).Select(l =>
+                new BookLevel(l.Price.ToTicks(), l.TotalQuantity.ToTicks(), l.OrderCount)).ToArray();
+
+            return new BookSnapshot
+            {
+                Symbol = _instrument.Symbol,
+                Timestamp = _lastUpdateTimestamp,
+                Sequence = _lastSequence,
+                Bids = bidLevels,
+                Asks = askLevels,
+                UpdateCount = _updateCount,
+                TradeCount = _tradeCount
+            };
+        }
     }
 
     /// <summary>

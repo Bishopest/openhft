@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Microsoft.AspNetCore.Components;
 using OpenHFT.Book.Core;
 using OpenHFT.Core.Instruments;
@@ -25,6 +26,8 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     // Data passed from parent components is defined here.
     [Parameter, EditorRequired]
     public Instrument DisplayInstrument { get; set; }
+    private string _priceFormat = "F2"; // Default format
+    private string _quantityFormat = "N4"; // Default format
 
     // --- State ---
     // Private fields and properties that hold the component's state.
@@ -41,7 +44,7 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     }
 
     // --- Event Handlers ---
-    private async void HandleOrderBookUpdate(OrderBook snapshot)
+    private async void HandleOrderBookUpdate(object? sender, OrderBook snapshot)
     {
         if (_isDisposed) return;
 
@@ -95,6 +98,35 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
         }
 
         _displayLevels = newLevels;
+    }
+
+    /// <summary>
+    /// This method is called when parameters are set. It's the perfect place
+    /// to calculate derived state, like our format strings.
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        if (DisplayInstrument != null)
+        {
+            // Calculate and store the format strings based on the instrument's properties.
+            _priceFormat = $"F{GetDecimalPlaces(DisplayInstrument.TickSize.ToDecimal())}";
+            _quantityFormat = $"N{GetDecimalPlaces(DisplayInstrument.LotSize.ToDecimal())}";
+        }
+    }
+
+    /// <summary>
+    /// Calculates the number of decimal places in a decimal value.
+    /// </summary>
+    private static int GetDecimalPlaces(decimal n)
+    {
+        // This is a robust way to count decimal places, handling different cultures.
+        string s = n.ToString(CultureInfo.InvariantCulture);
+        int decimalPointIndex = s.IndexOf('.');
+        if (decimalPointIndex == -1)
+        {
+            return 0;
+        }
+        return s.Length - decimalPointIndex - 1;
     }
 
     // --- Cleanup ---

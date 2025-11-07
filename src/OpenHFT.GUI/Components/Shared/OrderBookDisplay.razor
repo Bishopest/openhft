@@ -11,6 +11,7 @@
     
     @if (_displayLevels.Any())
     {
+        
         <div class="table-container">
             <MudSimpleTable Dense="true" Hover="true" Class="price-ladder">
                 <thead>
@@ -23,41 +24,44 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var level in _displayLevels)
-                    {
-                        var (bestBid, _) = _currentOrderBook.GetBestBid();
-                        var (bestAsk, _) = _currentOrderBook.GetBestAsk();
-
-                        // Highlight the best bid and ask rows for clarity
-                        string rowStyle = "";
-                        if (level.Price == bestBid) rowStyle = "background-color: rgba(0, 128, 0, 0.15);";
-                        if (level.Price == bestAsk) rowStyle = "background-color: rgba(255, 0, 0, 0.15);";
+                    @if(_currentOrderBook is not null) {
                         
-                        // Highlight the spread area
-                        if (level.Price < bestAsk && level.Price > bestBid) rowStyle = "background-color: rgba(245, 245, 220, 0.5);";
+                        @foreach (var level in _displayLevels)
+                        {
+                            var (bestBid, _) = _currentOrderBook.GetBestBid();
+                            var (bestAsk, _) = _currentOrderBook.GetBestAsk();
 
-                        <tr style="@rowStyle">
-                            <!-- Column 1: My Quote (Bid) - Empty for now -->
-                            <td></td>
+                            // Highlight the best bid and ask rows for clarity
+                            string rowStyle = "";
+                            if (level.Price == bestBid) rowStyle = "background-color: rgba(0, 128, 0, 0.15);";
+                            if (level.Price == bestAsk) rowStyle = "background-color: rgba(255, 0, 0, 0.15);";
+                            
+                            // Highlight the spread area
+                            if (level.Price < bestAsk && level.Price > bestBid) rowStyle = "background-color: rgba(245, 245, 220, 0.5);";
 
-                            <!-- Column 2: Ask Size -->
-                            <td style="text-align: right; color: #E57373;">
-                                @(level.AskQuantity?.ToDecimal().ToString("N4"))
-                            </td>
+                            <tr style="@rowStyle">
+                                <!-- Column 1: My Quote (Bid) - Empty for now -->
+                                <td></td>
 
-                            <!-- Column 3: Price (Center) -->
-                            <td style="font-weight: bold; text-align: center; border-left: 1px solid var(--mud-palette-divider); border-right: 1px solid var(--mud-palette-divider);">
-                                @level.Price.ToDecimal().ToString("F2")
-                            </td>
+                                <!-- Column 2: Ask Size -->
+                                <td style="text-align: right; color: #E57373;">
+                                    @(level.AskQuantity?.ToDecimal().ToString(_quantityFormat))
+                                </td>
 
-                            <!-- Column 4: Bid Size -->
-                            <td style="text-align: left; color: #81C784;">
-                                @(level.BidQuantity?.ToDecimal().ToString("N4"))
-                            </td>
+                                <!-- Column 3: Price (Center) -->
+                                <td style="font-weight: bold; text-align: center; border-left: 1px solid var(--mud-palette-divider); border-right: 1px solid var(--mud-palette-divider);">
+                                    @level.Price.ToDecimal().ToString(_priceFormat)
+                                </td>
 
-                            <!-- Column 5: My Quote (Ask) - Empty for now -->
-                            <td></td>
-                        </tr>
+                                <!-- Column 4: Bid Size -->
+                                <td style="text-align: left; color: #81C784;">
+                                    @(level.BidQuantity?.ToDecimal().ToString(_quantityFormat))
+                                </td>
+
+                                <!-- Column 5: My Quote (Ask) - Empty for now -->
+                                <td></td>
+                            </tr>
+                        }
                     }
                 </tbody>
             </MudSimpleTable>
