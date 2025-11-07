@@ -120,40 +120,58 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
             }
         }
 
-        // --- 2. Determine Center Price from GROUPED data ---
-        var bestBidPrice = groupedBids.Keys.DefaultIfEmpty(0).Max();
-        var bestAskPrice = groupedAsks.Keys.DefaultIfEmpty(0).Min();
+        // --- 2. Find Best Bid/Ask from GROUPED data ---
+        var bestBidPriceDecimal = groupedBids.Keys.DefaultIfEmpty(0).Max();
+        var bestAskPriceDecimal = groupedAsks.Keys.DefaultIfEmpty(0).Min();
 
-        Price centerPriceDecimal;
-        if (bestAskPrice > 0)
+        // If there's no data, clear the display.
+        if (bestBidPriceDecimal <= 0 && bestAskPriceDecimal <= 0)
         {
-            centerPriceDecimal = Price.FromDecimal(bestAskPrice);
+            _displayLevels = new List<DisplayLevel>();
+            return;
         }
-        else
-        {
-            centerPriceDecimal = Price.FromDecimal(bestBidPrice);
-        }
-        if (centerPriceDecimal.ToDecimal() <= 0) return; // No valid data to display
 
-        // --- 3. Build the Display Grid using PriceGrouping as the step ---
+        // --- 3. Build Ask and Bid Levels Separately ---
         var newLevels = new List<DisplayLevel>();
         var groupingAsPrice = Price.FromDecimal(PriceGrouping);
 
-        // Round the center price to the nearest grouping interval to keep the grid stable
-        // var centerPrice = Price.FromDecimal(Math.Round(centerPriceDecimal / PriceGrouping) * PriceGrouping);
-
-        for (int i = DisplayDepth; i >= -DisplayDepth; i--)
+        // Build Ask side: Start from Best Ask and go UP
+        if (bestAskPriceDecimal > 0)
         {
-            var currentPrice = Price.FromTicks(centerPriceDecimal.ToTicks() + (groupingAsPrice.ToTicks() * i));
-            var currentPriceDecimal = currentPrice.ToDecimal();
+            var startAskPrice = Price.FromDecimal(bestAskPriceDecimal);
+            for (int i = 0; i < DisplayDepth; i++)
+            {
+                var currentPrice = Price.FromTicks(startAskPrice.ToTicks() + (groupingAsPrice.ToTicks() * i));
+                var currentPriceDecimal = currentPrice.ToDecimal();
 
-            groupedBids.TryGetValue(currentPriceDecimal, out var bidQty);
-            groupedAsks.TryGetValue(currentPriceDecimal, out var askQty);
+                groupedAsks.TryGetValue(currentPriceDecimal, out var askQty);
 
-            newLevels.Add(new DisplayLevel(currentPrice, bidQty.ToTicks() > 0 ? bidQty : null, askQty.ToTicks() > 0 ? askQty : null));
+                newLevels.Add(new DisplayLevel(currentPrice, null, askQty.ToTicks() > 0 ? askQty : null));
+            }
         }
 
-        _displayLevels = newLevels;
+        // Build Bid side: Start from Best Bid and go DOWN
+        if (bestBidPriceDecimal > 0)
+        {
+            var startBidPrice = Price.FromDecimal(bestBidPriceDecimal);
+            for (int i = 0; i < DisplayDepth; i++)
+            {
+                var currentPrice = Price.FromTicks(startBidPrice.ToTicks() - (groupingAsPrice.ToTicks() * i));
+                var currentPriceDecimal = currentPrice.ToDecimal();
+
+                groupedBids.TryGetValue(currentPriceDecimal, out var bidQty);
+
+                // Avoid adding duplicates if spread is zero or crossed
+                if (!newLevels.Any(l => l.Price == currentPrice))
+                {
+                    newLevels.Add(new DisplayLevel(currentPrice, bidQty.ToTicks() > 0 ? bidQty : null, null));
+                }
+            }
+        }
+
+        // --- 4. Sort and assign the final list ---
+        // Sort all collected levels by price descending.
+        _displayLevels = newLevels.OrderByDescending(l => l.Price).ToList();
     }
 
     /// <summary>
