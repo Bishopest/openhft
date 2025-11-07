@@ -8,6 +8,7 @@ using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Exceptions;
 using OpenHFT.Feed.Interfaces;
+using OpenHFT.Feed.Models;
 
 namespace OpenHFT.Feed.Adapters;
 
@@ -43,6 +44,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
     public bool IsConnected => _webSocket?.State == WebSocketState.Open;
     public string Status => _webSocket?.State.ToString() ?? "Disconnected";
+    private readonly Dictionary<Instrument, HashSet<int>> _subscriptions = new();
 
     public event EventHandler<ConnectionStateChangedEventArgs>? ConnectionStateChanged;
     public event EventHandler<FeedErrorEventArgs>? Error;
@@ -136,51 +138,78 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         _logger.LogInformationWithCaller($"Successfully disconnected from {SourceExchange} WebSocket.");
     }
 
-    public async Task SubscribeAsync(IEnumerable<Instrument> symbols, CancellationToken cancellationToken = default)
+    public async Task SubscribeAsync(IEnumerable<Instrument> instruments, IEnumerable<ExchangeTopic> topics, CancellationToken cancellationToken = default)
     {
         if (!IsConnected)
             throw new InvalidOperationException("Cannot subscribe when not connected.");
 
-        var symbolsToSubscribe = new List<Instrument>();
+        var subscriptionsToAdd = new Dictionary<Instrument, List<ExchangeTopic>>();
+        var topicList = topics.ToList();
         lock (_subscriptionLock)
         {
-            foreach (var symbol in symbols)
+            foreach (var instrument in instruments)
             {
-                if (_subscribedInsts.Add(symbol))
+                if (!_subscriptions.TryGetValue(instrument, out var subscribedTopics))
                 {
-                    symbolsToSubscribe.Add(symbol);
+                    subscribedTopics = new HashSet<int>();
+                    _subscriptions[instrument] = subscribedTopics;
+                }
+
+                foreach (var topic in topicList)
+                {
+                    if (subscribedTopics.Add(topic.TopicId))
+                    {
+                        if (!subscriptionsToAdd.ContainsKey(instrument))
+                        {
+                            subscriptionsToAdd[instrument] = new List<ExchangeTopic>();
+                        }
+                        subscriptionsToAdd[instrument].Add(topic);
+                    }
                 }
             }
         }
 
-        if (symbolsToSubscribe.Any())
+        if (subscriptionsToAdd.Any())
         {
-            _logger.LogInformationWithCaller($"Subscribing to {symbolsToSubscribe.Count} new symbols on {SourceExchange}: {string.Join(", ", symbolsToSubscribe.Select(s => s.Symbol))}");
-            await DoSubscribeAsync(symbolsToSubscribe, cancellationToken);
+            _logger.LogInformationWithCaller($"Subscribing to {subscriptionsToAdd.Values.Sum(v => v.Count)} new topics across {subscriptionsToAdd.Count} instruments on {SourceExchange}.");
+            await DoSubscribeAsync(subscriptionsToAdd, cancellationToken);
         }
     }
 
-    public async Task UnsubscribeAsync(IEnumerable<Instrument> symbols, CancellationToken cancellationToken = default)
+    public async Task UnsubscribeAsync(IEnumerable<Instrument> instruments, IEnumerable<ExchangeTopic> topics, CancellationToken cancellationToken = default)
     {
         if (!IsConnected)
             throw new InvalidOperationException("Cannot unsubscribe when not connected.");
 
-        var symbolsToUnsubscribe = new List<Instrument>();
+        var subscriptionsToRemove = new Dictionary<Instrument, List<ExchangeTopic>>();
+        var topicList = topics.ToList();
         lock (_subscriptionLock)
         {
-            foreach (var symbol in symbols)
+            foreach (var instrument in instruments)
             {
-                if (_subscribedInsts.Remove(symbol))
+                if (!_subscriptions.TryGetValue(instrument, out var subscribedTopics))
                 {
-                    symbolsToUnsubscribe.Add(symbol);
+                    continue;
+                }
+
+                foreach (var topic in topicList)
+                {
+                    if (subscribedTopics.Remove(topic.TopicId))
+                    {
+                        if (!subscriptionsToRemove.ContainsKey(instrument))
+                        {
+                            subscriptionsToRemove[instrument] = new List<ExchangeTopic>();
+                        }
+                        subscriptionsToRemove[instrument].Add(topic);
+                    }
                 }
             }
         }
 
-        if (symbolsToUnsubscribe.Any())
+        if (subscriptionsToRemove.Any())
         {
-            _logger.LogInformationWithCaller($"Unsubscribing from {symbolsToUnsubscribe.Count} symbols on {SourceExchange}: {string.Join(", ", symbolsToUnsubscribe.Select(k => k.Symbol))}");
-            await DoUnsubscribeAsync(symbolsToUnsubscribe, cancellationToken);
+            _logger.LogInformationWithCaller($"Unsubscribing to {subscriptionsToRemove.Values.Sum(v => v.Count)} new topics across {subscriptionsToRemove.Count} instruments on {SourceExchange}.");
+            await DoUnsubscribeAsync(subscriptionsToRemove, cancellationToken);
         }
     }
 
@@ -497,12 +526,12 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     /// <summary>
     /// Sends subscription messages to the WebSocket for new symbols.
     /// </summary>
-    protected abstract Task DoSubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken);
+    protected abstract Task DoSubscribeAsync(IDictionary<Instrument, List<ExchangeTopic>> subscriptions, CancellationToken cancellationToken);
 
     /// <summary>
     /// Sends unsubscription messages to the WebSocket.
     /// </summary>
-    protected abstract Task DoUnsubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken);
+    protected abstract Task DoUnsubscribeAsync(IDictionary<Instrument, List<ExchangeTopic>> subscriptions, CancellationToken cancellationToken);
 
     /// <summary>
     /// Allows subclasses to apply specific WebSocket configurations.

@@ -1,6 +1,7 @@
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
 using OpenHFT.Feed.Exceptions;
+using OpenHFT.Feed.Models;
 
 namespace OpenHFT.Feed.Interfaces;
 
@@ -22,12 +23,11 @@ public interface IFeedAdapter : IDisposable
     /// <summary>
     /// Subscribe to market data for specific instruments
     /// </summary>
-    Task SubscribeAsync(IEnumerable<Instrument> instruments, CancellationToken cancellationToken = default);
-
+    Task SubscribeAsync(IEnumerable<Instrument> instruments, IEnumerable<ExchangeTopic> topics, CancellationToken cancellationToken = default);
     /// <summary>
     /// Unsubscribe from market data for specific instruments
     /// </summary>
-    Task UnsubscribeAsync(IEnumerable<Instrument> instruments, CancellationToken cancellationToken = default);
+    Task UnsubscribeAsync(IEnumerable<Instrument> instruments, IEnumerable<ExchangeTopic> topics, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Authenticates the WebSocket connection to subscribe to private user data streams.

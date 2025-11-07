@@ -292,10 +292,16 @@ public class BinanceAdapter : BaseAuthFeedAdapter
         return reader.ReadToEnd();
     }
 
-    protected override Task DoSubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
+    protected override Task DoSubscribeAsync(IDictionary<Instrument, List<ExchangeTopic>> subscriptions, CancellationToken cancellationToken)
     {
-        var allStreams = insts
-            .SelectMany(inst => BinanceTopic.GetAllMarketTopics().Select(topic => topic.GetStreamName(inst.Symbol)))
+        var allStreams = subscriptions
+            .SelectMany(kvp =>
+            {
+                var instrument = kvp.Key;
+                var topics = kvp.Value;
+                return topics.Select(topic => topic.GetStreamName(instrument.Symbol));
+            })
+            .Distinct()
             .ToArray();
 
         if (!allStreams.Any())
@@ -314,10 +320,16 @@ public class BinanceAdapter : BaseAuthFeedAdapter
         return SendMessageAsync(subscribeMessage, cancellationToken);
     }
 
-    protected override Task DoUnsubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
+    protected override Task DoUnsubscribeAsync(IDictionary<Instrument, List<ExchangeTopic>> subscriptions, CancellationToken cancellationToken)
     {
-        var allStreams = insts
-            .SelectMany(inst => BinanceTopic.GetAllMarketTopics().Select(topic => topic.GetStreamName(inst.Symbol)))
+        var allStreams = subscriptions
+            .SelectMany(kvp =>
+            {
+                var instrument = kvp.Key;
+                var topics = kvp.Value;
+                return topics.Select(topic => topic.GetStreamName(instrument.Symbol));
+            })
+            .Distinct() // 중복 스트림 이름 제거
             .ToArray();
 
         if (!allStreams.Any())

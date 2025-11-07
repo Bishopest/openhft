@@ -76,21 +76,27 @@ public class BitmexAdapter : BaseAuthFeedAdapter
         return SendMessageAsync(message, cancellationToken);
     }
 
-    protected override Task DoSubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
+    protected override Task DoSubscribeAsync(IDictionary<Instrument, List<ExchangeTopic>> subscriptions, CancellationToken cancellationToken)
     {
-        return SendSubscriptionRequest("subscribe", insts, cancellationToken);
+        return SendSubscriptionRequest("subscribe", subscriptions, cancellationToken);
     }
 
-    protected override Task DoUnsubscribeAsync(IEnumerable<Instrument> insts, CancellationToken cancellationToken)
+    protected override Task DoUnsubscribeAsync(IDictionary<Instrument, List<ExchangeTopic>> subscriptions, CancellationToken cancellationToken)
     {
-        return SendSubscriptionRequest("unsubscribe", insts, cancellationToken);
+        return SendSubscriptionRequest("unsubscribe", subscriptions, cancellationToken);
     }
 
-    private Task SendSubscriptionRequest(string operation, IEnumerable<Instrument> insts, CancellationToken cancellationToken)
+    private Task SendSubscriptionRequest(string operation, IDictionary<Instrument, List<ExchangeTopic>> subscriptions, CancellationToken cancellationToken)
     {
-        var allStreams = insts
-            .SelectMany(inst => BitmexTopic.GetAllMarketTopics().Select(topic => topic.GetStreamName(inst.Symbol)))
-            .ToArray();
+        var allStreams = subscriptions
+             .SelectMany(kvp =>
+             {
+                 var instrument = kvp.Key;
+                 var topics = kvp.Value;
+                 return topics.Select(topic => topic.GetStreamName(instrument.Symbol));
+             })
+             .Distinct()
+             .ToArray();
 
         if (!allStreams.Any())
         {

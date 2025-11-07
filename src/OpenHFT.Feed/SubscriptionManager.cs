@@ -93,8 +93,9 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
             var instrumentsToSubscribe = entry.Value;
             if (instrumentsToSubscribe.Any())
             {
-                _logger.LogInformationWithCaller($"Requesting subscription of {instrumentsToSubscribe.Count} instruments on adapter {adapterKey}");
-                subscribeTasks.Add(adapter.SubscribeAsync(instrumentsToSubscribe, cancellationToken));
+                var topicsToSubscribe = GetDefaultTopicsForExchange(adapterKey.Item1);
+                _logger.LogInformationWithCaller($"Requesting subscription of {instrumentsToSubscribe.Count} instruments to {topicsToSubscribe.Count()} topics on adapter {adapterKey}");
+                subscribeTasks.Add(adapter.SubscribeAsync(instrumentsToSubscribe, topicsToSubscribe, cancellationToken));
             }
         }
 
@@ -153,8 +154,9 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
 
         if (instrumentsToSubscribe.Any())
         {
-            _logger.LogInformationWithCaller($"Requesting re-subscription of {instrumentsToSubscribe.Count} instruments on adapter {adapter.SourceExchange}/{adapter.ProdType}");
-            await adapter.SubscribeAsync(instrumentsToSubscribe, cancellationToken);
+            var topicsToSubscribe = GetDefaultTopicsForExchange(adapter.SourceExchange);
+            _logger.LogInformationWithCaller($"Requesting re-subscription of {instrumentsToSubscribe.Count} instruments to {topicsToSubscribe.Count()} topics on adapter {adapter.SourceExchange}/{adapter.ProdType}");
+            await adapter.SubscribeAsync(instrumentsToSubscribe, topicsToSubscribe, cancellationToken);
         }
     }
 
@@ -198,6 +200,20 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
             "dated" => ProductType.DatedFuture,
             "option" => ProductType.Option,
             _ => ParseEnum<ProductType>(value) // Fallback for direct matches
+        };
+    }
+
+    /// <summary>
+    /// A helper method to get the default market data topics for a given exchange.
+    /// </summary>
+    private IEnumerable<ExchangeTopic> GetDefaultTopicsForExchange(ExchangeEnum exchange)
+    {
+        return exchange switch
+        {
+            ExchangeEnum.BINANCE => BinanceTopic.GetAllMarketTopics(),
+            ExchangeEnum.BITMEX => BitmexTopic.GetAllMarketTopics(),
+            // Add other exchanges here
+            _ => Enumerable.Empty<ExchangeTopic>()
         };
     }
 
