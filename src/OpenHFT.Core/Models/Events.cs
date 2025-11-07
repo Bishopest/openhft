@@ -153,31 +153,3 @@ public readonly struct OrderAck
     public override string ToString() =>
         $"Ack[{ClientOrderId}→{ExchangeOrderId}] {Kind} @{TimestampOut}μs";
 }
-
-/// <summary>
-/// Fill event from matching engine
-/// </summary>
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
-public readonly struct FillEvent
-{
-    public readonly long ClientOrderId;
-    public readonly long ExchangeOrderId;
-    public readonly long PriceTicks;
-    public readonly long Quantity;
-    public readonly long TimestampFill;
-    public readonly bool IsFullFill;
-
-    public FillEvent(long clientOrderId, long exchangeOrderId, long priceTicks,
-                    long quantity, long timestampFill, bool isFullFill)
-    {
-        ClientOrderId = clientOrderId;
-        ExchangeOrderId = exchangeOrderId;
-        PriceTicks = priceTicks;
-        Quantity = quantity;
-        TimestampFill = timestampFill;
-        IsFullFill = isFullFill;
-    }
-
-    public override string ToString() =>
-        $"Fill[{ClientOrderId}] {PriceTicks}@{Quantity} @{TimestampFill}μs {(IsFullFill ? "FULL" : "PARTIAL")}";
-}

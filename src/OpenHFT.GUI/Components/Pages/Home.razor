@@ -22,7 +22,7 @@
     <OmsConnectionManager Servers="_omsServers" CurrentStatus="_currentStatus" OnConnect="HandleConnectRequest"
         OnDisconnect="HandleDisconnectRequest" />
 
-    @if (_testInstrument is not null)
+    @if (_displayInstrument is not null)
     {
         @*
             CHANGE 2: This MudGrid also becomes a growing flex item.
@@ -31,10 +31,11 @@
         *@
         <MudGrid Spacing="0">
             <MudItem xs="12" md="6">
-                <OrderBookDisplay DisplayInstrument="@_testInstrument" />
+                <OrderBookDisplay DisplayInstrument="@_displayInstrument" />
             </MudItem>
             <MudItem xs="12" md="6">
-                <QuotingParametersController OnSubmit="HandleDeployStrategy" />
+                <QuotingParametersController OnSubmit="HandleDeployStrategy"
+                    OnInstrumentSelected="HandleInstrumentSelected" />
             </MudItem>
         </MudGrid>
     }

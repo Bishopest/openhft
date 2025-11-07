@@ -1,4 +1,16 @@
 {
+  "feed": [
+    {
+      "exchange": "binance",
+      "productType" : "perpetualfuture",
+      "executionMode": "live"
+    },
+    {
+      "exchange": "bitmex",
+      "productType" : "perpetualfuture",
+      "executionMode": "live"
+    }
+  ],
   "oms": [
     {
       "name": "LOCAL",

@@ -8,9 +8,10 @@ namespace OpenHFT.GUI.Services;
 
 public class MockOrderBookManager : IOrderBookManager
 {
-    public event Action<OrderBook>? OnOrderBookUpdated;
+    public event EventHandler<OrderBook>? OnOrderBookUpdated;
 
     private readonly List<int> _subscribedIds = new();
+    private OrderBook? _currentOrderBook;
 
     public Task ConnectAndSubscribeAsync(int instrumentId)
     {
@@ -58,8 +59,8 @@ public class MockOrderBookManager : IOrderBookManager
 
             mockOrderBook.ApplyEvent(marketDataEvent);
         }
-
-        OnOrderBookUpdated?.Invoke(mockOrderBook);
+        _currentOrderBook = mockOrderBook;
+        OnOrderBookUpdated?.Invoke(this, mockOrderBook);
         return Task.CompletedTask;
     }
 
@@ -70,4 +71,9 @@ public class MockOrderBookManager : IOrderBookManager
     }
 
     public IEnumerable<int> GetSubscribedIds() => _subscribedIds;
+
+    public OrderBook? GetOrderBook(int instrumentId)
+    {
+        return _currentOrderBook;
+    }
 }

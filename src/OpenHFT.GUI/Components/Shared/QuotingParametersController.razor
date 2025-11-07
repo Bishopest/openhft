@@ -5,12 +5,18 @@
     <MudText Typo="Typo.h6" GutterBottom="true">Deploy New Strategy</MudText>
     <MudForm @ref="_form">
         <MudStack Spacing="3">
-            <MudAutocomplete T="Instrument" Label="Instrument" @bind-Value="_selectedInstrument"
-                SearchFunc="@SearchInstruments" ToStringFunc="@ConvertInstrumentToString" Variant="Variant.Outlined"
+            <MudAutocomplete T="Instrument" Label="Instrument" SearchFunc="@SearchInstruments"
+                ToStringFunc="@ConvertInstrumentToString" @bind-Value="SelectedInstrument" Variant="Variant.Outlined"
                 Required="true" ResetValueOnEmptyText="true" CoerceText="true" CoerceValue="true">
                 <ItemTemplate Context="instrument">@instrument.Symbol (@instrument.SourceExchange)
                     (@instrument.ProductType)</ItemTemplate>
             </MudAutocomplete>
+            <MudSelect @bind-Value="_model.FvModel" Label="Fair Value Model" Variant="Variant.Outlined" Required="true">
+                @foreach (FairValueModel fv in Enum.GetValues(typeof(FairValueModel)))
+                {
+                    <MudSelectItem Value="fv">@fv.ToString()</MudSelectItem>
+                }
+            </MudSelect>
             <MudNumericField @bind-Value="_model.SpreadBp" Label="Spread (bp)" Variant="Variant.Outlined"
                 Required="true" Min="0" />
             <MudNumericField @bind-Value="_model.SkewBp" Label="Skew (bp)" Variant="Variant.Outlined" Required="true" />

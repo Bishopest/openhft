@@ -21,19 +21,33 @@ public partial class QuotingParametersController
     [Parameter]
     public EventCallback<QuotingParameters> OnSubmit { get; set; }
 
+    [Parameter]
+    public EventCallback<Instrument> OnInstrumentSelected { get; set; }
+
+
     private MudForm _form = new();
     private ParameterFormModel _model = new(); // A temporary model for form binding
 
     private IEnumerable<Instrument> _availableInstruments = Enumerable.Empty<Instrument>();
     private Instrument? _selectedInstrument;
+    private Instrument? SelectedInstrument
+    {
+        get => _selectedInstrument;
+        set
+        {
+            if (_selectedInstrument != value)
+            {
+                _selectedInstrument = value;
+                OnInstrumentSelected.InvokeAsync(value);
+            }
+        }
+    }
     private Instrument? _selectedFvSourceInstrument;
 
     // A private class to hold form data. This is often cleaner than binding directly to a struct.
     private class ParameterFormModel
     {
-        public int InstrumentId { get; set; } = 1001;
         public FairValueModel FvModel { get; set; }
-        public int FairValueSourceInstrumentId { get; set; }
         public decimal SpreadBp { get; set; } = 2.5m;
         public decimal SkewBp { get; set; } = 0.5m;
         public decimal Size { get; set; } = 0.01m;

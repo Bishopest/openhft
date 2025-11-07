@@ -25,11 +25,13 @@ public partial class Home : ComponentBase, IDisposable
     private IOrderBookManager OrderBookManager { get; set; } = default!;
     [Inject]
     private ILogger<Home> Logger { get; set; } = default!;
+    [Inject]
+    private IExchangeFeedManager FeedManager { get; set; } = default!;
 
     // --- State for Child Components ---
     private List<OmsServerConfig> _omsServers = new();
     private ConnectionStatus _currentStatus = ConnectionStatus.Disconnected;
-    private Instrument? _testInstrument;
+    private Instrument? _displayInstrument;
 
     // --- Lifecycle Methods ---
     protected override void OnInitialized()
@@ -38,7 +40,7 @@ public partial class Home : ComponentBase, IDisposable
         _omsServers = Configuration.GetSection("oms").Get<List<OmsServerConfig>>() ?? new List<OmsServerConfig>();
 
         // Create a test instrument to display
-        _testInstrument = new CryptoPerpetual(
+        _displayInstrument = new CryptoPerpetual(
             instrumentId: 1001, symbol: "BTCUSDT", exchange: ExchangeEnum.BINANCE,
             baseCurrency: Currency.BTC, quoteCurrency: Currency.USDT, tickSize: Price.FromDecimal(0.1m),
             lotSize: Quantity.FromDecimal(0.001m), multiplier: 1m, minOrderSize: Quantity.FromDecimal(0.001m)
@@ -48,11 +50,21 @@ public partial class Home : ComponentBase, IDisposable
         OmsConnector.OnConnectionStatusChanged += HandleStatusChange;
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private async Task HandleInstrumentSelected(Instrument instrument)
     {
-        if (firstRender)
+        if (_displayInstrument?.InstrumentId == instrument.InstrumentId) return;
+
+        if (_displayInstrument != null)
         {
-            await OrderBookManager.ConnectAndSubscribeAsync(_testInstrument.InstrumentId);
+            await FeedManager.UnsubscribeFromInstrumentAsync(_displayInstrument.InstrumentId);
+        }
+
+        _displayInstrument = instrument;
+        StateHasChanged();
+
+        if (_displayInstrument != null)
+        {
+            await FeedManager.SubscribeToInstrumentAsync(_displayInstrument.InstrumentId);
         }
     }
 
@@ -61,21 +73,12 @@ public partial class Home : ComponentBase, IDisposable
     {
         Logger.LogInformationWithCaller($"Connect requested for {server.Name} at {server.Url}");
         await OmsConnector.ConnectAsync(new Uri(server.Url));
-
-        // Once connected, we can subscribe to the order book.
-        if (OmsConnector.CurrentStatus == ConnectionStatus.Connected && _testInstrument != null)
-        {
-            // This replaces the old OnAfterRenderAsync logic.
-            await OrderBookManager.ConnectAndSubscribeAsync(_testInstrument.InstrumentId);
-        }
     }
 
     private async Task HandleDisconnectRequest()
     {
         Logger.LogInformationWithCaller("Disconnect requested.");
         await OmsConnector.DisconnectAsync();
-        // Optionally, also tell the OrderBookManager to disconnect/clear
-        await OrderBookManager.DisconnectAsync();
     }
 
     private async void HandleStatusChange(ConnectionStatus newStatus)
