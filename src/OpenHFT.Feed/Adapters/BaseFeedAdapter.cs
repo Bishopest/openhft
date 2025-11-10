@@ -591,6 +591,9 @@ public abstract class BaseFeedAdapter : IFeedAdapter
                 _webSocket?.Dispose();
                 _webSocket = null;
             }
+
+            // cleanup pre-subscribed topics
+            _subscriptions.Clear();
         }
     }
 
