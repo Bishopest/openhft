@@ -10,7 +10,7 @@ public interface IOmsConnectorService
     // --- Status Events ---
     event Action<ConnectionStatus> OnConnectionStatusChanged;
     ConnectionStatus CurrentStatus { get; }
-
+    Uri? ConnectedServerUri { get; }
     // --- Data Events ---
     event Action<InstanceStatusEvent> OnInstanceStatusReceived;
     event Action<QuotePairUpdateEvent> OnQuotePairUpdateReceived;

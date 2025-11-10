@@ -31,6 +31,7 @@ public class OmsConnectorService : IOmsConnectorService, IAsyncDisposable
             OnConnectionStatusChanged?.Invoke(_currentStatus);
         }
     }
+    public Uri? ConnectedServerUri { get; private set; }
 
     public OmsConnectorService(ILogger<OmsConnectorService> logger)
     {
@@ -61,6 +62,7 @@ public class OmsConnectorService : IOmsConnectorService, IAsyncDisposable
         try
         {
             await _socket.ConnectAsync(serverUri, _cts.Token);
+            ConnectedServerUri = serverUri;
             CurrentStatus = ConnectionStatus.Connected;
             _logger.LogInformationWithCaller($"Successfully connected to OMS at {serverUri}");
             _ = ReceiveLoop(); // Start listening in the background
@@ -173,6 +175,7 @@ public class OmsConnectorService : IOmsConnectorService, IAsyncDisposable
         }
         _socket.Dispose();
         _cts?.Dispose();
+        ConnectedServerUri = null;
         CurrentStatus = ConnectionStatus.Disconnected;
         _logger.LogInformationWithCaller("Disconnected from OMS.");
     }
