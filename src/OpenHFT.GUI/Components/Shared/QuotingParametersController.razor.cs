@@ -84,7 +84,7 @@ public partial class QuotingParametersController
         };
 
         // We need to update the instrument selection as well
-        _selectedInstrument = _availableInstruments.FirstOrDefault(i => i.InstrumentId == newParameters.InstrumentId);
+        SelectedInstrument = _availableInstruments.FirstOrDefault(i => i.InstrumentId == newParameters.InstrumentId);
         _selectedFvSourceInstrument = _availableInstruments.FirstOrDefault(i => i.InstrumentId == newParameters.FairValueSourceInstrumentId);
 
         // Notify Blazor that the state has changed and the UI needs to re-render

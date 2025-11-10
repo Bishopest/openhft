@@ -2,13 +2,6 @@
 @using OpenHFT.Core.Models
 @using OpenHFT.Core.Instruments
 <MudPaper Class="pa-4" Style="height: 100%;">
-    <MudPaper Elevation="@(IsStrategyActive ? 8 : 0)"
-        Class="@(IsStrategyActive ? "pa-2 rounded-lg mud-theme-success" : "pa-2")"
-        Style="transition: background-color 0.3s;">
-        <MudText Typo="Typo.h6" GutterBottom="true">
-            Deploy @(IsStrategyActive ? "(Active)" : "New") Strategy
-        </MudText>
-    </MudPaper>
     <MudForm @ref="_form">
         <MudStack Spacing="3">
             <MudAutocomplete T="Instrument" Label="Instrument" SearchFunc="@SearchInstruments"

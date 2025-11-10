@@ -18,6 +18,8 @@ public record UpdateParametersCommand(
     [property: JsonPropertyName("payload")] QuotingParameters Parameters
 ) : WebSocketMessage("UPDATE_PARAMETERS");
 
+public record GetInstanceStatusesCommand() : WebSocketMessage("GET_INSTANCE_STATUSES");
+
 // --- Server -> Client (Events / Responses) ---
 public record AcknowledgmentEvent(
     [property: JsonPropertyName("correlationId")] string CorrelationId,

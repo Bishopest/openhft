@@ -6,7 +6,7 @@
 <MudPaper Class="pa-0 d-flex flex-column" Elevation="3" Style="height:80vh; font-family: monospace;">
     @* Added a dedicated header div with its own padding to keep the title looking good. *@
     <div class="px-2 pt-2">
-        <MudText Typo="Typo.h6" Align="Align.Center" GutterBottom="true">@DisplayInstrument.Symbol</MudText>
+        <MudText Typo="Typo.h6" Align="Align.Center" GutterBottom="true">@(DisplayInstrument is not null ? DisplayInstrument.Symbol : "Select Instrument")</MudText>
     </div>
 
     @if (_myCurrentQuote is not null)
@@ -33,8 +33,16 @@
             TickSize x @_groupingMultipliers[SelectedMultiplierIndex]
         </MudSlider>
     </div> 
-    
-    @if (_displayLevels.Any())
+    @if (DisplayInstrument is null)
+    {
+        @* CHANGE 3: If no instrument is selected, show a clear message in the main area *@
+        <div class="d-flex flex-column justify-center align-center fill-height">
+            <MudIcon Icon="@Icons.Material.Filled.Info" Class="mb-2" />
+            <MudText Typo="Typo.h6">No Instrument Selected</MudText>
+            <MudText Typo="Typo.body2">Select a strategy from the list to view its order book.</MudText>
+        </div>
+    }
+    else if (_displayLevels.Any())
     {
         
         <div class="table-container" id="@_scrollContainerId">

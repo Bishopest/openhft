@@ -108,6 +108,7 @@ public class Program
                     provider.GetRequiredService<WebSocketChannel>());
                 services.AddSingleton<IWebSocketCommandHandler, UpdateParametersCommandHandler>();
                 services.AddSingleton<IWebSocketCommandHandler, RetireInstanceCommandHandler>();
+                services.AddSingleton<IWebSocketCommandHandler, GetInstanceStatusesCommandHandler>();
                 services.AddSingleton<IWebSocketCommandRouter, WebSocketCommandRouter>();
 
                 // --- 3-1. Adapter 및 RestApiClient 등록 ---

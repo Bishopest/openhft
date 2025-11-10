@@ -82,6 +82,11 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     {
         if (_isDisposed) return;
 
+        if (DisplayInstrument is null)
+        {
+            return;
+        }
+
         if (snapshot.InstrumentId != DisplayInstrument.InstrumentId)
         {
             return;
