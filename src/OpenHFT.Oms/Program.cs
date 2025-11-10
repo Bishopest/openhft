@@ -156,6 +156,7 @@ public class Program
                 services.AddHostedService<FeedOrchestrator>();
                 services.AddHostedService<SubscriptionInitializationService>();
                 services.AddHostedService<WebSocketHost>();
+                services.AddHostedService<WebSocketNotificationService>();
             }
         );
 }

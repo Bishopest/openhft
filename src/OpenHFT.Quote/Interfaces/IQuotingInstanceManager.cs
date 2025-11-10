@@ -1,9 +1,15 @@
 using System;
+using OpenHFT.Quoting.Models;
 
 namespace OpenHFT.Quoting.Interfaces;
 
 public interface IQuotingInstanceManager
 {
+    /// <summary>
+    /// Fired whenever any active quoting instance calculates a new quote pair.
+    /// </summary>
+    event EventHandler<QuotePair> InstanceQuotePairCalculated;
+
     /// <summary>
     /// update quoting parameters for a given instrument.
     /// if a instance for the instrument already exists, activate(equal params) or re deploy(different params))

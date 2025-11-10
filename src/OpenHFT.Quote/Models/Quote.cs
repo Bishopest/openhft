@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 using OpenHFT.Core.Models;
 
 namespace OpenHFT.Quoting.Models;
@@ -24,6 +25,7 @@ public readonly struct Quote : IEquatable<Quote>
     /// </summary>
     /// <param name="price">The price of the quote.</param>
     /// <param name="size">The size of the quote.</param>
+    [JsonConstructor]
     public Quote(Price price, Quantity size)
     {
         Price = price;

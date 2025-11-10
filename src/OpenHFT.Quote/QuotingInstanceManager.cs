@@ -9,6 +9,7 @@ using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Processing;
 using OpenHFT.Quoting.Interfaces;
+using OpenHFT.Quoting.Models;
 
 namespace OpenHFT.Quoting;
 
@@ -18,6 +19,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager
     private readonly IQuotingInstanceFactory _factory;
     private readonly ConcurrentDictionary<int, QuotingInstance> _activeInstances = new();
     private readonly IInstrumentRepository _instrumentRepository;
+    public event EventHandler<QuotePair> InstanceQuotePairCalculated;
 
     public QuotingInstanceManager(
         ILogger<QuotingInstanceManager> logger,
@@ -52,15 +54,16 @@ public class QuotingInstanceManager : IQuotingInstanceManager
         {
             _logger.LogInformationWithCaller($"Deploying new quoting instance for instrument ID {instrumentId}.");
             var instance = _factory.Create(parameters);
-
             if (instance == null)
             {
                 _logger.LogWarningWithCaller($"Failed to create quoting instance instance for instrument ID {instrumentId}.");
                 return null;
             }
 
+
             if (_activeInstances.TryAdd(instrumentId, instance))
             {
+                instance.Engine.QuotePairCalculated += OnEngineQuotePairCalculated;
                 instance.Start();
                 _logger.LogInformationWithCaller($"Successfully deployed quoting instance for instrument {instrument.Symbol}.");
                 return instance;
@@ -139,9 +142,18 @@ public class QuotingInstanceManager : IQuotingInstanceManager
     {
         if (_activeInstances.TryRemove(instrumentId, out var instance))
         {
+            instance.Engine.QuotePairCalculated -= OnEngineQuotePairCalculated;
             instance.Stop();
             return instance;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Relays the event from a specific engine to the manager's public event.
+    /// </summary>
+    private void OnEngineQuotePairCalculated(object? sender, QuotePair e)
+    {
+        InstanceQuotePairCalculated?.Invoke(sender, e);
     }
 }

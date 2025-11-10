@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 using OpenHFT.Core.Models;
 
 namespace OpenHFT.Quoting.Models;
@@ -37,6 +38,7 @@ public readonly struct QuotePair : IEquatable<QuotePair>
     /// <param name="bid">The bid quote to submit.</param>
     /// <param name="ask">The ask quote to submit.</param>
     /// /// <param name="creationTimestamp">The UTC timestamp in Unix milliseconds.</param>
+    [JsonConstructor]
     public QuotePair(int instrumentId, Quote bid, Quote ask, long creationTimestamp)
     {
         InstrumentId = instrumentId;

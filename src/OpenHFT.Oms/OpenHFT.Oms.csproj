@@ -18,6 +18,7 @@
     <PackageReference Include="Serilog.AspNetCore" />
     <PackageReference Include="Serilog.Sinks.Console" />
     <PackageReference Include="Serilog.Sinks.File" />
+    <ProjectReference Include="../OpenHFT.Core/OpenHFT.Core.csproj" />
     <ProjectReference Include="../OpenHFT.Quote/OpenHFT.Quoting.csproj" />
     <ProjectReference Include="../OpenHFT.Service/OpenHFT.Service.csproj" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

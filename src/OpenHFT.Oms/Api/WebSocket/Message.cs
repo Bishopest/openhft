@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using OpenHFT.Quoting;
+using OpenHFT.Quoting.Models;
 
 namespace OpenHFT.Oms.Api.WebSocket;
 
@@ -35,6 +36,10 @@ public class InstanceStatusPayload
     public QuotingParameters Parameters { get; set; }
     // Add other status info like PnL, number of orders, etc.
 }
+
+public record QuotePairUpdateEvent(
+    [property: JsonPropertyName("payload")] QuotePair QuotePair
+) : WebSocketMessage("QUOTEPAIR_UPDATE");
 
 public record ErrorEvent(
     [property: JsonPropertyName("message")] string Message
