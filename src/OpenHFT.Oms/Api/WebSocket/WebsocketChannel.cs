@@ -39,7 +39,7 @@ public class WebSocketChannel : IWebSocketChannel
     {
         if (!IsConnected)
         {
-            _logger.LogWarning("Cannot send message. WebSocket is not connected.");
+            _logger.LogDebug("Cannot send message. WebSocket is not connected.");
             return;
         }
 
