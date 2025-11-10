@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Text;
 using Microsoft.Extensions.Logging;
@@ -16,8 +17,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 {
     private Task? _receiveTask;
     private Task? _heartbeatTask;
-    //CTS to track message inactivity
-    private CancellationTokenSource? _inactivityCts;
+    private long _lastMessageTimestamp;
     // TCS to wait pong messages
     private TaskCompletionSource<bool> _pongTcs;
     // 0 = not reconnecting, 1 = reconnecting.
@@ -295,7 +295,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
                     OnConnectionStateChanged(true, "Connected Successfully");
 
                     // Start background tasks
-                    _inactivityCts = new CancellationTokenSource();
+                    Interlocked.Exchange(ref _lastMessageTimestamp, Stopwatch.GetTimestamp());
                     _receiveTask = Task.Run(() => ReceiveLoop(cancellationToken), cancellationToken);
                     _heartbeatTask = Task.Run(() => HeartbeatLoop(cancellationToken), cancellationToken);
                     return;
@@ -387,11 +387,19 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     {
         var inactivityTimeout = GetInactivityTimeout();
         var pingTimeout = GetPingTimeout();
+        var checkInterval = TimeSpan.FromSeconds(5);
+
+        if (IsHeartbeatEnabled)
+        {
+            _logger.LogInformationWithCaller($"Heartbeat/Monitor loop for {SourceExchange} started. Check interval: {checkInterval.TotalSeconds}s, Inactivity timeout: {inactivityTimeout.TotalSeconds}s.");
+        }
 
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
+                await Task.Delay(checkInterval, cancellationToken).ConfigureAwait(false);
+
                 if (_webSocket is null || _webSocket.State != WebSocketState.Open)
                 {
                     var reason = $"WebSocket state for {SourceExchange} is not Open (State: {_webSocket?.State.ToString() ?? "null"}).";
@@ -403,22 +411,14 @@ public abstract class BaseFeedAdapter : IFeedAdapter
                 {
                     // If heartbeats are disabled (e.g., Binance), this loop acts as a simple
                     // state poller. We just delay and then check the state again in the next iteration.
-                    await Task.Delay(inactivityTimeout, cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
-                try
-                {
-                    // Wait for a period of inactivity. This delay will be cancelled 
-                    // by ResetInactivityTimer if any message is received.
-                    await Task.Delay(inactivityTimeout, _inactivityCts!.Token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
+                var lastMessageElapsed = Stopwatch.GetElapsedTime(Interlocked.Read(ref _lastMessageTimestamp));
+                if (lastMessageElapsed < inactivityTimeout)
                 {
                     continue;
                 }
-
-                if (cancellationToken.IsCancellationRequested) break;
 
                 // If we reach here, no messages were received. Send a ping.
                 _logger.LogInformationWithCaller($"No message received for {inactivityTimeout.TotalSeconds}s. Sending ping to {SourceExchange}.");
@@ -547,15 +547,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
     private void ResetInactivityTimer()
     {
-        try
-        {
-            _inactivityCts?.Cancel();
-            _inactivityCts = new CancellationTokenSource();
-        }
-        catch (ObjectDisposedException)
-        {
-            // Can happen during disconnection, safe to ignore.
-        }
+        Interlocked.Exchange(ref _lastMessageTimestamp, Stopwatch.GetTimestamp());
     }
 
     protected virtual void OnConnectionStateChanged(bool isConnected, string reason)
@@ -582,11 +574,6 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     {
         lock (_connectionLock)
         {
-            // clean up inactivity cancellation token
-            _inactivityCts?.Cancel();
-            _inactivityCts?.Dispose();
-            _inactivityCts = null;
-
             // cleanup websocket connectivity
             if (_webSocket != null)
             {
