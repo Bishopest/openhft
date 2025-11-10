@@ -13,6 +13,7 @@ public interface IOmsConnectorService
 
     // --- Data Events ---
     event Action<InstanceStatusEvent> OnInstanceStatusReceived;
+    event Action<QuotePairUpdateEvent> OnQuotePairUpdateReceived;
     event Action<ErrorEvent> OnErrorReceived;
     event Action<AcknowledgmentEvent> OnAckReceived;
 

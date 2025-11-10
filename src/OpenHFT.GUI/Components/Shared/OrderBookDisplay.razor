@@ -8,6 +8,21 @@
     <div class="px-2 pt-2">
         <MudText Typo="Typo.h6" Align="Align.Center" GutterBottom="true">@DisplayInstrument.Symbol</MudText>
     </div>
+
+    @if (_myCurrentQuote is not null)
+    {
+        <MudPaper Outlined="true" Class="mx-2 my-1 pa-1 d-flex justify-space-between">
+            <MudText Typo="Typo.body2">
+                <span class="mud-theme-error-text">Expected Ask:</span>
+                <span class="mud-theme-error-text" style="font-weight: bold;">@_myCurrentQuote.Value.Ask.Price.ToDecimal().ToString(_priceFormat)</span>
+            </MudText>
+            <MudText Typo="Typo.body2">
+                <span class="mud-theme-success-text">Expected Bid:</span>
+                <span class="mud-theme-success-text" style="font-weight: bold;">@_myCurrentQuote.Value.Bid.Price.ToDecimal().ToString(_priceFormat)</span>
+            </MudText>
+        </MudPaper>
+    }
+
     <div class="px-4 pb-2">
     
         <MudText Typo="Typo.caption">Grouping: @PriceGrouping.ToString(_priceFormat)</MudText>
@@ -36,10 +51,10 @@
                 <tbody>
                     @if(_currentOrderBook is not null) {
                         
+                        var (bestBid, _) = _currentOrderBook.GetBestBid();
+                        var (bestAsk, _) = _currentOrderBook.GetBestAsk();
                         @foreach (var level in _displayLevels)
                         {
-                            var (bestBid, _) = _currentOrderBook.GetBestBid();
-                            var (bestAsk, _) = _currentOrderBook.GetBestAsk();
 
                             // Highlight the best bid and ask rows for clarity
                             string rowStyle = "";
@@ -48,7 +63,17 @@
                             
                             // Highlight the spread area
                             if (level.Price < bestAsk && level.Price > bestBid) rowStyle = "background-color: rgba(245, 245, 220, 0.5);";
-
+                            string priceCellStyle = "font-weight: bold; text-align: center; border-left: 1px solid var(--mud-palette-divider); border-right: 1px solid var(--mud-palette-divider);";
+                            if (level.IsMyQuoteAsk)
+                            {
+                                // If it's our theoretical Ask, add a solid red border on the LEFT.
+                                priceCellStyle += " border-left: 3px solid var(--mud-palette-error);";
+                            }
+                            if (level.IsMyQuoteBid)
+                            {
+                                // If it's our theoretical Bid, add a solid green border on the RIGHT.
+                                priceCellStyle += " border-right: 3px solid var(--mud-palette-success);";
+                            }
                             <tr style="@rowStyle">
                                 <!-- Column 1: My Quote (Bid) - Empty for now -->
                                 <td></td>
@@ -59,7 +84,7 @@
                                 </td>
 
                                 <!-- Column 3: Price (Center) -->
-                                <td style="font-weight: bold; text-align: center; border-left: 1px solid var(--mud-palette-divider); border-right: 1px solid var(--mud-palette-divider);">
+                                <td style="@priceCellStyle">
                                     @level.Price.ToDecimal().ToString(_priceFormat)
                                 </td>
 

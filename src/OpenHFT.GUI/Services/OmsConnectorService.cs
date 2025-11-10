@@ -17,6 +17,7 @@ public class OmsConnectorService : IOmsConnectorService, IAsyncDisposable
 
     public event Action<ConnectionStatus>? OnConnectionStatusChanged;
     public event Action<InstanceStatusEvent>? OnInstanceStatusReceived;
+    public event Action<QuotePairUpdateEvent> OnQuotePairUpdateReceived;
     public event Action<ErrorEvent>? OnErrorReceived;
     public event Action<AcknowledgmentEvent>? OnAckReceived;
 
@@ -123,6 +124,10 @@ public class OmsConnectorService : IOmsConnectorService, IAsyncDisposable
                     // --- USE THE CONFIGURED OPTIONS FOR DESERIALIZATION ---
                     var statusEvent = JsonSerializer.Deserialize<InstanceStatusEvent>(json, _jsonOptions);
                     if (statusEvent != null) OnInstanceStatusReceived?.Invoke(statusEvent);
+                    break;
+                case "QUOTEPAIR_UPDATE":
+                    var updateEvent = JsonSerializer.Deserialize<QuotePairUpdateEvent>(json, _jsonOptions);
+                    if (updateEvent != null) OnQuotePairUpdateReceived?.Invoke(updateEvent);
                     break;
                 case "ERROR":
                     var errorEvent = JsonSerializer.Deserialize<ErrorEvent>(json, _jsonOptions);

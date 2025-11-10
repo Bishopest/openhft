@@ -16,6 +16,7 @@ builder.Services.AddSingleton<IExchangeFeedManager, ExchangeFeedManager>();
 builder.Services.AddSingleton<IOrderBookManager, OrderBookManager>();
 builder.Services.AddSingleton<IOmsConnectorService, OmsConnectorService>();
 builder.Services.AddSingleton<IInstrumentRepository, InstrumentRepository>();
+builder.Services.AddSingleton<IQuoteManager, QuoteManager>();
 builder.Configuration.AddJsonFile("config.json", optional: false, reloadOnChange: false);
 
 var app = builder.Build();

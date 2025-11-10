@@ -6,6 +6,7 @@ using OpenHFT.Book.Core;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
 using OpenHFT.GUI.Services;
+using OpenHFT.Quoting.Models;
 
 namespace OpenHFT.GUI.Components.Shared;
 
@@ -13,7 +14,7 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
 {
     // A private record to represent a single row in our display grid.
     // It holds the price for the row and any bid/ask quantities that match that price.
-    public record DisplayLevel(Price Price, Quantity? BidQuantity, Quantity? AskQuantity);
+    public record DisplayLevel(Price Price, Quantity? BidQuantity, Quantity? AskQuantity, bool IsMyQuoteBid, bool IsMyQuoteAsk);
 
     // --- Dependencies ---
     // Services are injected here using the [Inject] attribute.
@@ -21,6 +22,8 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     private IOrderBookManager OrderBookManager { get; set; } = default!;
     [Inject]
     private IJSRuntime JSRuntime { get; set; } = default!;
+    [Inject]
+    private IQuoteManager QuoteManager { get; set; } = default!;
 
     [Parameter]
     public int DisplayDepth { get; set; } = 40; // Number of ticks to show above and below the center
@@ -49,6 +52,10 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
             }
         }
     }
+    /// <summary>
+    /// Holds the latest theoretical quote pair for the current instrument.
+    /// </summary>
+    private QuotePair? _myCurrentQuote;
 
     // --- STATE MANAGEMENT FOR AUTO-SCROLL ---
     private bool _shouldScrollToCenter = true; // Start with true for the initial load
@@ -67,6 +74,7 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     {
         // Subscribe to the data source.
         OrderBookManager.OnOrderBookUpdated += HandleOrderBookUpdate;
+        QuoteManager.OnQuoteUpdated += HandleQuoteUpdate;
     }
 
     // --- Event Handlers ---
@@ -85,6 +93,17 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
         await InvokeAsync(StateHasChanged);
     }
 
+    private async void HandleQuoteUpdate(object? sender, QuotePair quotePair)
+    {
+        // If the quote update is for our instrument, we need to redraw the grid.
+        if (DisplayInstrument != null && quotePair.InstrumentId == DisplayInstrument.InstrumentId)
+        {
+            _myCurrentQuote = quotePair;
+            UpdateDisplayGrid();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     /// <summary>
     /// This is the core logic. It builds the visual grid based on the current order book state.
     /// </summary>
@@ -92,6 +111,7 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     {
         if (_currentOrderBook is null || DisplayInstrument is null || PriceGrouping <= 0) return;
 
+        var myQuote = _myCurrentQuote;
         // --- 1. Grouping and Aggregation Logic ---
         var groupedBids = new Dictionary<decimal, Quantity>();
         var groupedAsks = new Dictionary<decimal, Quantity>();
@@ -144,9 +164,10 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
                 var currentPrice = Price.FromTicks(startAskPrice.ToTicks() + (groupingAsPrice.ToTicks() * i));
                 var currentPriceDecimal = currentPrice.ToDecimal();
 
+                bool isMyAsk = myQuote != null && Math.Ceiling(myQuote.Value.Ask.Price.ToDecimal() / PriceGrouping) * PriceGrouping == currentPriceDecimal;
                 groupedAsks.TryGetValue(currentPriceDecimal, out var askQty);
 
-                newLevels.Add(new DisplayLevel(currentPrice, null, askQty.ToTicks() > 0 ? askQty : null));
+                newLevels.Add(new DisplayLevel(currentPrice, null, askQty.ToTicks() > 0 ? askQty : null, false, isMyAsk));
             }
         }
 
@@ -159,12 +180,13 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
                 var currentPrice = Price.FromTicks(startBidPrice.ToTicks() - (groupingAsPrice.ToTicks() * i));
                 var currentPriceDecimal = currentPrice.ToDecimal();
 
+                bool isMyBid = myQuote != null && Math.Floor(myQuote.Value.Bid.Price.ToDecimal() / PriceGrouping) * PriceGrouping == currentPriceDecimal;
                 groupedBids.TryGetValue(currentPriceDecimal, out var bidQty);
 
                 // Avoid adding duplicates if spread is zero or crossed
                 if (!newLevels.Any(l => l.Price == currentPrice))
                 {
-                    newLevels.Add(new DisplayLevel(currentPrice, bidQty.ToTicks() > 0 ? bidQty : null, null));
+                    newLevels.Add(new DisplayLevel(currentPrice, bidQty.ToTicks() > 0 ? bidQty : null, null, isMyBid, false));
                 }
             }
         }
