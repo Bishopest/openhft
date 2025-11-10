@@ -35,11 +35,23 @@ public class RetireInstanceCommandHandler : IWebSocketCommandHandler
             var id = JsonSerializer.Deserialize<int>(payloadElement.GetRawText(), _jsonOptions);
 
             _logger.LogInformationWithCaller("Handling RETIRE_INSTANCE command.");
-            var success = _manager.RetireInstance(id);
-            var message = success ? "Strategy retired successfully." : "Failed to retire strategy.";
-
-            var ackEvent = new AcknowledgmentEvent(correlationId ?? string.Empty, success, message);
-            await _channel.SendAsync(ackEvent);
+            var resultInstance = _manager.RetireInstance(id);
+            if (resultInstance != null)
+            {
+                var payload = new InstanceStatusPayload
+                {
+                    InstrumentId = resultInstance.InstrumentId,
+                    IsActive = resultInstance.IsActive,
+                    Parameters = resultInstance.CurrentParameters
+                };
+                var statusEvent = new InstanceStatusEvent(payload);
+                await _channel.SendAsync(statusEvent);
+            }
+            else
+            {
+                var ackEvent = new AcknowledgmentEvent(correlationId ?? string.Empty, false, "Failed to retire quoting instance.");
+                await _channel.SendAsync(ackEvent);
+            }
         }
         catch (Exception ex)
         {

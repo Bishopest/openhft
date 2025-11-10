@@ -23,7 +23,7 @@ public interface IQuotingInstanceManager
     /// </summary>
     /// <param name="instrumentId">The ID of the instrument whose strategy should be retired.</param>
     /// <returns>True if a strategy was found and retired, false otherwise.</returns>
-    bool RetireInstance(int instrumentId);
+    QuotingInstance? RetireInstance(int instrumentId);
 
     /// <summary>
     /// Gets the status or instance of the currently active strategy for an instrument.

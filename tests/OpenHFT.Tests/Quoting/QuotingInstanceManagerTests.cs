@@ -222,7 +222,7 @@ public class QuotingInstanceManagerTests_Integration
         var result = _manager.RetireInstance(bitmexInstrument.InstrumentId);
 
         // Assert
-        result.Should().BeTrue();
+        result.Should().NotBeNull();
         instance.IsActive.Should().BeFalse("because the instance should be deactivated by RetireInstance.");
     }
 }

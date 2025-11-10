@@ -125,17 +125,17 @@ public class QuotingInstanceManager : IQuotingInstanceManager
         return instance;
     }
 
-    public bool RetireInstance(int instrumentId)
+    public QuotingInstance? RetireInstance(int instrumentId)
     {
         if (!_activeInstances.TryGetValue(instrumentId, out var instance))
         {
             _logger.LogWarningWithCaller($"No active quoting strategy found for instrument ID {instrumentId} to retire.");
-            return false;
+            return null;
         }
 
         instance.Deactivate();
         _logger.LogInformationWithCaller($"Successfully deactivate quoting strategy for instrument ID {instrumentId}.");
-        return true;
+        return instance;
     }
 
     private QuotingInstance? DestroyInstance(int instrumentId)
