@@ -1,8 +1,11 @@
 ﻿@page "/"
+@using OpenHFT.Core.Interfaces
 @using OpenHFT.GUI.Components.Shared
 @using OpenHFT.GUI.Services
 @using OpenHFT.Core.Instruments
 @using OpenHFT.Core.Models
+
+@inject IInstrumentRepository InstrumentRepository
 
 @inherits ComponentBase
 
@@ -16,28 +19,38 @@
     - 'flex-grow-1': This is the KEY. It makes the container expand to fill all
       available vertical space within the MainLayout.
 *@
-<MudPaper Class="pa-4" Elevation="2">
-    @* --- OMS Connection Component --- *@
-    @* We pass down the server list and current status, and listen for connect/disconnect events *@
-    <OmsConnectionManager Servers="_omsServers" CurrentStatus="_currentStatus" OnConnect="HandleConnectRequest"
-        OnDisconnect="HandleDisconnectRequest" />
+<MudPaper Class="pa-2" Elevation="2">
+    <MudStack Spacing="4">
+        @* --- OMS Connection Component --- *@
+        @* We pass down the server list and current status, and listen for connect/disconnect events *@
+        <OmsConnectionManager Servers="_omsServers" CurrentStatus="_currentStatus" OnConnect="HandleConnectRequest"
+            OnDisconnect="HandleDisconnectRequest" />
 
-    @if (_displayInstrument is not null)
-    {
-        @*
+        <MudGrid Spacing="2">
+            @* --- Instance List (Left Side) --- *@
+            <MudItem xs="12" md="5">
+                <InstanceListView Instances="_activeInstances" SelectedInstance="_selectedInstance"
+                    OnInstanceSelected="HandleInstanceSelection" />
+            </MudItem>
+
+            @*
             CHANGE 2: This MudGrid also becomes a growing flex item.
             It will now fill all the space NOT taken by the h1 and MudText above it.
             'AlignItems.Stretch' ensures the MudItems inside it also stretch vertically.
-        *@
-        <MudGrid Spacing="0">
-            <MudItem xs="12" md="6">
-                <OrderBookDisplay DisplayInstrument="@_displayInstrument" />
-            </MudItem>
-            <MudItem xs="12" md="6">
-                <QuotingParametersController @ref="_quotingController" OnSubmit="HandleSubmitParameters"
-                    OnCancel="HandleCancelParameters" OnInstrumentSelected="HandleInstrumentSelected"
-                    IsStrategyActive="@(_displayInstrument != null && _activeInstances.ContainsKey(_displayInstrument.InstrumentId))" />
+            *@
+            @* --- Main Content (Right Side) --- *@
+            <MudItem xs="12" md="7">
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" md="8">
+                        <OrderBookDisplay
+                            DisplayInstrument="@(_selectedInstance != null ? InstrumentRepository.GetById(_selectedInstance.InstrumentId) : null)" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <QuotingParametersController @ref="_quotingController" OnSubmit="HandleSubmitParameters"
+                            OnCancel="HandleCancelParameters" />
+                    </MudItem>
+                </MudGrid>
             </MudItem>
         </MudGrid>
-    }
+    </MudStack>
 </MudPaper>
