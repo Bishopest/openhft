@@ -25,7 +25,7 @@ public class QuoterFactory : IQuoterFactory
         switch (type)
         {
             case QuoterType.Log:
-                return new LogQuoter();
+                return new LogQuoter(_loggerFactory.CreateLogger<LogQuoter>());
             case QuoterType.Single:
                 return new SingleOrderQuoter(_loggerFactory.CreateLogger<SingleOrderQuoter>(), side, instrument, _orderFactory);
             default:
