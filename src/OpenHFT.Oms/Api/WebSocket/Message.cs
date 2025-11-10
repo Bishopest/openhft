@@ -12,7 +12,7 @@ public abstract record WebSocketMessage(
 // --- Client -> Server (Commands) ---
 public record RetireInstanceCommand(
     [property: JsonPropertyName("payload")] int InstrumentId
-) : WebSocketMessage("RETIRE_STRATEGY");
+) : WebSocketMessage("RETIRE_INSTANCE");
 
 public record UpdateParametersCommand(
     [property: JsonPropertyName("payload")] QuotingParameters Parameters

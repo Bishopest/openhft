@@ -35,7 +35,7 @@
             </MudItem>
             <MudItem xs="12" md="6">
                 <QuotingParametersController @ref="_quotingController" OnSubmit="HandleSubmitParameters"
-                    OnInstrumentSelected="HandleInstrumentSelected"
+                    OnCancel="HandleCancelParameters" OnInstrumentSelected="HandleInstrumentSelected"
                     IsStrategyActive="@(_displayInstrument != null && _activeInstances.ContainsKey(_displayInstrument.InstrumentId))" />
             </MudItem>
         </MudGrid>

@@ -142,6 +142,27 @@ public partial class Home : ComponentBase, IDisposable
         Snackbar.Add($"Deploy command sent for Instrument ID {parameters.InstrumentId}.", Severity.Success);
     }
 
+    /// <summary>
+    /// This method is called when the QuotingParameterController's OnSubmit event is fired.
+    /// </summary>
+    private async Task HandleCancelParameters(int instrumentId)
+    {
+        if (OmsConnector.CurrentStatus != ConnectionStatus.Connected)
+        {
+            Snackbar.Add("Cannot retire strategy, not connected to OMS.", Severity.Error);
+            return;
+        }
+
+        Logger.LogInformationWithCaller($"Retiring quoting instance for Instrument ID: {instrumentId}");
+
+        // Wrap the parameters in the command object
+        var command = new RetireInstanceCommand(instrumentId);
+
+        // Send the command via the service
+        await OmsConnector.SendCommandAsync(command);
+
+        Snackbar.Add($"Retire command sent for Instrument ID {instrumentId}.", Severity.Success);
+    }
     // --- Cleanup ---
     public void Dispose()
     {

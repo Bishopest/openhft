@@ -121,7 +121,6 @@ public class OmsConnectorService : IOmsConnectorService, IAsyncDisposable
             switch (type)
             {
                 case "INSTANCE_STATUS":
-                    // --- USE THE CONFIGURED OPTIONS FOR DESERIALIZATION ---
                     var statusEvent = JsonSerializer.Deserialize<InstanceStatusEvent>(json, _jsonOptions);
                     if (statusEvent != null) OnInstanceStatusReceived?.Invoke(statusEvent);
                     break;
@@ -146,7 +145,7 @@ public class OmsConnectorService : IOmsConnectorService, IAsyncDisposable
         {
             _logger.LogError(ex, "Failed to deserialize or handle incoming message.");
         }
-        await Task.CompletedTask; // To satisfy async method signature if needed
+        await Task.CompletedTask;
     }
 
     public async Task SendCommandAsync(WebSocketMessage command)

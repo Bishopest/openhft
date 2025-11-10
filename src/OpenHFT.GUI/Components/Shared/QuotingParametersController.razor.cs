@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
 using OpenHFT.Core.Instruments;
@@ -20,6 +21,8 @@ public partial class QuotingParametersController
     /// </summary>
     [Parameter]
     public EventCallback<QuotingParameters> OnSubmit { get; set; }
+    [Parameter]
+    public EventCallback<int> OnCancel { get; set; }
 
     [Parameter]
     public EventCallback<Instrument> OnInstrumentSelected { get; set; }
@@ -140,12 +143,13 @@ public partial class QuotingParametersController
         await OnSubmit.InvokeAsync(parameters);
     }
 
-    private void HandleCancel()
+    private async Task HandleCancel()
     {
-        _model = new ParameterFormModel(); // Reset the form
-        _selectedInstrument = _availableInstruments.FirstOrDefault();
-        _selectedFvSourceInstrument = null;
+        if (_selectedInstrument is not null)
+        {
+            await OnCancel.InvokeAsync(_selectedInstrument.InstrumentId);
+        }
+
         _form.ResetValidation();
-        Snackbar.Add("Form cleared.", Severity.Info);
     }
 }
