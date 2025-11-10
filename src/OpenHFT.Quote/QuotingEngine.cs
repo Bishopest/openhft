@@ -156,7 +156,7 @@ public class QuotingEngine : IQuotingEngine
 
         // 1. Calculate raw bid/ask prices based on spread.
         // Use Price arithmetic to avoid precision issues with decimal.
-        var spreadAmountInDecimal = fairValue.ToDecimal() * currentParams.SpreadBp * 0.0001m * 0.5m;
+        var spreadAmountInDecimal = fairValue.ToDecimal() * currentParams.SpreadBp * 0.0001m;
         var spreadAmount = Price.FromDecimal(spreadAmountInDecimal);
         var rawBidPrice = fairValue - spreadAmount;
         var rawAskPrice = fairValue + spreadAmount;
