@@ -105,6 +105,7 @@ public class OmsConnectorService : IOmsConnectorService, IAsyncDisposable
 
     private async Task HandleIncomingMessage(string json)
     {
+        _logger.LogDebug($"Received Websocket message: {json}");
         try
         {
             using var doc = JsonDocument.Parse(json);
