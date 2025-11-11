@@ -19,19 +19,12 @@ public partial class Home : ComponentBase, IDisposable
     [Inject]
     private ISnackbar Snackbar { get; set; } = default!;
     [Inject]
-    private IConfiguration Configuration { get; set; } = default!;
-    [Inject]
     private IOmsConnectorService OmsConnector { get; set; } = default!;
-    [Inject]
-    private IOrderBookManager OrderBookManager { get; set; } = default!;
     [Inject]
     private ILogger<Home> Logger { get; set; } = default!;
     [Inject]
     private IExchangeFeedManager FeedManager { get; set; } = default!;
 
-    // --- State for Child Components ---
-    private List<OmsServerConfig> _omsServers = new();
-    private ConnectionStatus _currentStatus = ConnectionStatus.Disconnected;
     /// <summary>
     /// A reference to the child QuotingParameterController component instance.
     /// </summary>
@@ -43,12 +36,17 @@ public partial class Home : ComponentBase, IDisposable
     private InstanceStatusPayload? _selectedInstance;
     // Keep track of which instruments we are subscribed to
     private readonly HashSet<int> _subscribedInstrumentIds = new();
+    private bool _isDisposed = false;
 
     // --- Lifecycle Methods ---
     protected override void OnInitialized()
     {
-        // Load OMS server list from appsettings.json
-        _omsServers = Configuration.GetSection("oms").Get<List<OmsServerConfig>>() ?? new List<OmsServerConfig>();
+        if (OmsConnector.CurrentStatus == ConnectionStatus.Connected)
+        {
+            // If we load the page and we are already connected,
+            // immediately request the list of instances.
+            RequestInstanceStatuses();
+        }
 
         // Subscribe to the connector's status changes to keep our UI in sync
         OmsConnector.OnConnectionStatusChanged += HandleStatusChange;
@@ -57,6 +55,10 @@ public partial class Home : ComponentBase, IDisposable
 
     private async void HandleInstanceStatusUpdate(InstanceStatusEvent statusEvent)
     {
+        if (_isDisposed)
+        {
+            return; // Do nothing if disposed.
+        }
         var payload = statusEvent.Payload;
         Logger.LogInformationWithCaller($"Received status update for Instrument ID: {payload.InstrumentId}, Active: {payload.IsActive}");
 
@@ -97,29 +99,8 @@ public partial class Home : ComponentBase, IDisposable
         StateHasChanged();
     }
 
-
-    // --- Event Handlers for OmsConnectionManager ---
-    private async Task HandleConnectRequest(OmsServerConfig server)
-    {
-        Logger.LogInformationWithCaller($"Connect requested for {server.Name} at {server.Url}");
-        await OmsConnector.ConnectAsync(new Uri(server.Url));
-
-        // After connecting, request the list of all current instances
-        if (OmsConnector.CurrentStatus == ConnectionStatus.Connected)
-        {
-            await OmsConnector.SendCommandAsync(new GetInstanceStatusesCommand());
-        }
-    }
-
-    private async Task HandleDisconnectRequest()
-    {
-        Logger.LogInformationWithCaller("Disconnect requested.");
-        await OmsConnector.DisconnectAsync();
-    }
-
     private async void HandleStatusChange(ConnectionStatus newStatus)
     {
-        _currentStatus = newStatus;
         if (newStatus == ConnectionStatus.Disconnected)
         {
             // Clear all state when disconnected
@@ -127,8 +108,17 @@ public partial class Home : ComponentBase, IDisposable
             _selectedInstance = null;
             _subscribedInstrumentIds.Clear();
         }
+        else if (newStatus == ConnectionStatus.Connected)
+        {
+            RequestInstanceStatuses();
+        }
         // Notify Blazor that the state has changed and the UI needs to re-render
         await InvokeAsync(StateHasChanged);
+    }
+
+    private void RequestInstanceStatuses()
+    {
+        _ = OmsConnector.SendCommandAsync(new GetInstanceStatusesCommand());
     }
 
     /// <summary>
@@ -177,7 +167,22 @@ public partial class Home : ComponentBase, IDisposable
     // --- Cleanup ---
     public void Dispose()
     {
-        OmsConnector.OnInstanceStatusReceived -= HandleInstanceStatusUpdate;
-        OmsConnector.OnConnectionStatusChanged -= HandleStatusChange;
+        // Standard dispose pattern
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_isDisposed) return;
+
+        if (disposing)
+        {
+            // Unsubscribe from all events here.
+            OmsConnector.OnConnectionStatusChanged -= HandleStatusChange;
+            OmsConnector.OnInstanceStatusReceived -= HandleInstanceStatusUpdate;
+        }
+
+        _isDisposed = true;
     }
 }

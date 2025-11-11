@@ -21,11 +21,6 @@
 *@
 <MudPaper Class="pa-2" Elevation="2">
     <MudStack Spacing="4">
-        @* --- OMS Connection Component --- *@
-        @* We pass down the server list and current status, and listen for connect/disconnect events *@
-        <OmsConnectionManager Servers="_omsServers" CurrentStatus="_currentStatus" OnConnect="HandleConnectRequest"
-            OnDisconnect="HandleDisconnectRequest" />
-
         <MudGrid Spacing="2">
             @* --- Instance List (Left Side) --- *@
             <MudItem xs="12" md="5">
