@@ -62,13 +62,10 @@ public sealed class SingleOrderQuoter : IQuoter
             }
             else
             {
-                if (currentOrder.Quantity > currentOrder.LeavesQuantity)
+                if (newQuote.Price != currentOrder.Price)
                 {
-                    await currentOrder.CancelAsync(cancellationToken).ConfigureAwait(false);
-                    return;
+                    await currentOrder.ReplaceAsync(newQuote.Price, OrderType.Limit, cancellationToken).ConfigureAwait(false);
                 }
-
-                await currentOrder.ReplaceAsync(newQuote.Price, OrderType.Limit, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
