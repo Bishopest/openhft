@@ -8,7 +8,7 @@
     {
       "exchange": "bitmex",
       "productType" : "perpetualfuture",
-      "executionMode": "live"
+      "executionMode": "testnet"
     }
   ],
   "oms": [

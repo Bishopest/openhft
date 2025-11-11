@@ -1,5 +1,5 @@
 
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 using OpenHFT.Core.Models;
 
 namespace OpenHFT.Core.Configuration;
@@ -10,10 +10,10 @@ namespace OpenHFT.Core.Configuration;
 public class ExecutionConfig
 {
     // JSON Deserializer가 "Testnet" 문자열을 ExecutionMode.Testnet enum으로 자동 변환
-    [JsonProperty("api")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public ExecutionMode Api { get; set; }
 
-    [JsonProperty("feed")]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public ExecutionMode Feed { get; set; }
 }
 
@@ -22,7 +22,6 @@ public class ExecutionConfig
 /// </summary>
 public class SubscriptionConfig
 {
-    [JsonProperty("subscriptions")]
     public List<SubscriptionGroup> Subscriptions { get; set; } = new();
 }
 
@@ -32,15 +31,11 @@ public class SubscriptionConfig
 /// </summary>
 public class SubscriptionGroup
 {
-    [JsonProperty("exchange")]
     public string Exchange { get; set; } = string.Empty;
 
-    [JsonProperty("execution")]
     public ExecutionConfig Execution { get; set; } = new();
 
-    [JsonProperty("productType")]
     public string ProductType { get; set; } = string.Empty;
 
-    [JsonProperty("symbols")]
     public string[] Symbols { get; set; } = Array.Empty<string>();
 }

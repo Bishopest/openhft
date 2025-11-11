@@ -2,21 +2,21 @@
   "subscriptions": [
     {
       "exchange": "bitmex",
-      "executionMode": {
+      "execution": {
         "api": "testnet",
-        "feed": "live"
+        "feed": "testnet"
       },
       "productType": "perpetualfuture",
-      "symbols": [ "XBTUSDT"]
+      "symbols": [ "XBTUSDT", "XBTUSD"]
     },
     {
       "exchange": "binance",
-      "executionMode": {
+      "execution": {
         "api": "testnet",
         "feed": "live"
       },
       "productType": "perpetualfuture",
-      "symbols": [ "BTCUSDT"]
+      "symbols": [ "BTCUSDT", "BTCUSD"]
     }
   ],
   "dataFolder": "/Users/jskim/workspace/openhft/data"
