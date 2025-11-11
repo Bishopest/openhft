@@ -5,7 +5,7 @@
     <div class="flex-grow-1" style="overflow-y: auto; min-height: 0;">
         <MudText Typo="Typo.h6" GutterBottom="true">Active Strategies</MudText>
         <MudTable Items="@Instances" T="InstanceStatusPayload" Dense="true" Hover="true" SortLabel="Sort By"
-            SelectedItem="SelectedInstance" SelectedItemChanged="instance => OnInstanceSelected.InvokeAsync(instance)">
+            SelectedItem="SelectedInstance" SelectedItemChanged="OnRowClicked">
             <HeaderContent>
                 <MudTh Style="width: 40px;"></MudTh>
                 <MudTh>
@@ -29,7 +29,7 @@
             <RowTemplate>
                 <MudTd DataLabel="Selected">
                     @* This icon will only appear on the currently selected row. *@
-                    @if (SelectedInstance == context)
+                    @if (SelectedInstance is not null && SelectedInstance.InstrumentId == context.InstrumentId)
                     {
                         <MudIcon Icon="@Icons.Material.Filled.ArrowRight" Color="Color.Primary" />
                     }

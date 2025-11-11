@@ -27,6 +27,23 @@ public partial class InstanceListView : ComponentBase
     [Parameter]
     public EventCallback<InstanceStatusPayload> OnInstanceSelected { get; set; }
 
+    /// <summary>
+    /// This method is now directly bound to the table's SelectedItemChanged event.
+    /// It handles both updating the internal state and notifying the parent.
+    /// </summary>
+    private async Task OnRowClicked(InstanceStatusPayload instance)
+    {
+        // Update the internal state for the icon to display correctly.
+        SelectedInstance = instance;
+
+        // Notify the parent component about the selection change.
+        await OnInstanceSelected.InvokeAsync(instance);
+
+        // It's often good practice to call StateHasChanged() in a local handler,
+        // though InvokeAsync might trigger it implicitly. This makes it explicit.
+        StateHasChanged();
+    }
+
     protected string GetSymbol(InstanceStatusPayload instance)
     {
         var instrument = InstrumentRepository.GetById(instance.InstrumentId);
