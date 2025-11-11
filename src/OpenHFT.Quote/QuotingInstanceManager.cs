@@ -109,8 +109,13 @@ public class QuotingInstanceManager : IQuotingInstanceManager
 
         _logger.LogInformationWithCaller($"Tunable parameters changed for InstrumentId {instrumentId}. Updating in-place.");
         // Only tunable parameters changed, so update the existing engine.
+        var oldParam = engine.CurrentParameters;
         engine.UpdateParameters(newParameters);
-        engine.Activate();
+        // Only when update request with equal param take place "twice", activate it
+        if (oldParam.Equals(newParameters))
+        {
+            engine.Activate();
+        }
         return instance;
     }
 
