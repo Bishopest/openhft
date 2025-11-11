@@ -45,7 +45,7 @@ public class OrderFactory : IOrderFactory
             instrumentId,
             side,
             _orderRouter,
-            orderGateway,
+            orderGateway ?? throw new ArgumentNullException("orderGateway"),
             _orderLogger
         );
 

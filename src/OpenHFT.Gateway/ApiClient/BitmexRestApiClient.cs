@@ -2,6 +2,7 @@ using System;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
@@ -35,7 +36,7 @@ public record BitmexOrderBookL2
 }
 
 /// <summary>
-/// REST API client for Binance, supporting both Spot and Futures markets.
+/// REST API client for Bitmex, supporting both Spot and Futures markets.
 /// </summary>
 public class BitmexRestApiClient : BaseRestApiClient
 {
