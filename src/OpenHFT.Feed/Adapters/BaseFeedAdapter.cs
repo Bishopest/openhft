@@ -25,6 +25,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
     protected readonly ILogger _logger;
     protected readonly ExecutionMode _executionMode;
+    public ExecutionMode ExecMode => _executionMode;
     protected readonly IInstrumentRepository _instrumentRepository;
     protected ClientWebSocket? _webSocket;
     private CancellationTokenSource? _cancellationTokenSource;
@@ -510,6 +511,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     protected virtual TimeSpan GetPingTimeout() => TimeSpan.FromSeconds(5);
 
     public abstract ExchangeEnum SourceExchange { get; }
+
 
     /// <summary>
     /// Gets the base WebSocket URL for the exchange.

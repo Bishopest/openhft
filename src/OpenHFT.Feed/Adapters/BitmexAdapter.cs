@@ -53,8 +53,6 @@ public class BitmexAdapter : BaseAuthFeedAdapter
         var message = JsonSerializer.Serialize(authRequest);
         _logger.LogInformationWithCaller("Sending authentication request to BitMEX WebSocket.");
         await SendMessageAsync(message, cancellationToken);
-
-        await SubscribeToPrivateTopicsAsync(cancellationToken);
     }
 
     public override Task SubscribeToPrivateTopicsAsync(CancellationToken cancellationToken)
@@ -129,6 +127,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             }
         }
     }
+
     private OrderStatusReport ParseExecution(JsonElement exeJson)
     {
         // --- 1. 필수 필드 추출 및 검증 ---

@@ -44,6 +44,11 @@ public interface IFeedAdapter : IDisposable
     /// Gets the product type (e.g., Spot, Futures) this adapter handles.
     /// </summary>
     ProductType ProdType { get; }
+
+    /// <summary>
+    /// Gets the execution mode(e.g., Live, Testnet)
+    /// </summary>
+    ExecutionMode ExecMode { get; }
     /// <summary>
     /// Check if adapter is connected
     /// </summary>

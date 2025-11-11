@@ -23,6 +23,7 @@ using OpenHFT.Quoting.FairValue;
 using OpenHFT.Quoting.Interfaces;
 using OpenHFT.Service;
 using Serilog;
+using DotNetEnv;
 
 public class Program
 {
@@ -34,6 +35,8 @@ public class Program
             .WriteTo.File("logs/oms-.log", rollingInterval: RollingInterval.Day)
             .CreateBootstrapLogger();
 
+        Env.Load();
+        Env.TraversePath().Load();
         try
         {
             await CreateHostBuilder(args).Build().RunAsync();
@@ -63,6 +66,7 @@ public class Program
             })
             .ConfigureServices((hostContext, services) =>
             {
+                var configuration = hostContext.Configuration;
                 services.Configure<SubscriptionConfig>(hostContext.Configuration);
                 services.AddSingleton(provider => provider.GetRequiredService<IOptions<SubscriptionConfig>>().Value);
                 services.Configure<QuotingConfig>(hostContext.Configuration);
@@ -120,10 +124,13 @@ public class Program
                         Enum.TryParse<ProductType>(group.ProductType, true, out var productType))
                     {
                         var executionConfig = group.Execution;
+                        var apiKey = configuration[$"{group.Exchange.ToString().ToUpper()}_{group.Execution.Api.ToString().ToUpper()}_API_KEY"];
+                        var apiSecret = configuration[$"{group.Exchange.ToString().ToUpper()}_{group.Execution.Api.ToString().ToUpper()}_API_SECRET"];
+
                         switch (exchange)
                         {
                             case ExchangeEnum.BINANCE:
-                                services.AddSingleton<BaseRestApiClient>(provider => new BinanceRestApiClient(
+                                services.AddSingleton<BaseRestApiClient, BinanceRestApiClient>(provider => new BinanceRestApiClient(
                                     provider.GetRequiredService<ILogger<BinanceRestApiClient>>(),
                                     provider.GetRequiredService<IInstrumentRepository>(),
                                     provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BinanceRestApiClient)),
@@ -136,12 +143,17 @@ public class Program
                                 ));
                                 break;
                             case ExchangeEnum.BITMEX:
-                                services.AddSingleton<BaseRestApiClient>(provider => new BitmexRestApiClient(
+                                services.AddSingleton<BitmexRestApiClient>(provider => new BitmexRestApiClient(
                                     provider.GetRequiredService<ILogger<BitmexRestApiClient>>(),
                                     provider.GetRequiredService<IInstrumentRepository>(),
                                     provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BitmexRestApiClient)),
                                     productType,
-                                    executionConfig.Api));
+                                    executionConfig.Api, apiSecret, apiKey));
+                                services.AddSingleton<IOrderGateway, BitmexOrderGateway>(provider => new BitmexOrderGateway(
+                                    provider.GetRequiredService<ILogger<BitmexOrderGateway>>(),
+                                    provider.GetRequiredService<BitmexRestApiClient>(),
+                                    provider.GetRequiredService<IInstrumentRepository>(),
+                                    productType));
                                 services.AddSingleton<IFeedAdapter>(provider => new BitmexAdapter(
                                     provider.GetRequiredService<ILogger<BitmexAdapter>>(), productType,
                                     provider.GetRequiredService<IInstrumentRepository>(),
