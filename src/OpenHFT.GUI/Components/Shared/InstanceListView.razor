@@ -7,6 +7,7 @@
         <MudTable Items="@Instances" T="InstanceStatusPayload" Dense="true" Hover="true" SortLabel="Sort By"
             SelectedItem="SelectedInstance" SelectedItemChanged="instance => OnInstanceSelected.InvokeAsync(instance)">
             <HeaderContent>
+                <MudTh Style="width: 40px;"></MudTh>
                 <MudTh>
                     <MudTableSortLabel SortBy="new Func<InstanceStatusPayload, object>(x => GetExchange(x))">Exchange
                     </MudTableSortLabel>
@@ -26,6 +27,13 @@
                 </MudTh>
             </HeaderContent>
             <RowTemplate>
+                <MudTd DataLabel="Selected">
+                    @* This icon will only appear on the currently selected row. *@
+                    @if (SelectedInstance == context)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.ArrowRight" Color="Color.Primary" />
+                    }
+                </MudTd>
                 <MudTd DataLabel="Exchange">@GetExchange(context)</MudTd>
                 <MudTd DataLabel="Symbol">@GetSymbol(context)</MudTd>
                 <MudTd DataLabel="Status">
