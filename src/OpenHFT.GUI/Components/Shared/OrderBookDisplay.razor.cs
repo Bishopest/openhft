@@ -209,7 +209,6 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     {
         if (DisplayInstrument != null)
         {
-            // --- CHANGE DETECTION LOGIC ---
             // Check if the instrument has actually changed.
             if (DisplayInstrument.InstrumentId != _previousInstrumentId)
             {
@@ -220,6 +219,16 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
                 // This prevents showing stale data from the previous instrument.
                 _currentOrderBook = null;
                 _displayLevels.Clear();
+
+                var currentQuote = QuoteManager.GetQuote(DisplayInstrument.InstrumentId);
+                if (currentQuote != null)
+                {
+                    _myCurrentQuote = currentQuote;
+                }
+                else
+                {
+                    _myCurrentQuote = null;
+                }
             }
             // Calculate and store the format strings based on the instrument's properties.
             _priceFormat = $"F{GetDecimalPlaces(PriceGrouping)}";
