@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 using OpenHFT.Core.Models;
 
 namespace OpenHFT.Core.Models;
@@ -29,6 +30,11 @@ public readonly struct OrderStatusReport
     /// The unique identifier for the instrument.
     /// </summary>
     public readonly int InstrumentId { get; }
+
+    /// <summary>
+    /// The side of the order (e.g., Buy, Sell).
+    /// </summary>
+    public readonly Side Side { get; }
 
     /// <summary>
     /// The new status of the order (e.g., New, Filled, Cancelled).
@@ -65,12 +71,26 @@ public readonly struct OrderStatusReport
     /// </summary>
     public readonly string? RejectReason { get; }
 
-    public OrderStatusReport(long clientOrderId, string? exchangeOrderId, string? executionId, int instrumentId, OrderStatus status, Price price, Quantity quantity, Quantity leavesQuantity, long timestamp, string? rejectReason = null, Quantity? lastQuantity = null)
+    [JsonConstructor]
+    public OrderStatusReport(
+        long clientOrderId,
+        string? exchangeOrderId,
+        string? executionId,
+        int instrumentId,
+        Side side,
+        OrderStatus status,
+        Price price,
+        Quantity quantity,
+        Quantity leavesQuantity,
+        long timestamp,
+        string? rejectReason = null,
+        Quantity? lastQuantity = null)
     {
         ClientOrderId = clientOrderId;
         ExchangeOrderId = exchangeOrderId;
         ExecutionId = executionId;
         InstrumentId = instrumentId;
+        Side = side;
         Status = status;
         Price = price;
         Quantity = quantity;

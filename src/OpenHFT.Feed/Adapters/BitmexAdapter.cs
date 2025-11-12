@@ -154,6 +154,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
         var exchangeOrderId = exeJson.TryGetProperty("orderID", out var exOrdEl) ? exOrdEl.GetString() : null;
         var ordStatusStr = exeJson.TryGetProperty("ordStatus", out var statEl) ? statEl.GetString() : null;
         var timestampStr = exeJson.TryGetProperty("timestamp", out var tsEl) ? tsEl.GetString() : null;
+        var sideStr = exeJson.TryGetProperty("side", out var sideEl) ? sideEl.GetString() : null;
 
         // --- 3. 값 변환 ---
         var status = ordStatusStr switch
@@ -164,6 +165,13 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             "Canceled" => OrderStatus.Cancelled,
             "Rejected" => OrderStatus.Rejected,
             _ => OrderStatus.Pending // Or log a warning for unknown status
+        };
+
+        var side = sideStr switch
+        {
+            "Buy" => Side.Buy,
+            "Sell" => Side.Sell,
+            _ => throw new FeedParseException(SourceExchange, $"Invalid side value in execution message({exeJson}).", null, null)
         };
 
         var timestamp = !string.IsNullOrEmpty(timestampStr)
@@ -189,6 +197,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             exchangeOrderId: exchangeOrderId,
             executionId: executionId,
             instrumentId: instrument.InstrumentId,
+            side: side,
             status: status,
             price: price,
             quantity: quantity,

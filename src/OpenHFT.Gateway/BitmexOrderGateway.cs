@@ -114,6 +114,7 @@ public class BitmexOrderGateway : IOrderGateway
             exchangeOrderId: response.OrderId,
             executionId: null,
             instrumentId: instrumentId,
+            side: response.Side == "Buy" ? Side.Buy : Side.Sell,
             status: status,
             price: Price.FromDecimal(response.Price ?? 0),
             quantity: Quantity.FromDecimal(response.OrderQty ?? 0),

@@ -77,7 +77,7 @@ public class Order : IOrder, IOrderUpdatable
         {
             // If the request fails immediately, create a rejection report.
             var failureReport = new OrderStatusReport(
-                ClientOrderId, null, null, InstrumentId, OrderStatus.Rejected, Price, Quantity, Quantity,
+                ClientOrderId, null, null, InstrumentId, Side, OrderStatus.Rejected, Price, Quantity, Quantity,
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), result.FailureReason);
             OnStatusReportReceived(failureReport);
         }
@@ -120,7 +120,7 @@ public class Order : IOrder, IOrderUpdatable
         if (!result.IsSuccess)
         {
             var failureReport = new OrderStatusReport(
-                ClientOrderId, ExchangeOrderId, null, InstrumentId, Status, Price, Quantity, LeavesQuantity,
+                ClientOrderId, ExchangeOrderId, null, InstrumentId, Side, Status, Price, Quantity, LeavesQuantity,
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), result.FailureReason);
             OnStatusReportReceived(failureReport);
         }
@@ -156,7 +156,7 @@ public class Order : IOrder, IOrderUpdatable
         if (!result.IsSuccess)
         {
             var failureReport = new OrderStatusReport(
-                ClientOrderId, ExchangeOrderId, null, InstrumentId, OrderStatus.Rejected, Price, Quantity, LeavesQuantity,
+                ClientOrderId, ExchangeOrderId, null, InstrumentId, Side, OrderStatus.Rejected, Price, Quantity, LeavesQuantity,
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), result.FailureReason);
             OnStatusReportReceived(failureReport);
         }
