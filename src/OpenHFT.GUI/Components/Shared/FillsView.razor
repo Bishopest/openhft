@@ -15,7 +15,8 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Time">
-                    @DateTimeOffset.FromUnixTimeMilliseconds(context.Timestamp).ToLocalTime():HH:mm:ss.fff</MudTd>
+                    @(DateTimeOffset.FromUnixTimeMilliseconds(context.Timestamp).ToLocalTime().ToString("MM-dd HH:mm:ss.fff"))
+                </MudTd>
                 <MudTd DataLabel="Side"
                     Style="@(context.Side == Side.Buy ? "color: var(--mud-palette-success);" : "color: var(--mud-palette-error);")">
                     @context.Side</MudTd>
