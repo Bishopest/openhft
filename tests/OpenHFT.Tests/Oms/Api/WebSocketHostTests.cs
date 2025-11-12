@@ -15,6 +15,8 @@ using Microsoft.Extensions.Hosting;
 using OpenHFT.Oms.Api.WebSocket.CommandHandlers;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
+using System.Text.Json.Serialization;
+using OpenHFT.Core.Instruments;
 
 namespace OpenHFT.Tests.Oms.Api;
 
@@ -25,10 +27,24 @@ public class WebSocketHostTests
     private IHostedService _webSocketHost;
     private ClientWebSocket _client;
     private Mock<IQuotingInstanceManager> _mockManager;
+    private JsonSerializerOptions _jsonOptions;
+
 
     [OneTimeSetUp]
     public async Task OnetTimeSetup()
     {
+        _jsonOptions = new JsonSerializerOptions
+        {
+            // For SENDING data to the server in camelCase
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+
+            // For RECEIVING data from the server, be flexible with casing.
+            // This will correctly map "instrumentId" (from server) to "InstrumentId" (in C#).
+            PropertyNameCaseInsensitive = true,
+
+            // For RECEIVING enum values as strings (e.g., "Spot" instead of 0)
+            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+        };
         _mockManager = new Mock<IQuotingInstanceManager>();
 
         var services = new ServiceCollection();
@@ -142,26 +158,67 @@ public class WebSocketHostTests
     [Test]
     public async Task When_UpdateParametersCommandHandled_Should_ReceiveAcknowledgment()
     {
-        // Arrange
+        var mockInstrument = new CryptoPerpetual(
+                instrumentId: 1001,
+                symbol: "BTCUSDT",
+                exchange: ExchangeEnum.BINANCE,
+                baseCurrency: Currency.BTC,
+                quoteCurrency: Currency.USDT,
+                tickSize: Price.FromDecimal(0.1m),
+                lotSize: Quantity.FromDecimal(0.001m),
+                multiplier: 1m,
+                minOrderSize: Quantity.FromDecimal(0.001m)
+        );
+        // --- Arrange ---
+        var parameters = new QuotingParameters(mockInstrument.InstrumentId, FairValueModel.Midp, 124, 1m, 1m, Quantity.FromDecimal(2m), 1, QuoterType.Single);
+
+        // Mock QuotingInstanceManager가 파라미터를 받았을 때,
+        // 검증에 필요한 QuotingInstance를 반환하도록 설정합니다.
+        var mockEngine = new Mock<IQuotingEngine>();
+        mockEngine.Setup(e => e.CurrentParameters).Returns(parameters);
+        mockEngine.Setup(e => e.IsActive).Returns(true);
+        mockEngine.Setup(e => e.QuotingInstrument).Returns(mockInstrument);
+        var mockInstance = new QuotingInstance(mockEngine.Object);
+
+        // UpdateInstanceParameters가 호출되면 위에서 만든 mockInstance를 반환하도록 설정
         _mockManager.Setup(m => m.UpdateInstanceParameters(It.IsAny<QuotingParameters>()))
-            .Returns(new QuotingInstance(null));
-        var command = new UpdateParametersCommand(new QuotingParameters(123, FairValueModel.Midp, 124, 1m, 1m, Quantity.FromDecimal(2m), 1, QuoterType.Single));
-        var commandJson = JsonSerializer.Serialize(command);
+                    .Returns(mockInstance);
+
+        var command = new UpdateParametersCommand(parameters);
+        var commandJson = JsonSerializer.Serialize(command, _jsonOptions);
         var commandBytes = Encoding.UTF8.GetBytes(commandJson);
 
-        // Act
-        await _client.SendAsync(commandBytes, WebSocketMessageType.Text, true, CancellationToken.None);
+        // --- Act ---
+        await _client.SendAsync(new ArraySegment<byte>(commandBytes), WebSocketMessageType.Text, true, CancellationToken.None);
 
+        // 서버가 메시지를 처리하고 응답을 보낼 시간을 줍니다.
         await Task.Delay(200);
 
-        // Assert: Acknowledgment 메시지 수신 확인
+        // --- Assert: 이제 InstanceStatusEvent 메시지를 수신하고 검증합니다. ---
         var buffer = new byte[1024];
         var receiveResult = await _client.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
         var responseJson = Encoding.UTF8.GetString(buffer, 0, receiveResult.Count);
 
-        var ackEvent = JsonSerializer.Deserialize<AcknowledgmentEvent>(responseJson);
-        ackEvent.Should().NotBeNull();
-        ackEvent!.Success.Should().BeTrue();
-        ackEvent.Message.Should().Contain("successfully");
+        TestContext.WriteLine($"Received Response: {responseJson}");
+
+        // 1. 메시지 타입을 먼저 확인하여 올바른 종류의 이벤트인지 확인합니다.
+        using var jsonDoc = JsonDocument.Parse(responseJson);
+        var messageType = jsonDoc.RootElement.GetProperty("type").GetString();
+        messageType.Should().Be("INSTANCE_STATUS");
+
+        // 2. 전체 메시지를 InstanceStatusEvent로 역직렬화합니다.
+        var statusEvent = JsonSerializer.Deserialize<InstanceStatusEvent>(responseJson, _jsonOptions);
+
+        // 3. 수신된 이벤트의 내용을 상세하게 검증합니다.
+        statusEvent.Should().NotBeNull();
+        var payload = statusEvent!.Payload;
+        payload.Should().NotBeNull();
+
+        payload.InstrumentId.Should().Be(parameters.InstrumentId);
+        payload.IsActive.Should().BeTrue();
+
+        // 페이로드에 포함된 Parameters가 우리가 보낸 것과 동일한지 확인합니다.
+        // QuotingParameters에 IEquatable이 구현되어 있으므로 직접 비교할 수 있습니다.
+        payload.Parameters.Should().Be(parameters);
     }
 }

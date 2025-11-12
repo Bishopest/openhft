@@ -15,9 +15,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="Microsoft.Extensions.Hosting " />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
@@ -30,6 +29,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/OpenHFT.Gateway/OpenHFT.Gateway.csproj" />
+    <ProjectReference Include="../../src/OpenHFT.GUI/OpenHFT.GUI.csproj" />
     <ProjectReference Include="../../src/OpenHFT.Oms/OpenHFT.Oms.csproj" />
     <ProjectReference Include="../../src/OpenHFT.Quote/OpenHFT.Quoting.csproj" />
     <ProjectReference Include="..\..\src\OpenHFT.Core\OpenHFT.Core.csproj" />

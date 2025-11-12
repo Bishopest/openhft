@@ -168,7 +168,7 @@ public class QuotingInstanceManagerTests_Integration
         instanceAfterUpdate.Should().BeSameAs(instanceBeforeUpdate, "because only tunable parameters changed.");
 
         engineAfterUpdate.CurrentParameters.Should().Be(updatedParams);
-        engineAfterUpdate.IsActive.Should().BeTrue("because updating parameters should activate a paused instance.");
+        engineAfterUpdate.IsActive.Should().BeFalse("because updating parameters should activate a paused instance with the same parameters twice.");
     }
 
     [Test]

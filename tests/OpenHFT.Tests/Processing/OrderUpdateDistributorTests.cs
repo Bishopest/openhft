@@ -66,7 +66,7 @@ public class OrderUpdateDistributorTests
 
         var ringBufer = disruptor.Start();
 
-        var testReport = new OrderStatusReport(clientOrderId: 12345L, exchangeOrderId: "xyz-789", executionId: null, instrumentId: 101, status: OrderStatus.New, price: Price.FromDecimal(5000m),
+        var testReport = new OrderStatusReport(clientOrderId: 12345L, exchangeOrderId: "xyz-789", executionId: null, instrumentId: 101, side: Side.Buy, status: OrderStatus.New, price: Price.FromDecimal(5000m),
         quantity: Quantity.FromDecimal(1m), leavesQuantity: Quantity.FromDecimal(1m), timestamp: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
         _mockAdapter.FireOrderUpdateEvent(testReport);
