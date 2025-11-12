@@ -20,7 +20,7 @@
                 <MudItem xs="5" Class="d-flex flex-column gap-1">
                     <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
                         OnClick="() => HandleConnectClick(server)"
-                        Disabled="@(_currentStatus != ConnectionStatus.Disconnected && _connectedServer != server)">
+                        Disabled="@(_currentStatus == ConnectionStatus.Connected)">
                         @if (_currentStatus == ConnectionStatus.Connecting && _connectedServer == server)
                         {
                             <MudProgressCircular Size="Size.Small" Indeterminate="true" />

@@ -101,7 +101,7 @@ public partial class Home : ComponentBase, IDisposable
 
     private async void HandleStatusChange(ConnectionStatus newStatus)
     {
-        if (newStatus == ConnectionStatus.Disconnected)
+        if (newStatus == ConnectionStatus.Disconnected || newStatus == ConnectionStatus.Error)
         {
             // Clear all state when disconnected
             _activeInstances.Clear();
