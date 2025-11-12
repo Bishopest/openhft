@@ -23,8 +23,19 @@
     <MudStack Spacing="4">
         <MudGrid Spacing="2">
             @* --- Instance List (Left Side) --- *@
-            <MudItem xs="12" md="5">
-                <InstanceListView Instances="_activeInstances" OnInstanceSelected=" HandleInstanceSelection" />
+            <MudItem xs="12" md="2">
+                <FillsView />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudStack Spacing="2" Style="height: 100%;">
+                    <div style="height: 50%;">
+                        <InstanceListView Instances="_activeInstances" SelectedInstance="_selectedInstance"
+                            OnInstanceSelected="HandleInstanceSelection" />
+                    </div>
+                    <div style="height: 50%;">
+                        <ActiveOrdersView InstrumentId="@_selectedInstance?.InstrumentId" />
+                    </div>
+                </MudStack>
             </MudItem>
 
             @*

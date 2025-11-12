@@ -119,6 +119,8 @@ public partial class Home : ComponentBase, IDisposable
     private void RequestInstanceStatuses()
     {
         _ = OmsConnector.SendCommandAsync(new GetInstanceStatusesCommand());
+        _ = OmsConnector.SendCommandAsync(new GetActiveOrdersCommand());
+        _ = OmsConnector.SendCommandAsync(new GetFillsCommand());
     }
 
     /// <summary>

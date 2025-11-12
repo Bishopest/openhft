@@ -1,6 +1,8 @@
 using System;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using OpenHFT.Core.Interfaces;
+using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Quoting.Interfaces;
 using OpenHFT.Quoting.Models;
@@ -16,16 +18,20 @@ public class WebSocketNotificationService : IHostedService
     private readonly ILogger<WebSocketNotificationService> _logger;
     private readonly IWebSocketChannel _channel;
     private readonly IQuotingInstanceManager _quotingManager;
+    private readonly IOrderRouter _orderRouter;
     // Add other event sources here, e.g., IPositionManager, IRiskManager
 
     public WebSocketNotificationService(
         ILogger<WebSocketNotificationService> logger,
         IWebSocketChannel channel,
-        IQuotingInstanceManager quotingManager)
+        IQuotingInstanceManager quotingManager,
+        IOrderRouter orderRouter
+    )
     {
         _logger = logger;
         _channel = channel;
         _quotingManager = quotingManager;
+        _orderRouter = orderRouter;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -34,6 +40,8 @@ public class WebSocketNotificationService : IHostedService
 
         // Subscribe to all relevant domain events
         _quotingManager.InstanceQuotePairCalculated += OnQuotePairCalculated;
+        _orderRouter.OrderStatusChanged += OnOrderStatusChanged;
+        _orderRouter.OrderFilled += OnOrderFilled;
         // _positionManager.PositionChanged += OnPositionChanged; // Example for future extension
 
         return Task.CompletedTask;
@@ -45,6 +53,8 @@ public class WebSocketNotificationService : IHostedService
 
         // Unsubscribe to prevent memory leaks
         _quotingManager.InstanceQuotePairCalculated -= OnQuotePairCalculated;
+        _orderRouter.OrderStatusChanged -= OnOrderStatusChanged;
+        _orderRouter.OrderFilled -= OnOrderFilled;
         // _positionManager.PositionChanged -= OnPositionChanged;
 
         return Task.CompletedTask;
@@ -59,5 +69,18 @@ public class WebSocketNotificationService : IHostedService
         _ = _channel.SendAsync(updateEvent);
     }
 
+    private void OnOrderStatusChanged(object? sender, OrderStatusReport report)
+    {
+        _logger.LogTrace("Broadcasting order status update for CID {ClientOrderId}", report.ClientOrderId);
+        var updateEvent = new ActiveOrdersListEvent(new List<OrderStatusReport>() { report });
+        _ = _channel.SendAsync(updateEvent);
+    }
+
+    private void OnOrderFilled(object? sender, Fill fill)
+    {
+        _logger.LogTrace("Broadcasting order fill for CID {ClientOrderId}", fill.ClientOrderId);
+        var fillEvent = new FillsListEvent(new List<Fill>() { fill });
+        _ = _channel.SendAsync(fillEvent);
+    }
     // private void OnPositionChanged(object? sender, Position newPosition) { ... }
 }

@@ -16,6 +16,9 @@ public interface IOmsConnectorService
     event Action<QuotePairUpdateEvent> OnQuotePairUpdateReceived;
     event Action<ErrorEvent> OnErrorReceived;
     event Action<AcknowledgmentEvent> OnAckReceived;
+    event Action<ActiveOrdersListEvent> OnActiveOrderListReceived;
+    event Action<FillsListEvent> OnFillsListReceived;
+
 
     // --- Connection Management ---
     Task ConnectAsync(Uri serverUri);

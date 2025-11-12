@@ -8,6 +8,10 @@ namespace OpenHFT.Core.Interfaces;
 /// </summary>
 public interface IOrderRouter
 {
+    event EventHandler<OrderStatusReport> OrderStatusChanged;
+    event EventHandler<Fill> OrderFilled;
+
+    IReadOnlyCollection<IOrder> GetActiveOrders();
     /// <summary>
     /// Registers an order to begin receiving status reports.
     /// This is typically called by the IOrder instance itself upon creation.
@@ -28,4 +32,7 @@ public interface IOrderRouter
     /// </summary>
     /// <param name="report">The report to be routed.</param>
     void RouteReport(in OrderStatusReport report);
+
+    void RaiseStatusChanged(IOrder order, OrderStatusReport report);
+    void RaiseOrderFilled(IOrder order, Fill fill);
 }

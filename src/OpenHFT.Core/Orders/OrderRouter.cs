@@ -16,10 +16,19 @@ public class OrderRouter : IOrderRouter
     private readonly ILogger<OrderRouter> _logger;
     private readonly ConcurrentDictionary<long, IOrderUpdatable> _activeOrders = new();
 
+    public event EventHandler<OrderStatusReport> OrderStatusChanged;
+    public event EventHandler<Fill> OrderFilled;
+
     public OrderRouter(ILogger<OrderRouter> logger)
     {
         _logger = logger;
     }
+
+    public IReadOnlyCollection<IOrder> GetActiveOrders()
+    {
+        return _activeOrders.Values.Cast<IOrder>().ToList().AsReadOnly();
+    }
+
 
     public void RegisterOrder(IOrder order)
     {
@@ -66,5 +75,15 @@ public class OrderRouter : IOrderRouter
             // This can be normal if a report arrives after an order is already considered terminal and deregistered.
             _logger.LogInformationWithCaller($"Received a status report for an unknown or already completed order with ClientOrderId {report.ClientOrderId}.");
         }
+    }
+
+    public void RaiseStatusChanged(IOrder order, OrderStatusReport report)
+    {
+        OrderStatusChanged?.Invoke(order, report);
+    }
+
+    public void RaiseOrderFilled(IOrder order, Fill fill)
+    {
+        OrderFilled?.Invoke(order, fill);
     }
 }

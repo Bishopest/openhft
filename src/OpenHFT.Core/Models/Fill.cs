@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 
 namespace OpenHFT.Core.Models;
 
@@ -44,6 +45,7 @@ public readonly struct Fill : IEquatable<Fill>
     /// </summary>
     public readonly long Timestamp { get; }
 
+    [JsonConstructor]
     public Fill(int instrumentId, long clientOrderId, string exchangeOrderId, string executionId, Side side, Price price, Quantity quantity, long timestamp)
     {
         InstrumentId = instrumentId;

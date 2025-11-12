@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using OpenHFT.Core.Models;
 using OpenHFT.Quoting;
 using OpenHFT.Quoting.Models;
 
@@ -19,6 +20,8 @@ public record UpdateParametersCommand(
 ) : WebSocketMessage("UPDATE_PARAMETERS");
 
 public record GetInstanceStatusesCommand() : WebSocketMessage("GET_INSTANCE_STATUSES");
+public record GetActiveOrdersCommand() : WebSocketMessage("GET_ACTIVE_ORDERS");
+public record GetFillsCommand() : WebSocketMessage("GET_FILLS");
 
 // --- Server -> Client (Events / Responses) ---
 public record AcknowledgmentEvent(
@@ -26,6 +29,20 @@ public record AcknowledgmentEvent(
     [property: JsonPropertyName("success")] bool Success,
     [property: JsonPropertyName("message")] string? Message = null
 ) : WebSocketMessage("ACK");
+
+/// <summary>
+/// Response to GET_ACTIVE_ORDERS, containing a list of the latest status reports for all active orders.
+/// </summary>
+public record ActiveOrdersListEvent(
+    [property: JsonPropertyName("payload")] IEnumerable<OrderStatusReport> Reports
+) : WebSocketMessage("ACTIVE_ORDERS_LIST");
+
+/// <summary>
+/// Response to GET_FILLS, containing a list of all known fills for active orders.
+/// </summary>
+public record FillsListEvent(
+    [property: JsonPropertyName("payload")] IEnumerable<Fill> Fills
+) : WebSocketMessage("FILLS_LIST");
 
 public record InstanceStatusEvent(
     [property: JsonPropertyName("payload")] InstanceStatusPayload Payload

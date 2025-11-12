@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Oms.Api.WebSocket;
 
@@ -20,6 +21,8 @@ public class OmsConnectorService : IOmsConnectorService, IAsyncDisposable
     public event Action<QuotePairUpdateEvent> OnQuotePairUpdateReceived;
     public event Action<ErrorEvent>? OnErrorReceived;
     public event Action<AcknowledgmentEvent>? OnAckReceived;
+    public event Action<ActiveOrdersListEvent> OnActiveOrderListReceived;
+    public event Action<FillsListEvent> OnFillsListReceived;
 
     private ConnectionStatus _currentStatus = ConnectionStatus.Disconnected;
     public ConnectionStatus CurrentStatus
@@ -137,6 +140,14 @@ public class OmsConnectorService : IOmsConnectorService, IAsyncDisposable
                 case "ACK":
                     var ackEvent = JsonSerializer.Deserialize<AcknowledgmentEvent>(json, _jsonOptions);
                     if (ackEvent != null) OnAckReceived?.Invoke(ackEvent);
+                    break;
+                case "ACTIVE_ORDERS_LIST":
+                    var activeOrdersListEvent = JsonSerializer.Deserialize<ActiveOrdersListEvent>(json, _jsonOptions);
+                    if (activeOrdersListEvent != null) OnActiveOrderListReceived?.Invoke(activeOrdersListEvent);
+                    break;
+                case "FILLS_LIST":
+                    var fillEvent = JsonSerializer.Deserialize<FillsListEvent>(json, _jsonOptions);
+                    if (fillEvent != null) OnFillsListReceived?.Invoke(fillEvent);
                     break;
                 default:
                     _logger.LogWarning("Received unknown WebSocket message type: {Type}", type);

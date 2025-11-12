@@ -199,10 +199,12 @@ public class Order : IOrder, IOrderUpdatable
                 {
                     _fills.Add(fill);
                     OrderFilled?.Invoke(this, fill);
+                    _router.RaiseOrderFilled(this, fill);
                 }
             }
 
             StatusChanged?.Invoke(this, report);
+            _router.RaiseStatusChanged(this, report);
 
 
             switch (report.Status)

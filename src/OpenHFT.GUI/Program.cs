@@ -12,6 +12,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
 builder.Services.AddScoped<IOrderBookManager, MockOrderBookManager>();
+builder.Services.AddSingleton<IOrderCacheService, OrderCacheService>();
 builder.Services.AddSingleton<IExchangeFeedManager, ExchangeFeedManager>();
 builder.Services.AddSingleton<IOrderBookManager, OrderBookManager>();
 builder.Services.AddSingleton<IOmsConnectorService, OmsConnectorService>();

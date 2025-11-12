@@ -1,0 +1,38 @@
+﻿@using OpenHFT.Core.Models
+@using OpenHFT.GUI.Services
+@inject IOrderCacheService OrderCache
+@implements IDisposable
+
+<MudPaper Class="pa-2 d-flex flex-column" Style="height: 100%;">
+    <MudText Typo="Typo.h6" GutterBottom="true">Fills</MudText>
+    <div class="flex-grow-1" style="overflow-y: auto; min-height: 0;">
+        <MudTable Items="@OrderCache.GetAllFills()" T="Fill" Dense="true" Hover="true">
+            <HeaderContent>
+                <MudTh>Time</MudTh>
+                <MudTh>Side</MudTh>
+                <MudTh>Price</MudTh>
+                <MudTh>Qty</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Time">
+                    @DateTimeOffset.FromUnixTimeMilliseconds(context.Timestamp).ToLocalTime():HH:mm:ss.fff</MudTd>
+                <MudTd DataLabel="Side"
+                    Style="@(context.Side == Side.Buy ? "color: var(--mud-palette-success);" : "color: var(--mud-palette-error);")">
+                    @context.Side</MudTd>
+                <MudTd DataLabel="Price">@context.Price.ToDecimal()</MudTd>
+                <MudTd DataLabel="Qty">@context.Quantity.ToDecimal()</MudTd>
+            </RowTemplate>
+        </MudTable>
+    </div>
+</MudPaper>
+
+@code {
+    protected override void OnInitialized() => OrderCache.OnFillsUpdated += OnUpdateFills;
+
+    private void OnUpdateFills(object? sender, Fill fill)
+    {
+        StateHasChanged();
+    }
+
+    public void Dispose() => OrderCache.OnFillsUpdated -= OnUpdateFills;
+}
