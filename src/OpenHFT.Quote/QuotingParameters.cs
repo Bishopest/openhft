@@ -17,10 +17,11 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
 
     /// <summary>
     /// spread ratio in bp to calculate quotes on each side from fair value.
-    // Price of ask quote = fair value * (1 + SpreadBp * 1e-4 / 2 )
-    /// Price of bid quote = fair value * (1 - SpreadBp * 1e-4 / 2 )
+    /// Price of ask quote = fair value * (1 + AskSpreadBp * 1e-4 )
+    /// Price of bid quote = fair value * (1 + BidSpreadBp * 1e-4 )
     /// </summary>
-    public readonly decimal SpreadBp { get; }
+    public readonly decimal AskSpreadBp { get; }
+    public readonly decimal BidSpreadBp { get; }
 
     /// <summary>
     /// skew ratio in bp to calculate skewed fair value to hedge inventory risk
@@ -53,12 +54,19 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     /// <param name="depth">The number of quote levels on each side.</param>
     /// <param name="type">The type of quoter to be used.</param>
     [JsonConstructor]
-    public QuotingParameters(int instrumentId, FairValueModel fvModel, int fairValueSourceInstrumentId, decimal spreadBp, decimal skewBp, Quantity size, int depth, QuoterType type)
+    public QuotingParameters(int instrumentId, FairValueModel fvModel, int fairValueSourceInstrumentId, decimal askSpreadBp, decimal bidSpreadBp, decimal skewBp, Quantity size, int depth, QuoterType type)
     {
+        if (askSpreadBp <= bidSpreadBp)
+        {
+            throw new ArgumentException("AskSpreadBp must be strictly greater than BidSpreadBp to ensure a positive spread.",
+                                        nameof(QuotingParameters));
+        }
+
         InstrumentId = instrumentId;
         FvModel = fvModel;
         FairValueSourceInstrumentId = fairValueSourceInstrumentId;
-        SpreadBp = spreadBp;
+        AskSpreadBp = askSpreadBp;
+        BidSpreadBp = bidSpreadBp;
         SkewBp = skewBp;
         Size = size;
         Depth = depth;
@@ -69,7 +77,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     {
         return $"{{ " +
                $"\"InstrumentId\": {InstrumentId}, " +
-               $"\"SpreadBp\": {SpreadBp}, " +
+               $"\"AskSpreadBp\": {AskSpreadBp}, " +
+               $"\"BidSpreadBp\": {BidSpreadBp}, " +
                $"\"SkewBp\": {SkewBp}, " +
                $"\"Size\": {Size.ToDecimal()}, " +
                $"\"Depth\": {Depth}" +
@@ -81,7 +90,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     {
         return InstrumentId == other.InstrumentId &&
                FvModel == other.FvModel &&
-               SpreadBp == other.SpreadBp &&
+               AskSpreadBp == other.AskSpreadBp &&
+               BidSpreadBp == other.BidSpreadBp &&
                SkewBp == other.SkewBp &&
                Size == other.Size &&
                Depth == other.Depth &&
@@ -97,7 +107,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         var hash = new HashCode();
         hash.Add(InstrumentId);
         hash.Add(FvModel);
-        hash.Add(SpreadBp);
+        hash.Add(AskSpreadBp);
+        hash.Add(BidSpreadBp);
         hash.Add(SkewBp);
         hash.Add(Size);
         hash.Add(Depth);

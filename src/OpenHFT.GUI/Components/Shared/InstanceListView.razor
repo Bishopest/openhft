@@ -21,7 +21,8 @@
                     </MudTableSortLabel>
                 </MudTh>
                 <MudTh>
-                    <MudTableSortLabel SortBy="new Func<InstanceStatusPayload, object>(x => x.Parameters.SpreadBp)">
+                    <MudTableSortLabel
+                        SortBy="new Func<InstanceStatusPayload, object>(x => (x.Parameters.AskSpreadBp - x.Parameters.BidSpreadBp))">
                         Spread
                     </MudTableSortLabel>
                 </MudTh>
@@ -41,7 +42,7 @@
                         @(context.IsActive ? "Active" : "Inactive")
                     </MudChip>
                 </MudTd>
-                <MudTd DataLabel="Spread">@context.Parameters.SpreadBp bp</MudTd>
+                <MudTd DataLabel="Spread">@(context.Parameters.AskSpreadBp - context.Parameters.BidSpreadBp) bp</MudTd>
             </RowTemplate>
             <PagerContent>
                 <MudTablePager />

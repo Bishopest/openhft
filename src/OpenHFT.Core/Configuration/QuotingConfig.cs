@@ -58,8 +58,11 @@ public class QuotingConfig
     [JsonProperty("fairValue")]
     public FairValueConfig FairValue { get; set; } = new();
 
-    [JsonProperty("spreadBp")]
-    public decimal SpreadBp { get; set; }
+    [JsonProperty("askSpreadBp")]
+    public decimal AskSpreadBp { get; set; }
+
+    [JsonProperty("bidSpreadBp")]
+    public decimal BidSpreadBp { get; set; }
 
     [JsonProperty("skewBp")]
     public decimal SkewBp { get; set; }

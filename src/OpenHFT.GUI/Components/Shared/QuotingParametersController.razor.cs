@@ -55,7 +55,8 @@ public partial class QuotingParametersController
     private class ParameterFormModel
     {
         public FairValueModel FvModel { get; set; }
-        public decimal SpreadBp { get; set; } = 2.5m;
+        public decimal AskSpreadBp { get; set; } = 2.5m;
+        public decimal BidSpreadBp { get; set; } = -2.5m;
         public decimal SkewBp { get; set; } = 0.5m;
         public decimal Size { get; set; } = 0.01m;
         public int Depth { get; set; } = 5;
@@ -76,7 +77,8 @@ public partial class QuotingParametersController
         _model = new ParameterFormModel
         {
             FvModel = newParameters.FvModel,
-            SpreadBp = newParameters.SpreadBp,
+            AskSpreadBp = newParameters.AskSpreadBp,
+            BidSpreadBp = newParameters.BidSpreadBp,
             SkewBp = newParameters.SkewBp,
             Size = newParameters.Size.ToDecimal(),
             Depth = newParameters.Depth,
@@ -132,7 +134,8 @@ public partial class QuotingParametersController
             _selectedInstrument.InstrumentId,
             _model.FvModel,
             _selectedFvSourceInstrument?.InstrumentId ?? 0,
-            _model.SpreadBp,
+            _model.AskSpreadBp,
+            _model.BidSpreadBp,
             _model.SkewBp,
             Quantity.FromDecimal(_model.Size), // Convert decimal to Quantity
             _model.Depth,
@@ -151,5 +154,22 @@ public partial class QuotingParametersController
         }
 
         _form.ResetValidation();
+    }
+
+    private string AskSpreadValidation(decimal askValue)
+    {
+        if (askValue <= _model.BidSpreadBp)
+        {
+            return "Ask Spread must be strictly greater than Bid Spread.";
+        }
+        return null; // 유효함
+    }
+    private string BidSpreadValidation(decimal askValue)
+    {
+        if (askValue >= _model.AskSpreadBp)
+        {
+            return "Bid Spread must be strictly greater than Bid Spread.";
+        }
+        return null; // 유효함
     }
 }

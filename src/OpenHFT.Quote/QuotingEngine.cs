@@ -156,17 +156,19 @@ public class QuotingEngine : IQuotingEngine
 
         // 1. Calculate raw bid/ask prices based on spread.
         // Use Price arithmetic to avoid precision issues with decimal.
-        var spreadAmountInDecimal = fairValue.ToDecimal() * currentParams.SpreadBp * 0.0001m;
-        var spreadAmount = Price.FromDecimal(spreadAmountInDecimal);
-        var rawBidPrice = fairValue - spreadAmount;
-        var rawAskPrice = fairValue + spreadAmount;
+        var askSpreadAmountInDecimal = fairValue.ToDecimal() * currentParams.AskSpreadBp * 0.0001m;
+        var bidSpreadAmountInDecimal = fairValue.ToDecimal() * currentParams.BidSpreadBp * 0.0001m;
+        var askSpreadAmount = Price.FromDecimal(askSpreadAmountInDecimal);
+        var bidSpreadAmount = Price.FromDecimal(bidSpreadAmountInDecimal);
+        var rawAskPrice = fairValue + askSpreadAmount;
+        var rawBidPrice = fairValue + bidSpreadAmount;
 
         // 2. Round prices to the instrument's tick size.
         var tickSizeInTicks = QuotingInstrument.TickSize.ToTicks();
         if (tickSizeInTicks <= 0) return; // Avoid division by zero
 
-        var roundedBidTicks = rawBidPrice.ToTicks() / tickSizeInTicks * tickSizeInTicks; // Floor
         var roundedAskTicks = (rawAskPrice.ToTicks() + tickSizeInTicks - 1) / tickSizeInTicks * tickSizeInTicks; // Ceiling
+        var roundedBidTicks = rawBidPrice.ToTicks() / tickSizeInTicks * tickSizeInTicks; // Floor
 
         var targetQuotePair = new QuotePair(
             QuotingInstrument.InstrumentId,

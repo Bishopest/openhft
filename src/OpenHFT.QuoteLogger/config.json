@@ -32,7 +32,8 @@
         "symbol": "LTCUSDT"
       }
     },
-    "spreadBp": 33.0,
+    "askSpreadBp": 33.0,
+    "bidSpreadBp": -33.0,
     "skewBp": 3.0,
     "size": 1000,
     "depth": 1

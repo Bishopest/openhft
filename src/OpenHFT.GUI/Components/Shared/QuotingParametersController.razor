@@ -22,8 +22,16 @@
                     <MudSelectItem Value="type">@type.ToString()</MudSelectItem>
                 }
             </MudSelect>
-            <MudNumericField @bind-Value="_model.SpreadBp" Label="Spread (bp)" Variant="Variant.Outlined"
-                Required="true" Min="0" />
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="_model.AskSpreadBp" Label="Spread A (bp)" Variant="Variant.Outlined"
+                        Required="true" Validation="@(new Func<decimal, string>(AskSpreadValidation))" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="_model.BidSpreadBp" Label="Spread B (bp)" Variant="Variant.Outlined"
+                        Required="true" Validation="@(new Func<decimal, string>(BidSpreadValidation))" />
+                </MudItem>
+            </MudGrid>
             <MudNumericField @bind-Value="_model.SkewBp" Label="Skew (bp)" Variant="Variant.Outlined" Required="true" />
             <MudNumericField @bind-Value="_model.Size" Label="Size (Quantity)" Variant="Variant.Outlined"
                 Required="true" Min="0" Step="0.001m" />
