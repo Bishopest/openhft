@@ -117,6 +117,7 @@ public class QuotingInstanceManagerTests_Integration
             FairValueModel.Midp,
             binanceInstrument.InstrumentId,
             10m,
+            -10m,
             0.5m,
             Quantity.FromDecimal(100),
             1,
@@ -145,7 +146,7 @@ public class QuotingInstanceManagerTests_Integration
 
         var initialParams = new QuotingParameters(
             bitmexInstrument.InstrumentId, FairValueModel.Midp, binanceInstrument.InstrumentId,
-            10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log);
+            10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log);
 
         _manager.UpdateInstanceParameters(initialParams);
         _manager.RetireInstance(initialParams.InstrumentId);
@@ -156,7 +157,7 @@ public class QuotingInstanceManagerTests_Integration
         // Spread, Skew, Size만 변경된 새로운 파라미터
         var updatedParams = new QuotingParameters(
             bitmexInstrument.InstrumentId, FairValueModel.Midp, binanceInstrument.InstrumentId,
-            20m, 1.0m, Quantity.FromDecimal(200), 1, QuoterType.Log);
+            20m, -20m, 1.0m, Quantity.FromDecimal(200), 1, QuoterType.Log);
 
         // Act
         _manager.UpdateInstanceParameters(updatedParams);
@@ -180,7 +181,7 @@ public class QuotingInstanceManagerTests_Integration
 
         var initialParams = new QuotingParameters(
             bitmexInstrument.InstrumentId, FairValueModel.Midp, binanceInstrument.InstrumentId,
-            10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log);
+            10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log);
 
         _manager.UpdateInstanceParameters(initialParams);
         var instanceBefore = _manager.GetInstance(bitmexInstrument.InstrumentId);
@@ -188,7 +189,7 @@ public class QuotingInstanceManagerTests_Integration
         // 핵심 파라미터인 FvModel 변경
         var newParams = new QuotingParameters(
             bitmexInstrument.InstrumentId, FairValueModel.BestMidp, binanceInstrument.InstrumentId,
-            10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log);
+            10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log);
 
         // Act
         _manager.UpdateInstanceParameters(newParams);
@@ -211,7 +212,7 @@ public class QuotingInstanceManagerTests_Integration
         var bitmexInstrument = _instrumentRepo.FindBySymbol("XBTUSD", ProductType.PerpetualFuture, ExchangeEnum.BITMEX)!;
         var parameters = new QuotingParameters(
             bitmexInstrument.InstrumentId, FairValueModel.Midp, 2,
-            10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log);
+            10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log);
 
         _manager.UpdateInstanceParameters(parameters);
         var instance = _manager.GetInstance(bitmexInstrument.InstrumentId);

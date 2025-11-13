@@ -112,7 +112,7 @@ public class WebSocketHostTests
     public async Task When_UpdateParametersCommandSent_Should_CallStrategyManager()
     {
         // --- Arrange ---
-        var parameters = new QuotingParameters(123, FairValueModel.Midp, 124, 1m, 1m, Quantity.FromDecimal(2m), 1, QuoterType.Single);
+        var parameters = new QuotingParameters(123, FairValueModel.Midp, 124, 1m, -1m, 1m, Quantity.FromDecimal(2m), 1, QuoterType.Single);
         var updateCommand = new UpdateParametersCommand(parameters);
         var commandJson = JsonSerializer.Serialize(updateCommand, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
         var commandBytes = Encoding.UTF8.GetBytes(commandJson);
@@ -170,7 +170,7 @@ public class WebSocketHostTests
                 minOrderSize: Quantity.FromDecimal(0.001m)
         );
         // --- Arrange ---
-        var parameters = new QuotingParameters(mockInstrument.InstrumentId, FairValueModel.Midp, 124, 1m, 1m, Quantity.FromDecimal(2m), 1, QuoterType.Single);
+        var parameters = new QuotingParameters(mockInstrument.InstrumentId, FairValueModel.Midp, 124, 1m, -1m, 1m, Quantity.FromDecimal(2m), 1, QuoterType.Single);
 
         // Mock QuotingInstanceManager가 파라미터를 받았을 때,
         // 검증에 필요한 QuotingInstance를 반환하도록 설정합니다.
