@@ -21,7 +21,12 @@ public sealed class MarketMaker
     private readonly IQuoteValidator _quoteValidator;
     private readonly object _statusLock = new();
 
+
     private TwoSidedQuoteStatus _quoteStatus;
+    private readonly object _targetLock = new();
+    private QuotePair? _nextTargetQuotePair;
+    // 0 = Idle, 1 = In Progress
+    private int _isActionInProgress = 0;
 
     /// <summary>
     /// Fired whenever the status of the bid or ask quote changes (e.g., from Held to Live).
@@ -57,6 +62,52 @@ public sealed class MarketMaker
     /// </summary>
     /// <param name="target">The new target quote pair from the strategy logic.</param>
     public async Task UpdateQuoteTargetAsync(QuotePair target)
+    {
+        lock (_targetLock)
+        {
+            // 새로운 목표가 도착하면, 항상 _nextTargetQuote를 최신 값으로 덮어씁니다.
+            _nextTargetQuotePair = target;
+        }
+
+        // 현재 진행 중인 작업이 있는지 확인하고, 없다면 즉시 실행을 시도합니다.
+        await TryProcessNextQuoteAsync();
+    }
+
+    private async Task TryProcessNextQuoteAsync()
+    {
+        if (Interlocked.CompareExchange(ref _isActionInProgress, 1, 0) == 0)
+        {
+            QuotePair? targetToProcess = null;
+
+            try
+            {
+                while (true)
+                {
+                    lock (_targetLock)
+                    {
+                        // 처리할 다음 목표를 가져오고, 큐를 비웁니다.
+                        targetToProcess = _nextTargetQuotePair;
+                        _nextTargetQuotePair = null;
+                    }
+
+                    if (targetToProcess == null)
+                    {
+                        // 처리할 목표가 더 이상 없으면 루프를 종료합니다.
+                        break;
+                    }
+
+                    _logger.LogDebug("Processing new quote target: {Target}", targetToProcess);
+                    await ExecuteQuoteUpdateAsync(targetToProcess.Value);
+                }
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _isActionInProgress, 0);
+            }
+        }
+    }
+
+    public async Task ExecuteQuoteUpdateAsync(QuotePair target)
     {
         if (target.InstrumentId != _instrument.InstrumentId)
         {

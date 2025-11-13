@@ -24,9 +24,6 @@ public sealed class SingleOrderQuoter : IQuoter
 
     private IOrder? _activeOrder;
 
-    // 0 = idle, 1 = request in progress. Prevents concurrent modification attempts.
-    private int _requestInProgressFlag;
-
     public SingleOrderQuoter(
         ILogger logger,
         Side side,
@@ -41,12 +38,6 @@ public sealed class SingleOrderQuoter : IQuoter
 
     public async Task UpdateQuoteAsync(Quote newQuote, CancellationToken cancellationToken = default)
     {
-        if (Interlocked.CompareExchange(ref _requestInProgressFlag, 1, 0) != 0)
-        {
-            _logger.LogWarningWithCaller($"({_side}) UpdateQuoteAsync rejected: Another operation is already in progress.");
-            return;
-        }
-
         try
         {
             IOrder? currentOrder;
@@ -72,20 +63,10 @@ public sealed class SingleOrderQuoter : IQuoter
         {
             _logger.LogErrorWithCaller(ex, $"({_side}) An unexpected error occurred during UpdateQuoteAsync.");
         }
-        finally
-        {
-            Interlocked.Exchange(ref _requestInProgressFlag, 0);
-        }
     }
 
     public async Task CancelQuoteAsync(CancellationToken cancellationToken = default)
     {
-        if (Interlocked.CompareExchange(ref _requestInProgressFlag, 1, 0) != 0)
-        {
-            _logger.LogWarningWithCaller($"({_side}) CancelQuoteAsync rejected: Another operation is already in progress.");
-            return;
-        }
-
         try
         {
             IOrder? orderToCancel;
@@ -105,10 +86,6 @@ public sealed class SingleOrderQuoter : IQuoter
         catch (Exception ex)
         {
             _logger.LogErrorWithCaller(ex, $"({_side}) An unexpected error occurred during CancelQuoteAsync.");
-        }
-        finally
-        {
-            Interlocked.Exchange(ref _requestInProgressFlag, 0);
         }
     }
 
