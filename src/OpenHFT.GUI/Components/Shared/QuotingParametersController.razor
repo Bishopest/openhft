@@ -47,6 +47,13 @@
                     <MudText Class="pa-4">No matching instruments found.</MudText>
                 </NoItemsTemplate>
             </MudAutocomplete>
+            <MudSelect T="string" @bind-Value="_selectedOmsIdentifier" Label="Target OMS" Variant="Variant.Outlined" Required="true"
+                       Disabled="IsStrategyActive"> @* Disable if a strategy is already active/selected *@
+                @foreach (var server in _availableOmsServers)
+                {
+                    <MudSelectItem T="string" Value="@server.OmsIdentifier">@server.OmsIdentifier</MudSelectItem>
+                }
+            </MudSelect>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleSubmit" Class="mt-4">Submit
             </MudButton>
             <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="HandleCancel">Cancel</MudButton>

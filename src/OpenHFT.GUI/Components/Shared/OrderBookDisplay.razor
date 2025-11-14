@@ -33,7 +33,7 @@
             TickSize x @_groupingMultipliers[SelectedMultiplierIndex]
         </MudSlider>
     </div> 
-    @if (DisplayInstrument is null)
+    @if (ActiveInstance is null)
     {
         @* CHANGE 3: If no instrument is selected, show a clear message in the main area *@
         <div class="d-flex flex-column justify-center align-center fill-height">

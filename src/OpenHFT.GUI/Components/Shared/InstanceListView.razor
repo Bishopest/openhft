@@ -17,6 +17,10 @@
                     </MudTableSortLabel>
                 </MudTh>
                 <MudTh>
+                    <MudTableSortLabel SortBy="new Func<InstanceStatusPayload, object>(x => GetOmsIdentifier(x))">Oms
+                    </MudTableSortLabel>
+                </MudTh>
+                <MudTh>
                     <MudTableSortLabel SortBy="new Func<InstanceStatusPayload, object>(x => x.IsActive)">Status
                     </MudTableSortLabel>
                 </MudTh>
@@ -30,13 +34,14 @@
             <RowTemplate>
                 <MudTd DataLabel="Selected">
                     @* This icon will only appear on the currently selected row. *@
-                    @if (SelectedInstance is not null && SelectedInstance.InstrumentId == context.InstrumentId)
+                    @if (SelectedInstance is not null && SelectedInstance.InstrumentId == context.InstrumentId && SelectedInstance.OmsIdentifier == context.OmsIdentifier)
                     {
                         <MudIcon Icon="@Icons.Material.Filled.ArrowRight" Color="Color.Primary" />
                     }
                 </MudTd>
                 <MudTd DataLabel="Exchange">@GetExchange(context)</MudTd>
                 <MudTd DataLabel="Symbol">@GetSymbol(context)</MudTd>
+                <MudTd DataLabel="Symbol">@GetOmsIdentifier(context)</MudTd>
                 <MudTd DataLabel="Status">
                     <MudChip T='string' Color="@(context.IsActive? Color.Success: Color.Warning)" Size="Size.Small">
                         @(context.IsActive ? "Active" : "Inactive")

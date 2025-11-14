@@ -28,12 +28,12 @@
 </MudPaper>
 
 @code {
-    protected override void OnInitialized() => OrderCache.OnFillsUpdated += OnUpdateFills;
+    protected override void OnInitialized() => OrderCache.OnFillReceived += OnUpdateFills;
 
-    private void OnUpdateFills(object? sender, Fill fill)
+    private void OnUpdateFills((string OmsIdentifier, Fill fill)args)
     {
         StateHasChanged();
     }
 
-    public void Dispose() => OrderCache.OnFillsUpdated -= OnUpdateFills;
+    public void Dispose() => OrderCache.OnFillReceived -= OnUpdateFills;
 }

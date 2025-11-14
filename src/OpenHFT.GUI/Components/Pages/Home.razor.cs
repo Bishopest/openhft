@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
 using OpenHFT.Core.Configuration;
@@ -16,53 +17,64 @@ namespace OpenHFT.GUI.Components.Pages;
 public partial class Home : ComponentBase, IDisposable
 {
     // --- Dependencies ---
-    [Inject]
-    private ISnackbar Snackbar { get; set; } = default!;
-    [Inject]
-    private IOmsConnectorService OmsConnector { get; set; } = default!;
-    [Inject]
-    private ILogger<Home> Logger { get; set; } = default!;
-    [Inject]
-    private IExchangeFeedManager FeedManager { get; set; } = default!;
+    [Inject] private IConfiguration Configuration { get; set; } = default!;
+    [Inject] private IOmsConnectorService OmsConnector { get; set; } = default!;
+    [Inject] private IInstrumentRepository InstrumentRepository { get; set; } = default!;
+    [Inject] private IExchangeFeedManager FeedManager { get; set; } = default!;
+    [Inject] private IOrderCacheService OrderCache { get; set; } = default!;
+    [Inject] private ILogger<Home> Logger { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+    [Inject] private JsonSerializerOptions _jsonOptions { get; set; } = default!;
 
-    /// <summary>
-    /// A reference to the child QuotingParameterController component instance.
-    /// </summary>
+    // --- Child Component References ---
     private QuotingParametersController? _quotingController;
-    /// <summary>
-    /// Stores the active quoting parameters for each instrument ID.
-    /// </summary>
+    // --- Centralized State ---
     private List<InstanceStatusPayload> _activeInstances = new();
     private InstanceStatusPayload? _selectedInstance;
-    // Keep track of which instruments we are subscribed to
     private readonly HashSet<int> _subscribedInstrumentIds = new();
     private bool _isDisposed = false;
 
     // --- Lifecycle Methods ---
     protected override void OnInitialized()
     {
-        if (OmsConnector.CurrentStatus == ConnectionStatus.Connected)
+        var connectedOmsConfig = OmsConnector.GetConnectedServers();
+        foreach (var config in connectedOmsConfig)
         {
-            // If we load the page and we are already connected,
-            // immediately request the list of instances.
-            RequestInstanceStatuses();
+            _ = OmsConnector.SendCommandAsync(config, new GetInstanceStatusesCommand());
+            _ = OmsConnector.SendCommandAsync(config, new GetActiveOrdersCommand());
+            _ = OmsConnector.SendCommandAsync(config, new GetFillsCommand());
         }
 
         // Subscribe to the connector's status changes to keep our UI in sync
         OmsConnector.OnConnectionStatusChanged += HandleStatusChange;
-        OmsConnector.OnInstanceStatusReceived += HandleInstanceStatusUpdate;
+        OmsConnector.OnMessageReceived += HandleRawMessage;
     }
 
-    private async void HandleInstanceStatusUpdate(InstanceStatusEvent statusEvent)
+    private void HandleRawMessage(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var type = doc.RootElement.GetProperty("type").GetString();
+
+        switch (type)
+        {
+            case "INSTANCE_STATUS":
+                var instanceStatusEvent = JsonSerializer.Deserialize<InstanceStatusEvent>(json, _jsonOptions);
+                if (instanceStatusEvent != null) HandleInstanceStatusUpdate(instanceStatusEvent.Payload);
+                break;
+            default:
+                break;
+        }
+    }
+
+    private async void HandleInstanceStatusUpdate(InstanceStatusPayload payload)
     {
         if (_isDisposed)
         {
             return; // Do nothing if disposed.
         }
-        var payload = statusEvent.Payload;
         Logger.LogInformationWithCaller($"Received status update for Instrument ID: {payload.InstrumentId}, Active: {payload.IsActive}");
 
-        var existingInstance = _activeInstances.FirstOrDefault(i => i.InstrumentId == payload.InstrumentId);
+        var existingInstance = _activeInstances.FirstOrDefault(i => i.InstrumentId == payload.InstrumentId && i.OmsIdentifier == payload.OmsIdentifier);
         if (existingInstance != null)
         {
             // Update existing instance
@@ -73,98 +85,120 @@ public partial class Home : ComponentBase, IDisposable
         {
             // Add new instance
             _activeInstances.Add(payload);
-            if (_subscribedInstrumentIds.Add(payload.InstrumentId))
-            {
-                Logger.LogInformationWithCaller($"New instance detected. Subscribing to market data for Instrument ID: {payload.InstrumentId}");
-                await FeedManager.SubscribeToInstrumentAsync(payload.InstrumentId);
-            }
         }
 
         await InvokeAsync(StateHasChanged);
     }
 
-    // Called when a user clicks a row in the InstanceListView
+    private async void HandleStatusChange((OmsServerConfig Server, ConnectionStatus Status) args)
+    {
+        if (_isDisposed) return;
+
+        if (args.Status == ConnectionStatus.Connected)
+        {
+            Logger.LogInformationWithCaller($"Connection to {args.Server.OmsIdentifier} established. Requesting initial state.");
+            // Request initial state from the newly connected server.
+            await OmsConnector.SendCommandAsync(args.Server, new GetInstanceStatusesCommand());
+            await OmsConnector.SendCommandAsync(args.Server, new GetActiveOrdersCommand());
+            await OmsConnector.SendCommandAsync(args.Server, new GetFillsCommand());
+        }
+        else if (args.Status == ConnectionStatus.Disconnected || args.Status == ConnectionStatus.Error)
+        {
+            // If a connection is lost, remove instances belonging to that OMS.
+            _activeInstances.RemoveAll(i => i.OmsIdentifier == args.Server.OmsIdentifier);
+            if (_selectedInstance?.OmsIdentifier == args.Server.OmsIdentifier)
+            {
+                _selectedInstance = null;
+            }
+            Logger.LogInformationWithCaller($"Connection to {args.Server.OmsIdentifier} lost. Clearing related state.");
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
     private async Task HandleInstanceSelection(InstanceStatusPayload instance)
     {
-        Logger.LogInformationWithCaller($"User selected instance for Instrument ID: {instance.InstrumentId}");
+        if (_selectedInstance?.InstrumentId == instance.InstrumentId && _selectedInstance?.OmsIdentifier == instance.OmsIdentifier)
+            return;
+
+        Logger.LogInformationWithCaller($"User selected instance for Instrument: {instance.InstrumentId} on OMS: {instance.OmsIdentifier}");
+
+        // Unsubscribe from the old selection's market data
+        if (_selectedInstance != null && _subscribedInstrumentIds.Remove(_selectedInstance.InstrumentId))
+        {
+            await FeedManager.UnsubscribeFromInstrumentAsync(_selectedInstance.InstrumentId);
+        }
 
         _selectedInstance = instance;
 
-        // Update child components with the data of the new selection
+        // Subscribe to the new selection's market data
+        if (_subscribedInstrumentIds.Add(_selectedInstance.InstrumentId))
+        {
+            await FeedManager.SubscribeToInstrumentAsync(_selectedInstance.InstrumentId);
+        }
+
         if (_quotingController != null)
         {
-            await _quotingController.UpdateParametersAsync(instance.Parameters);
+            var serverConfig = Configuration.GetSection("oms").Get<List<OmsServerConfig>>()?
+                                            .FirstOrDefault(s => s.OmsIdentifier == instance.OmsIdentifier);
+            await _quotingController.UpdateParametersAsync(instance.Parameters, serverConfig);
         }
 
         StateHasChanged();
     }
 
-    private async void HandleStatusChange(ConnectionStatus newStatus)
+    /// <summary>
+    /// This method is called when the QuotingParameterController's OnSubmit event is fired.
+    /// </summary>
+    private async Task HandleSubmitParameters((string OmsIdentifier, QuotingParameters Parameters) args)
     {
-        if (newStatus == ConnectionStatus.Disconnected || newStatus == ConnectionStatus.Error)
+        var targetServer = Configuration.GetSection("oms").Get<List<OmsServerConfig>>()?
+                                        .FirstOrDefault(s => s.OmsIdentifier == args.OmsIdentifier);
+        if (targetServer is null)
         {
-            // Clear all state when disconnected
-            _activeInstances.Clear();
-            _selectedInstance = null;
-            _subscribedInstrumentIds.Clear();
+            Snackbar.Add($"Could not find server config for OMS: {args.OmsIdentifier}", Severity.Error);
+            return;
         }
-        else if (newStatus == ConnectionStatus.Connected)
-        {
-            RequestInstanceStatuses();
-        }
-        // Notify Blazor that the state has changed and the UI needs to re-render
-        await InvokeAsync(StateHasChanged);
-    }
 
-    private void RequestInstanceStatuses()
-    {
-        _ = OmsConnector.SendCommandAsync(new GetInstanceStatusesCommand());
-        _ = OmsConnector.SendCommandAsync(new GetActiveOrdersCommand());
-        _ = OmsConnector.SendCommandAsync(new GetFillsCommand());
+        // Check connection status for the specific server
+        if (OmsConnector.GetStatus(targetServer) != ConnectionStatus.Connected)
+        {
+            Snackbar.Add($"Cannot deploy instance, not connected to OMS: {args.OmsIdentifier}", Severity.Error);
+            return;
+        }
+
+        Logger.LogInformationWithCaller($"Deploying/updating parameters for Instrument ID: {args.Parameters.InstrumentId} on OMS: {args.OmsIdentifier}");
+
+        var command = new UpdateParametersCommand(args.Parameters);
+        await OmsConnector.SendCommandAsync(targetServer, command);
+        Snackbar.Add($"Update command sent to {targetServer.OmsIdentifier}.", Severity.Success);
     }
 
     /// <summary>
     /// This method is called when the QuotingParameterController's OnSubmit event is fired.
     /// </summary>
-    private async Task HandleSubmitParameters(QuotingParameters parameters)
+    private async Task HandleCancelParameters((string OmsIdentifier, int InstrumentId) args)
     {
-        if (OmsConnector.CurrentStatus != ConnectionStatus.Connected)
+        var targetServer = Configuration.GetSection("oms").Get<List<OmsServerConfig>>()?
+                                        .FirstOrDefault(s => s.OmsIdentifier == args.OmsIdentifier);
+        if (targetServer is null)
         {
-            Snackbar.Add("Cannot deploy strategy, not connected to OMS.", Severity.Error);
+            Snackbar.Add($"Could not find server config for OMS: {args.OmsIdentifier}", Severity.Error);
             return;
         }
 
-        Logger.LogInformationWithCaller($"Deploying quoting instance for Instrument ID: {parameters.InstrumentId}");
-
-        // Wrap the parameters in the command object
-        var command = new UpdateParametersCommand(parameters);
-
-        // Send the command via the service
-        await OmsConnector.SendCommandAsync(command);
-
-        Snackbar.Add($"Deploy command sent for Instrument ID {parameters.InstrumentId}.", Severity.Success);
-    }
-
-    /// <summary>
-    /// This method is called when the QuotingParameterController's OnSubmit event is fired.
-    /// </summary>
-    private async Task HandleCancelParameters(int instrumentId)
-    {
-        if (OmsConnector.CurrentStatus != ConnectionStatus.Connected)
+        // Check connection status for the specific server
+        if (OmsConnector.GetStatus(targetServer) != ConnectionStatus.Connected)
         {
-            Snackbar.Add("Cannot retire strategy, not connected to OMS.", Severity.Error);
+            Snackbar.Add($"Cannot retire instance, not connected to OMS: {args.OmsIdentifier}", Severity.Error);
             return;
         }
 
-        Logger.LogInformationWithCaller($"Retiring quoting instance for Instrument ID: {instrumentId}");
+        Logger.LogInformationWithCaller($"Retire instance for Instrument ID: {args.InstrumentId} on OMS: {args.OmsIdentifier}");
 
-        // Wrap the parameters in the command object
-        var command = new RetireInstanceCommand(instrumentId);
-
-        // Send the command via the service
-        await OmsConnector.SendCommandAsync(command);
-
-        Snackbar.Add($"Retire command sent for Instrument ID {instrumentId}.", Severity.Success);
+        var command = new RetireInstanceCommand(args.InstrumentId);
+        await OmsConnector.SendCommandAsync(targetServer, command);
+        Snackbar.Add($"Retire command sent to {targetServer.OmsIdentifier}.", Severity.Success);
     }
     // --- Cleanup ---
     public void Dispose()
@@ -182,7 +216,7 @@ public partial class Home : ComponentBase, IDisposable
         {
             // Unsubscribe from all events here.
             OmsConnector.OnConnectionStatusChanged -= HandleStatusChange;
-            OmsConnector.OnInstanceStatusReceived -= HandleInstanceStatusUpdate;
+            OmsConnector.OnMessageReceived -= HandleRawMessage;
         }
 
         _isDisposed = true;

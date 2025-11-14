@@ -4,8 +4,10 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using OpenHFT.Book.Core;
 using OpenHFT.Core.Instruments;
+using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.GUI.Services;
+using OpenHFT.Oms.Api.WebSocket;
 using OpenHFT.Quoting.Models;
 
 namespace OpenHFT.GUI.Components.Shared;
@@ -24,6 +26,10 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     private IJSRuntime JSRuntime { get; set; } = default!;
     [Inject]
     private IQuoteManager QuoteManager { get; set; } = default!;
+    [Inject]
+    private IInstrumentRepository InstrumentRepository { get; set; } = default!;
+
+    // --- Child Component References ---
 
     [Parameter]
     public int DisplayDepth { get; set; } = 40; // Number of ticks to show above and below the center
@@ -32,7 +38,18 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     // --- Parameters ---
     // Data passed from parent components is defined here.
     [Parameter, EditorRequired]
-    public Instrument DisplayInstrument { get; set; }
+    public InstanceStatusPayload ActiveInstance { get; set; }
+    public Instrument? DisplayInstrument
+    {
+        get
+        {
+            if (ActiveInstance is null)
+            {
+                return null;
+            }
+            return InstrumentRepository.GetById(ActiveInstance.InstrumentId);
+        }
+    }
     private string _priceFormat = "F2"; // Default format
     private string _quantityFormat = "N4"; // Default format
 
@@ -60,6 +77,8 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     // --- STATE MANAGEMENT FOR AUTO-SCROLL ---
     private bool _shouldScrollToCenter = true; // Start with true for the initial load
     private int _previousInstrumentId = 0;
+    private string _previousOmsIdentifier = "";
+
     private readonly string _scrollContainerId = $"scroll-container-{Guid.NewGuid()}";
 
     // --- State ---
@@ -82,12 +101,12 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     {
         if (_isDisposed) return;
 
-        if (DisplayInstrument is null)
+        if (ActiveInstance is null)
         {
             return;
         }
 
-        if (snapshot.InstrumentId != DisplayInstrument.InstrumentId)
+        if (snapshot.InstrumentId != ActiveInstance.InstrumentId)
         {
             return;
         }
@@ -98,12 +117,12 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
         await InvokeAsync(StateHasChanged);
     }
 
-    private async void HandleQuoteUpdate(object? sender, QuotePair quotePair)
+    private async void HandleQuoteUpdate(object? sender, (string OmsIdentifier, QuotePair quotePair) args)
     {
         // If the quote update is for our instrument, we need to redraw the grid.
-        if (DisplayInstrument != null && quotePair.InstrumentId == DisplayInstrument.InstrumentId)
+        if (ActiveInstance != null && args.quotePair.InstrumentId == ActiveInstance.InstrumentId && args.OmsIdentifier == ActiveInstance.OmsIdentifier)
         {
-            _myCurrentQuote = quotePair;
+            _myCurrentQuote = args.quotePair;
             UpdateDisplayGrid();
             await InvokeAsync(StateHasChanged);
         }
@@ -114,7 +133,7 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     /// </summary>
     private void UpdateDisplayGrid()
     {
-        if (_currentOrderBook is null || DisplayInstrument is null || PriceGrouping <= 0) return;
+        if (_currentOrderBook is null || ActiveInstance is null || PriceGrouping <= 0) return;
 
         var myQuote = _myCurrentQuote;
         // --- 1. Grouping and Aggregation Logic ---
@@ -207,20 +226,19 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     /// </summary>
     protected override void OnParametersSet()
     {
-        if (DisplayInstrument != null)
+        if (ActiveInstance != null)
         {
             // Check if the instrument has actually changed.
-            if (DisplayInstrument.InstrumentId != _previousInstrumentId)
+            if (ActiveInstance.InstrumentId != _previousInstrumentId || ActiveInstance.OmsIdentifier != _previousOmsIdentifier)
             {
-                _previousInstrumentId = DisplayInstrument.InstrumentId;
-                _shouldScrollToCenter = true; // Set the flag to scroll on next render
+                _previousInstrumentId = ActiveInstance.InstrumentId;
+                _previousOmsIdentifier = ActiveInstance.OmsIdentifier;
+                _shouldScrollToCenter = true;
                 _selectedMultiplierIndex = 0;
-                // Clear old data immediately to show the "Awaiting data..." message
-                // This prevents showing stale data from the previous instrument.
                 _currentOrderBook = null;
                 _displayLevels.Clear();
 
-                var currentQuote = QuoteManager.GetQuote(DisplayInstrument.InstrumentId);
+                var currentQuote = QuoteManager.GetQuote(ActiveInstance.OmsIdentifier, ActiveInstance.InstrumentId);
                 if (currentQuote != null)
                 {
                     _myCurrentQuote = currentQuote;
@@ -230,6 +248,7 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
                     _myCurrentQuote = null;
                 }
             }
+
             // Calculate and store the format strings based on the instrument's properties.
             _priceFormat = $"F{GetDecimalPlaces(PriceGrouping)}";
             _quantityFormat = $"N{GetDecimalPlaces(PriceGrouping)}";

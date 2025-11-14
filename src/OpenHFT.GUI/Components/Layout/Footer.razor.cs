@@ -13,98 +13,58 @@ public partial class Footer : ComponentBase, IDisposable
     [Inject]
     private IOmsConnectorService OmsConnector { get; set; } = default!;
 
-    private bool _drawerOpen = true;
-
-    // --- STATE FOR THE NEW FOOTER ---
     private List<OmsServerConfig> _omsServers = new();
 
-    // NOTE: This assumes you will have one OmsConnectorService per OMS in the future.
-    // For now, with one service, we'll just track one status, but the UI is ready for multiples.
-    private OmsServerConfig? _connectedServer;
-    private ConnectionStatus _currentStatus = ConnectionStatus.Disconnected;
+    // --- KEY CHANGE: We only need a dictionary to track the status of each server ---
+    private readonly Dictionary<string, ConnectionStatus> _statuses = new();
 
     protected override void OnInitialized()
     {
-        // Load server list from config
+        // Load the server list from config.
         _omsServers = Configuration.GetSection("oms").Get<List<OmsServerConfig>>() ?? new List<OmsServerConfig>();
-        _currentStatus = OmsConnector.CurrentStatus;
 
-        // If already connected, pre-select the server in the dropdown
-        if (_currentStatus == ConnectionStatus.Connected && OmsConnector.ConnectedServerUri != null)
+        // Initialize the status for each server by asking the central service.
+        foreach (var server in _omsServers)
         {
-            string connectedUriString = OmsConnector.ConnectedServerUri.AbsoluteUri;
-            _connectedServer = _omsServers.FirstOrDefault(s =>
-            {
-                if (Uri.TryCreate(s.Url, UriKind.Absolute, out var configUri))
-                {
-                    return configUri.AbsoluteUri == connectedUriString;
-                }
-                else
-                {
-                    return false;
-                }
-            });
+            _statuses[server.OmsIdentifier] = OmsConnector.GetStatus(server);
         }
 
-        // Subscribe to subsequent status changes
+        // Subscribe to the single, centralized status change event.
         OmsConnector.OnConnectionStatusChanged += HandleStatusChange;
     }
 
-    private async Task HandleConnectClick(OmsServerConfig server)
+    // Connect button now calls the central service with the server config.
+    private async Task HandleConnectClick(OmsServerConfig serverConfig)
     {
-        // If another server is already connected, disconnect first.
-        if (_currentStatus == ConnectionStatus.Connected && _connectedServer != server)
-        {
-            await OmsConnector.DisconnectAsync();
-        }
-        await OmsConnector.ConnectAsync(new Uri(server.Url));
+        await OmsConnector.ConnectAsync(serverConfig);
     }
 
-    private async Task HandleDisconnectClick()
+    // Disconnect button also calls the central service.
+    private async Task HandleDisconnectClick(OmsServerConfig serverConfig)
     {
-        await OmsConnector.DisconnectAsync();
+        await OmsConnector.DisconnectAsync(serverConfig);
     }
 
-    private async void HandleStatusChange(ConnectionStatus newStatus)
+    // The event handler now receives a tuple with the server and its new status.
+    private async void HandleStatusChange((OmsServerConfig Server, ConnectionStatus Status) args)
     {
-        _currentStatus = newStatus;
-        if (newStatus == ConnectionStatus.Connected && OmsConnector.ConnectedServerUri != null)
-        {
-            string connectedUriString = OmsConnector.ConnectedServerUri.AbsoluteUri;
-            _connectedServer = _omsServers.FirstOrDefault(s =>
-            {
-                if (Uri.TryCreate(s.Url, UriKind.Absolute, out var configUri))
-                {
-                    return configUri.AbsoluteUri == connectedUriString;
-                }
-                else
-                {
-                    return false;
-                }
-            });
-        }
-        else
-        {
-            _connectedServer = null;
-        }
+        _statuses[args.Server.OmsIdentifier] = args.Status;
         await InvokeAsync(StateHasChanged);
     }
 
-    private Color GetStatusColor(OmsServerConfig server)
+    // The color logic now just looks up the status from our dictionary.
+    private Color GetStatusColor(OmsServerConfig serverConfig)
     {
-        if (_connectedServer != server) return Color.Default;
-        return _currentStatus switch
+        if (!_statuses.TryGetValue(serverConfig.OmsIdentifier, out var status))
+            return Color.Default;
+
+        return status switch
         {
             ConnectionStatus.Connected => Color.Success,
             ConnectionStatus.Connecting => Color.Info,
             ConnectionStatus.Error => Color.Error,
             _ => Color.Default
         };
-    }
-
-    private void DrawerToggle()
-    {
-        _drawerOpen = !_drawerOpen;
     }
 
     public void Dispose()

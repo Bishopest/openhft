@@ -4,6 +4,8 @@ using OpenHFT.GUI.Services;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Feed.Adapters;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +14,13 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
 builder.Services.AddScoped<IOrderBookManager, MockOrderBookManager>();
+var jsonOptions = new JsonSerializerOptions
+{
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    PropertyNameCaseInsensitive = true,
+    Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+};
+builder.Services.AddSingleton(jsonOptions);
 builder.Services.AddSingleton<IOrderCacheService, OrderCacheService>();
 builder.Services.AddSingleton<IExchangeFeedManager, ExchangeFeedManager>();
 builder.Services.AddSingleton<IOrderBookManager, OrderBookManager>();

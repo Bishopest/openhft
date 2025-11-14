@@ -5,10 +5,23 @@ namespace OpenHFT.GUI.Services;
 
 public interface IOrderCacheService
 {
-    event EventHandler<OrderStatusReport> OnOrdersUpdated;
-    event EventHandler<Fill> OnFillsUpdated;
+    /// <summary>
+    /// Fired when an order status is updated. The tuple contains the OMS identifier and the report.
+    /// </summary>
+    event Action<(string OmsIdentifier, OrderStatusReport Report)>? OnOrderUpdated;
 
-    IEnumerable<OrderStatusReport> GetActiveOrders(int instrumentId);
+    /// <summary>
+    /// Fired when a new fill is received. The tuple contains the OMS identifier and the fill data.
+    /// </summary>
+    event Action<(string OmsIdentifier, Fill Fill)>? OnFillReceived;
+
+    /// <summary>
+    /// Gets all active orders for a specific instrument on a specific OMS.
+    /// </summary>
+    IEnumerable<OrderStatusReport> GetActiveOrders(string omsIdentifier, int instrumentId);
+
+    /// <summary>
+    /// Gets all recent fills from all connected OMS servers.
+    /// </summary>
     IEnumerable<Fill> GetAllFills();
-
 }

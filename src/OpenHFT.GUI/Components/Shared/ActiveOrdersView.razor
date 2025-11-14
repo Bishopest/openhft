@@ -1,6 +1,6 @@
 ﻿@using OpenHFT.Core.Models
 @using OpenHFT.GUI.Services
-@inject IOrderCacheService OrderCache
+@using OpenHFT.Oms.Api.WebSocket
 @implements IDisposable
 
 <MudPaper Class="pa-2 d-flex flex-column" Style="height: 100%;">
@@ -26,27 +26,78 @@
 </MudPaper>
 
 @code {
+    [Inject]
+    private IOrderCacheService OrderCache { get; set; } = default!;
+
+    // --- CHANGE: Receive OmsIdentifier as a parameter ---
+    [Parameter]
+    public string? OmsIdentifier { get; set; }
+
     [Parameter]
     public int? InstrumentId { get; set; }
 
     private IEnumerable<OrderStatusReport> _orders = Enumerable.Empty<OrderStatusReport>();
+    private string? _previousOmsIdentifier;
+    private int? _previousInstrumentId;
 
-    protected override void OnInitialized() => OrderCache.OnOrdersUpdated += OnUpdateOrders;
-    protected override void OnParametersSet() => RenewOrders();
+    protected override void OnInitialized() => OrderCache.OnOrderUpdated += HandleOrderUpdate;
 
-    private void OnUpdateOrders(object? sender, OrderStatusReport report)
+    protected override void OnParametersSet()
     {
-        _orders = InstrumentId.HasValue ? OrderCache.GetActiveOrders(InstrumentId.Value) :
-        Enumerable.Empty<OrderStatusReport>();
-        StateHasChanged();
+        // Check if the key parameters (OMS or Instrument) have changed.
+        if (OmsIdentifier != _previousOmsIdentifier || InstrumentId != _previousInstrumentId)
+        {
+            // If they have changed, clear the current order list immediately.
+            // This prevents showing stale data from the previous selection.
+            _orders = Enumerable.Empty<OrderStatusReport>();
+
+            // Update the tracked previous values.
+            _previousOmsIdentifier = OmsIdentifier;
+            _previousInstrumentId = InstrumentId;
+
+            // Now, load the new data.
+            UpdateOrders();
+        }
     }
 
-    private void RenewOrders()
+    private void HandleOrderUpdate((string OmsIdentifier, OrderStatusReport Report) args)
     {
-        _orders = InstrumentId.HasValue ? OrderCache.GetActiveOrders(InstrumentId.Value) :
-        Enumerable.Empty<OrderStatusReport>();
-        StateHasChanged();
+        // Only update if the event is for the currently displayed OMS and Instrument
+        if (args.OmsIdentifier == OmsIdentifier && args.Report.InstrumentId == InstrumentId)
+        {
+            var status = args.Report.Status;
+
+            switch (status)
+            {
+                case OrderStatus.Cancelled:
+                case OrderStatus.Rejected:
+                case OrderStatus.Filled:
+                    _orders = _orders.Where(o => o.ExchangeOrderId != args.Report.ExchangeOrderId).ToList();
+                    break;
+                default:
+                    if (_orders.Any(o => o.ExchangeOrderId == args.Report.ExchangeOrderId))
+                    {
+                        _orders = _orders.Select(o => o.ExchangeOrderId == args.Report.ExchangeOrderId ? args.Report : o).ToList();
+                    }
+                    else
+                    {
+                        _orders = _orders.Append(args.Report).ToList();
+                    }
+                    break;
+            }
+        }
+
+        InvokeAsync(StateHasChanged);
     }
 
-    public void Dispose() => OrderCache.OnOrdersUpdated -= OnUpdateOrders;
+    private void UpdateOrders()
+    {
+        _orders = (OmsIdentifier != null && InstrumentId.HasValue)
+        ? OrderCache.GetActiveOrders(OmsIdentifier, InstrumentId.Value)
+        : Enumerable.Empty<OrderStatusReport>();
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => OrderCache.OnOrderUpdated -= HandleOrderUpdate;
 }

@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
+using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
@@ -15,14 +16,12 @@ public partial class QuotingParametersController
     private ISnackbar Snackbar { get; set; } = default!;
     [Inject]
     private IInstrumentRepository InstrumentRepository { get; set; } = default!;
-
+    [Inject] private IConfiguration Configuration { get; set; } = default!;
     /// <summary>
     /// This event is triggered when the user clicks the Submit button with valid data.
     /// </summary>
-    [Parameter]
-    public EventCallback<QuotingParameters> OnSubmit { get; set; }
-    [Parameter]
-    public EventCallback<int> OnCancel { get; set; }
+    [Parameter] public EventCallback<(string OmsIdentifier, QuotingParameters Parameters)> OnSubmit { get; set; }
+    [Parameter] public EventCallback<(string OmsIdentifier, int InstrumentId)> OnCancel { get; set; }
 
     [Parameter]
     public EventCallback<Instrument> OnInstrumentSelected { get; set; }
@@ -34,7 +33,8 @@ public partial class QuotingParametersController
     public bool IsStrategyActive { get; set; }
     private MudForm _form = new();
     private ParameterFormModel _model = new(); // A temporary model for form binding
-
+    private List<OmsServerConfig> _availableOmsServers = new();
+    private string? _selectedOmsIdentifier;
     private IEnumerable<Instrument> _availableInstruments = Enumerable.Empty<Instrument>();
     private Instrument? _selectedInstrument;
     private Instrument? SelectedInstrument
@@ -67,12 +67,14 @@ public partial class QuotingParametersController
     {
         _availableInstruments = InstrumentRepository.GetAll();
         _selectedInstrument = _availableInstruments.FirstOrDefault();
+        _availableOmsServers = Configuration.GetSection("oms").Get<List<OmsServerConfig>>() ?? new List<OmsServerConfig>();
+        _selectedOmsIdentifier = _availableOmsServers.FirstOrDefault()?.OmsIdentifier;
     }
 
     /// <summary>
     /// Public method that can be called by a parent component to update the form's data.
     /// </summary>
-    public async Task UpdateParametersAsync(QuotingParameters newParameters)
+    public async Task UpdateParametersAsync(QuotingParameters newParameters, OmsServerConfig? targetOms)
     {
         _model = new ParameterFormModel
         {
@@ -88,7 +90,7 @@ public partial class QuotingParametersController
         // We need to update the instrument selection as well
         SelectedInstrument = _availableInstruments.FirstOrDefault(i => i.InstrumentId == newParameters.InstrumentId);
         _selectedFvSourceInstrument = _availableInstruments.FirstOrDefault(i => i.InstrumentId == newParameters.FairValueSourceInstrumentId);
-
+        _selectedOmsIdentifier = targetOms?.OmsIdentifier;
         // Notify Blazor that the state has changed and the UI needs to re-render
         await InvokeAsync(StateHasChanged);
     }
@@ -129,6 +131,12 @@ public partial class QuotingParametersController
             return;
         }
 
+        if (string.IsNullOrEmpty(_selectedOmsIdentifier))
+        {
+            Snackbar.Add("Please select a target OMS server.", Severity.Warning);
+            return;
+        }
+
         // Convert the form model to the actual QuotingParameters struct
         var parameters = new QuotingParameters(
             _selectedInstrument.InstrumentId,
@@ -143,14 +151,20 @@ public partial class QuotingParametersController
         );
 
         // Invoke the callback to notify the parent component
-        await OnSubmit.InvokeAsync(parameters);
+        await OnSubmit.InvokeAsync((_selectedOmsIdentifier, parameters));
     }
 
     private async Task HandleCancel()
     {
+        if (string.IsNullOrEmpty(_selectedOmsIdentifier))
+        {
+            Snackbar.Add("Please select a target OMS server.", Severity.Warning);
+            return;
+        }
+
         if (_selectedInstrument is not null)
         {
-            await OnCancel.InvokeAsync(_selectedInstrument.InstrumentId);
+            await OnCancel.InvokeAsync((_selectedOmsIdentifier, _selectedInstrument.InstrumentId));
         }
 
         _form.ResetValidation();

@@ -1,18 +1,19 @@
 ﻿@namespace OpenHFT.GUI.Components.Layout
 @using OpenHFT.GUI.Services
 
-@* Use MudPaper as the root for more height flexibility *@
 <MudPaper Elevation="4" Square="true" Class="d-flex align-center pa-2 gap-4" Style="flex-shrink: 0;">
     @foreach (var server in _omsServers)
     {
+        var currentStatus = _statuses.GetValueOrDefault(server.OmsIdentifier, ConnectionStatus.Disconnected);
+
         <MudPaper Outlined="true" Class="pa-2" Style="min-width: 250px;">
             <MudGrid Spacing="1" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
 
                 @* Left Column: Server Name and Status *@
                 <MudItem xs="7">
-                    <MudText Typo="Typo.body1" Style="font-weight: bold;">@server.Name</MudText>
+                    <MudText Typo="Typo.body1" Style="font-weight: bold;">@server.OmsIdentifier</MudText>
                     <MudText Typo="Typo.body1" Color="@GetStatusColor(server)" Variant="Variant.Outlined">
-                        @(_connectedServer == server ? _currentStatus.ToString() : "Disconnected")
+                        @currentStatus.ToString()
                     </MudText>
                 </MudItem>
 
@@ -20,19 +21,18 @@
                 <MudItem xs="5" Class="d-flex flex-column gap-1">
                     <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
                         OnClick="() => HandleConnectClick(server)"
-                        Disabled="@(_currentStatus == ConnectionStatus.Connected)">
-                        @if (_currentStatus == ConnectionStatus.Connecting && _connectedServer == server)
+                        Disabled="@(currentStatus == ConnectionStatus.Connected)">
+                        @if (currentStatus == ConnectionStatus.Connecting)
                         {
                             <MudProgressCircular Size="Size.Small" Indeterminate="true" />
                         }
                         else
                         {
-
                             <text>Connect</text>
                         }
                     </MudButton>
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="HandleDisconnectClick"
-                        Disabled="@(_connectedServer != server)">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => HandleDisconnectClick(server)"
+                        Disabled="@(currentStatus == ConnectionStatus.Disconnected)">
                         Disconnect
                     </MudButton>
                 </MudItem>

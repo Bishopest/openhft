@@ -13,7 +13,7 @@ public partial class InstanceListView : ComponentBase
     /// The list of all active instances received from the parent.
     /// </summary>
     [Parameter]
-    public IEnumerable<InstanceStatusPayload> Instances { get; set; } = Enumerable.Empty<InstanceStatusPayload>();
+    public List<InstanceStatusPayload> Instances { get; set; } = new();
 
     /// <summary>
     /// The currently selected instance, for highlighting.
@@ -49,7 +49,10 @@ public partial class InstanceListView : ComponentBase
         var instrument = InstrumentRepository.GetById(instance.InstrumentId);
         return instrument?.Symbol ?? instance.InstrumentId.ToString();
     }
-
+    protected string GetOmsIdentifier(InstanceStatusPayload instance)
+    {
+        return instance.OmsIdentifier;
+    }
     protected string GetExchange(InstanceStatusPayload instance)
     {
         var instrument = InstrumentRepository.GetById(instance.InstrumentId);
