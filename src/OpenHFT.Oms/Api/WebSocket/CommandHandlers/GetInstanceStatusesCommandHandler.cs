@@ -1,5 +1,6 @@
 using System;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Utils;
 using OpenHFT.Quoting.Interfaces;
@@ -16,17 +17,20 @@ public class GetInstanceStatusesCommandHandler : IWebSocketCommandHandler
     private readonly ILogger<GetInstanceStatusesCommandHandler> _logger;
     private readonly IQuotingInstanceManager _manager;
     private readonly IWebSocketChannel _channel;
+    private readonly string _omsIdentifier;
 
     public string CommandType => "GET_INSTANCE_STATUSES";
 
     public GetInstanceStatusesCommandHandler(
         ILogger<GetInstanceStatusesCommandHandler> logger,
         IQuotingInstanceManager manager,
-        IWebSocketChannel channel)
+        IWebSocketChannel channel,
+        IConfiguration config)
     {
         _logger = logger;
         _manager = manager;
         _channel = channel;
+        _omsIdentifier = config["omsIdentifier"] ?? throw new ArgumentNullException("omsIdentifier");
     }
 
     public async Task HandleAsync(JsonElement messageElement)
@@ -45,6 +49,7 @@ public class GetInstanceStatusesCommandHandler : IWebSocketCommandHandler
                 // 2. For each instance, create a status payload.
                 var payload = new InstanceStatusPayload
                 {
+                    OmsIdentifier = _omsIdentifier,
                     InstrumentId = instance.InstrumentId,
                     IsActive = instance.IsActive,
                     Parameters = instance.CurrentParameters
@@ -62,9 +67,11 @@ public class GetInstanceStatusesCommandHandler : IWebSocketCommandHandler
         }
         catch (Exception ex)
         {
-            _logger.LogErrorWithCaller(ex, $"Error handling {CommandType} command.");
+            var msg = $"Error handling {CommandType} command.";
+            _logger.LogErrorWithCaller(ex, msg);
             // Send a generic error event back to the client.
-            var errorEvent = new ErrorEvent($"An unexpected error occurred while fetching instance statuses: {ex.Message}");
+            var errorPayload = new ErrorPayload(_omsIdentifier, msg);
+            var errorEvent = new ErrorEvent(errorPayload);
             await _channel.SendAsync(errorEvent);
         }
     }

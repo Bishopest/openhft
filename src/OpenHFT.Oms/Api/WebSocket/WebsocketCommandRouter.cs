@@ -1,5 +1,6 @@
 using System;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Utils;
 
@@ -15,15 +16,18 @@ public class WebSocketCommandRouter : IWebSocketCommandRouter
     private readonly ILogger<WebSocketCommandRouter> _logger;
     private readonly IReadOnlyDictionary<string, IWebSocketCommandHandler> _handlers;
     private readonly IWebSocketChannel _channel;
+    private readonly string _omsIdentifier;
 
     public WebSocketCommandRouter(
         ILogger<WebSocketCommandRouter> logger,
         IEnumerable<IWebSocketCommandHandler> handlers,
-        IWebSocketChannel channel)
+        IWebSocketChannel channel,
+        IConfiguration config)
     {
         _logger = logger;
         _handlers = handlers.ToDictionary(h => h.CommandType, h => h);
         _channel = channel;
+        _omsIdentifier = config["omsIdentifier"] ?? throw new ArgumentNullException("omsIdentifier");
         _logger.LogInformation("WebSocketCommandRouter initialized with {Count} handlers: {Handlers}",
             _handlers.Count, string.Join(", ", _handlers.Keys));
     }
@@ -48,14 +52,17 @@ public class WebSocketCommandRouter : IWebSocketCommandRouter
             {
                 var errorMsg = $"No handler found for WebSocket message type: {messageType}";
                 _logger.LogWarningWithCaller(errorMsg);
-                var errorEvent = new ErrorEvent(errorMsg);
+                var errorPayload = new ErrorPayload(_omsIdentifier, errorMsg);
+                var errorEvent = new ErrorEvent(errorPayload);
                 await _channel.SendAsync(errorEvent);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogErrorWithCaller(ex, "Error routing WebSocket message.");
-            var errorEvent = new ErrorEvent(ex.Message);
+            var errorMsg = $"Error routing WebSocket message: {ex.Message}";
+            _logger.LogErrorWithCaller(ex, errorMsg);
+            var errorPayload = new ErrorPayload(_omsIdentifier, errorMsg);
+            var errorEvent = new ErrorEvent(errorPayload);
             await _channel.SendAsync(errorEvent);
         }
     }

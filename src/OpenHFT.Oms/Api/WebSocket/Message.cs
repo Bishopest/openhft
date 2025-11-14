@@ -25,41 +25,67 @@ public record GetFillsCommand() : WebSocketMessage("GET_FILLS");
 
 // --- Server -> Client (Events / Responses) ---
 public record AcknowledgmentEvent(
+        [property: JsonPropertyName("payload")] AckPayload Payload
+    ) : WebSocketMessage("ACK");
+
+public record AckPayload(
+    [property: JsonPropertyName("omsIdentifier")] string OmsIdentifier,
     [property: JsonPropertyName("correlationId")] string CorrelationId,
     [property: JsonPropertyName("success")] bool Success,
     [property: JsonPropertyName("message")] string? Message = null
-) : WebSocketMessage("ACK");
+);
 
-/// <summary>
-/// Response to GET_ACTIVE_ORDERS, containing a list of the latest status reports for all active orders.
-/// </summary>
 public record ActiveOrdersListEvent(
-    [property: JsonPropertyName("payload")] IEnumerable<OrderStatusReport> Reports
+    [property: JsonPropertyName("payload")] ActiveOrdersPayload Payload
 ) : WebSocketMessage("ACTIVE_ORDERS_LIST");
 
-/// <summary>
-/// Response to GET_FILLS, containing a list of all known fills for active orders.
-/// </summary>
+public record ActiveOrdersPayload(
+    [property: JsonPropertyName("omsIdentifier")] string OmsIdentifier,
+    [property: JsonPropertyName("reports")] IEnumerable<OrderStatusReport> Reports
+);
+
 public record FillsListEvent(
-    [property: JsonPropertyName("payload")] IEnumerable<Fill> Fills
+    [property: JsonPropertyName("payload")] FillsPayload Payload
 ) : WebSocketMessage("FILLS_LIST");
+
+public record FillsPayload(
+    [property: JsonPropertyName("omsIdentifier")] string OmsIdentifier,
+    [property: JsonPropertyName("fills")] IEnumerable<Fill> Fills
+);
 
 public record InstanceStatusEvent(
     [property: JsonPropertyName("payload")] InstanceStatusPayload Payload
 ) : WebSocketMessage("INSTANCE_STATUS");
 
+// The existing InstanceStatusPayload needs the identifier.
 public class InstanceStatusPayload
 {
+    [JsonPropertyName("omsIdentifier")]
+    public string OmsIdentifier { get; set; } = string.Empty;
+
+    [JsonPropertyName("instrumentId")]
     public int InstrumentId { get; set; }
+
+    [JsonPropertyName("isActive")]
     public bool IsActive { get; set; }
+
+    [JsonPropertyName("parameters")]
     public QuotingParameters Parameters { get; set; }
-    // Add other status info like PnL, number of orders, etc.
 }
 
 public record QuotePairUpdateEvent(
-    [property: JsonPropertyName("payload")] QuotePair QuotePair
+    [property: JsonPropertyName("payload")] QuotePairUpdatePayload Payload
 ) : WebSocketMessage("QUOTEPAIR_UPDATE");
 
+public record QuotePairUpdatePayload(
+    [property: JsonPropertyName("omsIdentifier")] string OmsIdentifier,
+    [property: JsonPropertyName("quotePair")] QuotePair QuotePair
+);
 public record ErrorEvent(
+        [property: JsonPropertyName("payload")] ErrorPayload Payload
+    ) : WebSocketMessage("ERROR");
+
+public record ErrorPayload(
+    [property: JsonPropertyName("omsIdentifier")] string OmsIdentifier,
     [property: JsonPropertyName("message")] string Message
-) : WebSocketMessage("ERROR");
+);

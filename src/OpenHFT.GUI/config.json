@@ -3,7 +3,7 @@
     {
       "exchange": "binance",
       "productType" : "perpetualfuture",
-      "executionMode": "live"
+      "executionMode": "testnet"
     },
     {
       "exchange": "bitmex",
@@ -13,8 +13,12 @@
   ],
   "oms": [
     {
-      "name": "LOCAL",
+      "omsIdentifier": "LOCAL",
       "url": "ws://localhost:5001"
+    },
+    {
+      "omsIdentifier": "OH01",
+      "url": "ws://18.183.233.162:5001"
     }
   ],
   "dataFolder": "/Users/jskim/workspace/openhft/data"

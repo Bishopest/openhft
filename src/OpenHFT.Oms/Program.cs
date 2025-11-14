@@ -24,6 +24,8 @@ using OpenHFT.Quoting.Interfaces;
 using OpenHFT.Service;
 using Serilog;
 using DotNetEnv;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 public class Program
 {
@@ -72,6 +74,13 @@ public class Program
                 services.Configure<QuotingConfig>(hostContext.Configuration);
                 services.AddSingleton(provider => provider.GetRequiredService<IOptions<QuotingConfig>>().Value);
                 services.AddHttpClient();
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    PropertyNameCaseInsensitive = true,
+                    Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+                };
+                services.AddSingleton(jsonOptions);
 
                 // --- 2. Disruptor  ---
                 services.AddSingleton<MarketDataDistributor>();

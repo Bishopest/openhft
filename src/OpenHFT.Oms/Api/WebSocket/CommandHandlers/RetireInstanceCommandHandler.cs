@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Utils;
 using OpenHFT.Quoting.Interfaces;
@@ -10,13 +11,14 @@ public class RetireInstanceCommandHandler : IWebSocketCommandHandler
     private readonly IQuotingInstanceManager _manager;
     private readonly IWebSocketChannel _channel;
     private readonly JsonSerializerOptions _jsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    private readonly string _omsIdentifier;
 
-
-    public RetireInstanceCommandHandler(ILogger<RetireInstanceCommandHandler> logger, IQuotingInstanceManager manager, IWebSocketChannel channel)
+    public RetireInstanceCommandHandler(ILogger<RetireInstanceCommandHandler> logger, IQuotingInstanceManager manager, IWebSocketChannel channel, IConfiguration config)
     {
         _logger = logger;
         _manager = manager;
         _channel = channel;
+        _omsIdentifier = config["omsIdentifier"] ?? throw new ArgumentNullException("omsIdentifier");
     }
 
     public string CommandType => "RETIRE_INSTANCE";
@@ -40,6 +42,7 @@ public class RetireInstanceCommandHandler : IWebSocketCommandHandler
             {
                 var payload = new InstanceStatusPayload
                 {
+                    OmsIdentifier = _omsIdentifier,
                     InstrumentId = resultInstance.InstrumentId,
                     IsActive = resultInstance.IsActive,
                     Parameters = resultInstance.CurrentParameters
@@ -49,14 +52,17 @@ public class RetireInstanceCommandHandler : IWebSocketCommandHandler
             }
             else
             {
-                var ackEvent = new AcknowledgmentEvent(correlationId ?? string.Empty, false, "Failed to retire quoting instance.");
+                var ackPayload = new AckPayload(_omsIdentifier, correlationId ?? string.Empty, false, "Failed to retire quoting instance.");
+                var ackEvent = new AcknowledgmentEvent(ackPayload);
                 await _channel.SendAsync(ackEvent);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogErrorWithCaller(ex, "Error handling RETIRE_INSTANCE command.");
-            var errorEvent = new ErrorEvent(ex.Message);
+            var msg = "Error handling RETIRE_INSTANCE command.";
+            _logger.LogErrorWithCaller(ex, msg);
+            var errorPayload = new ErrorPayload(_omsIdentifier, msg);
+            var errorEvent = new ErrorEvent(errorPayload);
             await _channel.SendAsync(errorEvent);
         }
     }

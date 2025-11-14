@@ -1,6 +1,7 @@
 using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Utils;
 using OpenHFT.Quoting;
@@ -13,19 +14,18 @@ public class UpdateParametersCommandHandler : IWebSocketCommandHandler
     private readonly ILogger<UpdateParametersCommandHandler> _logger;
     private readonly IQuotingInstanceManager _manager;
     private readonly IWebSocketChannel _channel;
-    private readonly JsonSerializerOptions _jsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() }
-    };
+    private readonly JsonSerializerOptions _jsonOptions;
+    private readonly string _omsIdentifier;
 
     public string CommandType => "UPDATE_PARAMETERS";
 
-    public UpdateParametersCommandHandler(ILogger<UpdateParametersCommandHandler> logger, IQuotingInstanceManager manager, IWebSocketChannel channel)
+    public UpdateParametersCommandHandler(ILogger<UpdateParametersCommandHandler> logger, IQuotingInstanceManager manager, IWebSocketChannel channel, JsonSerializerOptions jsonOptions, IConfiguration config)
     {
         _logger = logger;
         _manager = manager;
         _channel = channel;
+        _jsonOptions = jsonOptions;
+        _omsIdentifier = config["omsIdentifier"] ?? throw new ArgumentNullException("omsIdentifier");
     }
 
     public async Task HandleAsync(JsonElement messageElement)
@@ -48,6 +48,7 @@ public class UpdateParametersCommandHandler : IWebSocketCommandHandler
             {
                 var payload = new InstanceStatusPayload
                 {
+                    OmsIdentifier = _omsIdentifier,
                     InstrumentId = resultInstance.InstrumentId,
                     IsActive = resultInstance.IsActive,
                     Parameters = resultInstance.CurrentParameters
@@ -57,14 +58,17 @@ public class UpdateParametersCommandHandler : IWebSocketCommandHandler
             }
             else
             {
-                var ackEvent = new AcknowledgmentEvent(correlationId ?? string.Empty, false, "Failed to deploy or update strategy instance.");
+                var ackPayload = new AckPayload(_omsIdentifier, correlationId ?? string.Empty, false, "Failed to retire quoting instance.");
+                var ackEvent = new AcknowledgmentEvent(ackPayload);
                 await _channel.SendAsync(ackEvent);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogErrorWithCaller(ex, "Error handling UPDATE_PARAMETERS command.");
-            var errorEvent = new ErrorEvent(ex.Message);
+            var msg = "Error handling UPDATE_PARAMETERS command.";
+            _logger.LogErrorWithCaller(ex, msg);
+            var errorPayload = new ErrorPayload(_omsIdentifier, msg);
+            var errorEvent = new ErrorEvent(errorPayload);
             await _channel.SendAsync(errorEvent);
         }
     }

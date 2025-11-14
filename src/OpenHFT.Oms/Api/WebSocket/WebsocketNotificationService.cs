@@ -1,4 +1,5 @@
 using System;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Interfaces;
@@ -20,18 +21,21 @@ public class WebSocketNotificationService : IHostedService
     private readonly IQuotingInstanceManager _quotingManager;
     private readonly IOrderRouter _orderRouter;
     // Add other event sources here, e.g., IPositionManager, IRiskManager
+    private readonly string _omsIdentifier;
 
     public WebSocketNotificationService(
         ILogger<WebSocketNotificationService> logger,
         IWebSocketChannel channel,
         IQuotingInstanceManager quotingManager,
-        IOrderRouter orderRouter
+        IOrderRouter orderRouter,
+        IConfiguration config
     )
     {
         _logger = logger;
         _channel = channel;
         _quotingManager = quotingManager;
         _orderRouter = orderRouter;
+        _omsIdentifier = config["omsIdentifier"] ?? throw new ArgumentNullException("omsIdentifier");
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -63,7 +67,8 @@ public class WebSocketNotificationService : IHostedService
     private void OnQuotePairCalculated(object? sender, QuotePair quotePair)
     {
         // Convert the domain event to a WebSocket message DTO
-        var updateEvent = new QuotePairUpdateEvent(quotePair);
+        var payload = new QuotePairUpdatePayload(_omsIdentifier, quotePair);
+        var updateEvent = new QuotePairUpdateEvent(payload);
 
         // Use the channel to send the message. Fire-and-forget is appropriate here.
         _ = _channel.SendAsync(updateEvent);
@@ -72,14 +77,16 @@ public class WebSocketNotificationService : IHostedService
     private void OnOrderStatusChanged(object? sender, OrderStatusReport report)
     {
         _logger.LogTrace("Broadcasting order status update for CID {ClientOrderId}", report.ClientOrderId);
-        var updateEvent = new ActiveOrdersListEvent(new List<OrderStatusReport>() { report });
+        var payload = new ActiveOrdersPayload(_omsIdentifier, new List<OrderStatusReport>() { report });
+        var updateEvent = new ActiveOrdersListEvent(payload);
         _ = _channel.SendAsync(updateEvent);
     }
 
     private void OnOrderFilled(object? sender, Fill fill)
     {
         _logger.LogTrace("Broadcasting order fill for CID {ClientOrderId}", fill.ClientOrderId);
-        var fillEvent = new FillsListEvent(new List<Fill>() { fill });
+        var payload = new FillsPayload(_omsIdentifier, new List<Fill>() { fill });
+        var fillEvent = new FillsListEvent(payload);
         _ = _channel.SendAsync(fillEvent);
     }
     // private void OnPositionChanged(object? sender, Position newPosition) { ... }

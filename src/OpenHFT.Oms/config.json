@@ -1,4 +1,5 @@
 {
+  "omsIdentifier": "LOCAL",
   "subscriptions": [
     {
       "exchange": "bitmex",
@@ -7,13 +8,13 @@
         "feed": "testnet"
       },
       "productType": "perpetualfuture",
-      "symbols": [ "XBTUSDT", "XBTUSD"]
+      "symbols": [ "XBTUSDT", "XBTUSD", "ETHUSDT"]
     },
     {
       "exchange": "binance",
       "execution": {
         "api": "testnet",
-        "feed": "live"
+        "feed": "testnet"
       },
       "productType": "perpetualfuture",
       "symbols": [ "BTCUSDT", "BTCUSD"]

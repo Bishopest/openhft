@@ -4,7 +4,7 @@ namespace OpenHFT.Core.Configuration;
 
 public class OmsServerConfig
 {
-    public required string Name
+    public required string OmsIdentifier
     {
         get; set;
     }
