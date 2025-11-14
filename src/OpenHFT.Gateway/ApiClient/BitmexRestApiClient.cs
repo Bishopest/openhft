@@ -45,7 +45,7 @@ public class BitmexRestApiClient : BaseRestApiClient
         return mode switch
         {
             ExecutionMode.Live => "https://www.bitmex.com",
-            ExecutionMode.Testnet => "https://testnet.bitmex.com",
+            ExecutionMode.Testnet => "https://direct.btimex.com/api/v2",
             _ => throw new InvalidOperationException($"Unsupported Execution Mode for Bitmex: {mode}")
         };
     }

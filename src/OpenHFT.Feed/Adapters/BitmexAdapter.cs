@@ -26,7 +26,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
     {
         return _executionMode switch
         {
-            ExecutionMode.Live => "wss://ws.bitmex.com/realtime",
+            ExecutionMode.Live => "wss://direct.bitmex.com/realtime",
             ExecutionMode.Testnet => "wss://ws.testnet.bitmex.com/realtime", // BitMEX Testnet WebSocket URL
             _ => throw new ArgumentOutOfRangeException(nameof(_executionMode), $"Unsupported execution mode: {_executionMode}")
         };
