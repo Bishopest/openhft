@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Oms.Api.WebSocket;
@@ -12,187 +14,79 @@ namespace OpenHFT.GUI.Services;
 public class OmsConnectorService : IOmsConnectorService, IAsyncDisposable
 {
     private readonly ILogger<OmsConnectorService> _logger;
+    private readonly IServiceProvider _serviceProvider;
     private readonly JsonSerializerOptions _jsonOptions;
-    private ClientWebSocket? _socket;
-    private CancellationTokenSource? _cts;
+    private readonly ConcurrentDictionary<string, OmsConnection> _connections = new();
 
-    public event Action<ConnectionStatus>? OnConnectionStatusChanged;
-    public event Action<InstanceStatusEvent>? OnInstanceStatusReceived;
-    public event Action<QuotePairUpdateEvent> OnQuotePairUpdateReceived;
-    public event Action<ErrorEvent>? OnErrorReceived;
-    public event Action<AcknowledgmentEvent>? OnAckReceived;
-    public event Action<ActiveOrdersListEvent> OnActiveOrderListReceived;
-    public event Action<FillsListEvent> OnFillsListReceived;
+    public event Action<(OmsServerConfig Server, ConnectionStatus Status)>? OnConnectionStatusChanged;
+    public event Action<string>? OnMessageReceived;
 
-    private ConnectionStatus _currentStatus = ConnectionStatus.Disconnected;
-    public ConnectionStatus CurrentStatus
-    {
-        get => _currentStatus;
-        private set
-        {
-            _currentStatus = value;
-            OnConnectionStatusChanged?.Invoke(_currentStatus);
-        }
-    }
-    public Uri? ConnectedServerUri { get; private set; }
-
-    public OmsConnectorService(ILogger<OmsConnectorService> logger)
+    public OmsConnectorService(ILogger<OmsConnectorService> logger, IServiceProvider serviceProvider, JsonSerializerOptions jsonOptions)
     {
         _logger = logger;
-        _jsonOptions = new JsonSerializerOptions
-        {
-            // For SENDING data to the server in camelCase
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-
-            // For RECEIVING data from the server, be flexible with casing.
-            // This will correctly map "instrumentId" (from server) to "InstrumentId" (in C#).
-            PropertyNameCaseInsensitive = true,
-
-            // For RECEIVING enum values as strings (e.g., "Spot" instead of 0)
-            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
-        };
+        _serviceProvider = serviceProvider;
+        _jsonOptions = jsonOptions; // Receive pre-configured options
     }
 
-    public async Task ConnectAsync(Uri serverUri)
+    public ConnectionStatus GetStatus(OmsServerConfig server)
     {
-        if (CurrentStatus == ConnectionStatus.Connected || CurrentStatus == ConnectionStatus.Connecting)
-            return;
-
-        _socket = new ClientWebSocket();
-        _cts = new CancellationTokenSource();
-        CurrentStatus = ConnectionStatus.Connecting;
-
-        try
-        {
-            await _socket.ConnectAsync(serverUri, _cts.Token);
-            ConnectedServerUri = serverUri;
-            CurrentStatus = ConnectionStatus.Connected;
-            _logger.LogInformationWithCaller($"Successfully connected to OMS at {serverUri}");
-            _ = ReceiveLoop(); // Start listening in the background
-        }
-        catch (Exception ex)
-        {
-            _logger.LogErrorWithCaller(ex, "Failed to connect to OMS.");
-            CurrentStatus = ConnectionStatus.Error;
-        }
+        return _connections.TryGetValue(server.Url, out var connection)
+            ? connection.CurrentStatus
+            : ConnectionStatus.Disconnected;
     }
 
-    private async Task ReceiveLoop()
+    public async Task ConnectAsync(OmsServerConfig server)
     {
-        if (_socket is null || _cts is null) return;
-        await using var ms = new MemoryStream();
-        var buffer = new ArraySegment<byte>(new byte[8192]);
-
-        while (_socket.State == WebSocketState.Open && !_cts.IsCancellationRequested)
+        var connection = _connections.GetOrAdd(server.Url, _ =>
         {
-            try
-            {
-                WebSocketReceiveResult result;
-                ms.SetLength(0);
-                do
-                {
-                    result = await _socket.ReceiveAsync(buffer, _cts.Token);
-                    if (result.MessageType == WebSocketMessageType.Close) { await DisconnectAsync(); return; }
-                    if (buffer.Array != null) await ms.WriteAsync(buffer.Array, buffer.Offset, result.Count, _cts.Token);
-                } while (!result.EndOfMessage);
+            _logger.LogInformationWithCaller($"Creating new connection object for {server.OmsIdentifier} ({server.Url})");
+            // Create a new OmsConnection instance using the service provider
+            // This correctly resolves its dependencies (logger, jsonOptions).
+            var connectionLogger = _serviceProvider.GetRequiredService<ILogger<OmsConnection>>();
+            var newConn = new OmsConnection(connectionLogger, _jsonOptions, server);
 
-                var messageJson = Encoding.UTF8.GetString(ms.ToArray());
-                await HandleIncomingMessage(messageJson);
-            }
-            catch (OperationCanceledException) { break; }
-            catch (Exception ex)
-            {
-                _logger.LogErrorWithCaller(ex, "An error occurred in the receive loop.");
-                CurrentStatus = ConnectionStatus.Error;
-                break;
-            }
-        }
+            // Bubble up events from the specific connection to the central service
+            newConn.OnStatusChanged += (status) => OnConnectionStatusChanged?.Invoke((server, status));
+            newConn.OnMessageReceived += (json) => OnMessageReceived?.Invoke(json);
+
+            return newConn;
+        });
+
+        await connection.ConnectAsync();
     }
 
-    private async Task HandleIncomingMessage(string json)
+    public async Task DisconnectAsync(OmsServerConfig server)
     {
-        _logger.LogDebug($"Received Websocket message: {json}");
-        try
+        if (_connections.TryRemove(server.Url, out var connection))
         {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            if (!root.TryGetProperty("type", out var typeElement) || typeElement.GetString() is not { } type)
-            {
-                _logger.LogWarningWithCaller("Received message without a 'type' property.");
-                return;
-            }
-
-            // Now, deserialize the full object based on its type.
-            switch (type)
-            {
-                case "INSTANCE_STATUS":
-                    var statusEvent = JsonSerializer.Deserialize<InstanceStatusEvent>(json, _jsonOptions);
-                    if (statusEvent != null) OnInstanceStatusReceived?.Invoke(statusEvent);
-                    break;
-                case "QUOTEPAIR_UPDATE":
-                    var updateEvent = JsonSerializer.Deserialize<QuotePairUpdateEvent>(json, _jsonOptions);
-                    if (updateEvent != null) OnQuotePairUpdateReceived?.Invoke(updateEvent);
-                    break;
-                case "ERROR":
-                    var errorEvent = JsonSerializer.Deserialize<ErrorEvent>(json, _jsonOptions);
-                    if (errorEvent != null) OnErrorReceived?.Invoke(errorEvent);
-                    break;
-                case "ACK":
-                    var ackEvent = JsonSerializer.Deserialize<AcknowledgmentEvent>(json, _jsonOptions);
-                    if (ackEvent != null) OnAckReceived?.Invoke(ackEvent);
-                    break;
-                case "ACTIVE_ORDERS_LIST":
-                    var activeOrdersListEvent = JsonSerializer.Deserialize<ActiveOrdersListEvent>(json, _jsonOptions);
-                    if (activeOrdersListEvent != null) OnActiveOrderListReceived?.Invoke(activeOrdersListEvent);
-                    break;
-                case "FILLS_LIST":
-                    var fillEvent = JsonSerializer.Deserialize<FillsListEvent>(json, _jsonOptions);
-                    if (fillEvent != null) OnFillsListReceived?.Invoke(fillEvent);
-                    break;
-                default:
-                    _logger.LogWarning("Received unknown WebSocket message type: {Type}", type);
-                    break;
-            }
+            await connection.DisposeAsync();
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to deserialize or handle incoming message.");
-        }
-        await Task.CompletedTask;
     }
 
-    public async Task SendCommandAsync(WebSocketMessage command)
+    public async Task SendCommandAsync(OmsServerConfig server, WebSocketMessage command)
     {
-        if (CurrentStatus != ConnectionStatus.Connected || _socket is null)
+        if (_connections.TryGetValue(server.Url, out var connection))
         {
-            _logger.LogWarningWithCaller("Cannot send command, not connected.");
-            return;
+            await connection.SendCommandAsync(command);
         }
-
-        var json = JsonSerializer.Serialize(command, command.GetType(), _jsonOptions);
-        var buffer = Encoding.UTF8.GetBytes(json);
-        await _socket.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, CancellationToken.None);
-        _logger.LogInformationWithCaller($"Sent command: {command.Type}");
+        else
+        {
+            _logger.LogWarningWithCaller($"Attempted to send command to a non-existent connection for {server.OmsIdentifier}.");
+        }
     }
 
-    public async Task DisconnectAsync()
+    public IEnumerable<OmsServerConfig> GetConnectedServers()
     {
-        if (_socket is null) return;
-        _cts?.Cancel();
-
-        if (_socket.State == WebSocketState.Open)
-        {
-            await _socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Client disconnecting", CancellationToken.None);
-        }
-        _socket.Dispose();
-        _cts?.Dispose();
-        ConnectedServerUri = null;
-        CurrentStatus = ConnectionStatus.Disconnected;
-        _logger.LogInformationWithCaller("Disconnected from OMS.");
+        return _connections.Where(kvp => kvp.Value.CurrentStatus == ConnectionStatus.Connected).Select(kvp => kvp.Value.ServerConfig);
     }
-
     public async ValueTask DisposeAsync()
     {
-        await DisconnectAsync();
+        foreach (var key in _connections.Keys)
+        {
+            if (_connections.TryRemove(key, out var connection))
+            {
+                await connection.DisposeAsync();
+            }
+        }
     }
 }

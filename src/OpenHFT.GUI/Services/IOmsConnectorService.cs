@@ -1,4 +1,5 @@
 using System;
+using OpenHFT.Core.Configuration;
 using OpenHFT.Oms.Api.WebSocket;
 
 namespace OpenHFT.GUI.Services;
@@ -7,23 +8,12 @@ namespace OpenHFT.GUI.Services;
 public enum ConnectionStatus { Disconnected, Connecting, Connected, Error }
 public interface IOmsConnectorService
 {
-    // --- Status Events ---
-    event Action<ConnectionStatus> OnConnectionStatusChanged;
-    ConnectionStatus CurrentStatus { get; }
-    Uri? ConnectedServerUri { get; }
-    // --- Data Events ---
-    event Action<InstanceStatusEvent> OnInstanceStatusReceived;
-    event Action<QuotePairUpdateEvent> OnQuotePairUpdateReceived;
-    event Action<ErrorEvent> OnErrorReceived;
-    event Action<AcknowledgmentEvent> OnAckReceived;
-    event Action<ActiveOrdersListEvent> OnActiveOrderListReceived;
-    event Action<FillsListEvent> OnFillsListReceived;
+    event Action<(OmsServerConfig Server, ConnectionStatus Status)>? OnConnectionStatusChanged;
+    event Action<string>? OnMessageReceived; // Centralized message event
 
-
-    // --- Connection Management ---
-    Task ConnectAsync(Uri serverUri);
-    Task DisconnectAsync();
-
-    // --- Command Sending ---
-    Task SendCommandAsync(WebSocketMessage command);
+    ConnectionStatus GetStatus(OmsServerConfig server);
+    Task ConnectAsync(OmsServerConfig server);
+    Task DisconnectAsync(OmsServerConfig server);
+    Task SendCommandAsync(OmsServerConfig server, WebSocketMessage command);
+    IEnumerable<OmsServerConfig> GetConnectedServers();
 }
