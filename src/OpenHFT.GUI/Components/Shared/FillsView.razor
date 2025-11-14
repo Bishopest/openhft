@@ -1,14 +1,20 @@
-﻿@using OpenHFT.Core.Models
+﻿@using OpenHFT.Core.Interfaces
+@using OpenHFT.Core.Models
 @using OpenHFT.GUI.Services
 @inject IOrderCacheService OrderCache
+@inject IInstrumentRepository InstrumentRepository
+
+@namespace OpenHFT.GUI.Components.Shared
+
 @implements IDisposable
 
-<MudPaper Class="pa-2 d-flex flex-column" Style="height: 100%;">
+<MudPaper Class="pa-2 d-flex flex-column" Style="height: calc(100vh - 220px)">
     <MudText Typo="Typo.h6" GutterBottom="true">Fills</MudText>
     <div class="flex-grow-1" style="overflow-y: auto; min-height: 0;">
-        <MudTable Items="@OrderCache.GetAllFills()" T="Fill" Dense="true" Hover="true">
+        <MudTable Items="@OrderCache.GetAllFills()" T="Fill" Dense="true" Hover="true" FixedHeader="true">
             <HeaderContent>
                 <MudTh>Time</MudTh>
+                <MudTh>Symbol</MudTh>
                 <MudTh>Side</MudTh>
                 <MudTh>Price</MudTh>
                 <MudTh>Qty</MudTh>
@@ -17,6 +23,7 @@
                 <MudTd DataLabel="Time">
                     @(DateTimeOffset.FromUnixTimeMilliseconds(context.Timestamp).ToLocalTime().ToString("MM-dd HH:mm:ss.fff"))
                 </MudTd>
+                <MudTd DataLabel="Symbol">@GetSymbol(context.InstrumentId)</MudTd>
                 <MudTd DataLabel="Side"
                     Style="@(context.Side == Side.Buy ? "color: var(--mud-palette-success);" : "color: var(--mud-palette-error);")">
                     @context.Side</MudTd>
@@ -33,6 +40,11 @@
     private void OnUpdateFills((string OmsIdentifier, Fill fill)args)
     {
         StateHasChanged();
+    }
+protected string GetSymbol(int instrumentId)
+    {
+        var instrument = InstrumentRepository.GetById(instrumentId);
+        return instrument?.Symbol ?? instrumentId.ToString();
     }
 
     public void Dispose() => OrderCache.OnFillReceived -= OnUpdateFills;
