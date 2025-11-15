@@ -1,4 +1,5 @@
-﻿@using OpenHFT.Core.Models
+﻿@using OpenHFT.Book.Core
+@using OpenHFT.Core.Models
 @using OpenHFT.GUI.Services
 @using OpenHFT.Oms.Api.WebSocket
 @implements IDisposable
@@ -12,6 +13,7 @@
                 <MudTh>Price</MudTh>
                 <MudTh>Qty</MudTh>
                 <MudTh>Status</MudTh>
+                <MudTh>Dist(bp)</MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Side"
@@ -20,6 +22,7 @@
                 <MudTd DataLabel="Price">@context.Price.ToDecimal()</MudTd>
                 <MudTd DataLabel="Qty">@context.Quantity.ToDecimal()</MudTd>
                 <MudTd DataLabel="Status">@context.Status</MudTd>
+                <MudTd DataLabel="Dist(bp)">@GetDistanceInBps(context)</MudTd>
             </RowTemplate>
         </MudTable>
     </div>
@@ -28,7 +31,8 @@
 @code {
     [Inject]
     private IOrderCacheService OrderCache { get; set; } = default!;
-
+    [Inject]
+    private IOrderBookManager OrderBookManager { get; set; } = default!;
     // --- CHANGE: Receive OmsIdentifier as a parameter ---
     [Parameter]
     public string? OmsIdentifier { get; set; }
@@ -60,6 +64,24 @@
         }
     }
 
+    protected string GetDistanceInBps(OrderStatusReport order)
+    {
+        if (InstrumentId is null) return "-";
+        
+        var orderBook = OrderBookManager.GetOrderBook(InstrumentId.Value);
+        if (orderBook is null) return "-";
+
+        var midPrice = orderBook.GetMidPrice().ToDecimal();
+        if (midPrice == 0) return "-";
+        
+        var orderPrice = order.Price.ToDecimal();
+        
+        // Formula: (orderPrice / midPrice - 1) * 10000
+        var bps = (orderPrice / midPrice - 1) * 10000;
+        
+        return bps.ToString("F1"); // Format to one decimal place
+    }
+
     private void HandleOrderUpdate((string OmsIdentifier, OrderStatusReport Report) args)
     {
         // Only update if the event is for the currently displayed OMS and Instrument
@@ -88,6 +110,16 @@
         }
 
         InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleOrderBookUpdate(OrderBook orderBook)
+    {
+        // If the order book for our currently displayed instrument updates,
+        // we need to re-render to update the Dist(bp) column.
+        if (InstrumentId.HasValue && orderBook.InstrumentId == InstrumentId.Value)
+        {
+            InvokeAsync(StateHasChanged);
+        }
     }
 
     private void UpdateOrders()
