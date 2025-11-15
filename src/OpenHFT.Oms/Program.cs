@@ -59,6 +59,7 @@ public class Program
                 .ReadFrom.Configuration(context.Configuration)
                 .ReadFrom.Services(services)
                 .Enrich.FromLogContext()
+                .MinimumLevel.Override("System.Net.Http.HttpClient", Serilog.Events.LogEventLevel.Warning)
                 .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
                 .WriteTo.File("logs/oms-.log", rollingInterval: RollingInterval.Day)
             )
@@ -74,6 +75,7 @@ public class Program
                 services.Configure<QuotingConfig>(hostContext.Configuration);
                 services.AddSingleton(provider => provider.GetRequiredService<IOptions<QuotingConfig>>().Value);
                 services.AddHttpClient();
+
                 var jsonOptions = new JsonSerializerOptions
                 {
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
