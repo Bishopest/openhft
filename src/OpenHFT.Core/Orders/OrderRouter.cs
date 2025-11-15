@@ -70,11 +70,6 @@ public class OrderRouter : IOrderRouter
                 _logger.LogErrorWithCaller(ex, $"An error occurred while processing a status report for ClientOrderId {report.ClientOrderId}.");
             }
         }
-        else
-        {
-            // This can be normal if a report arrives after an order is already considered terminal and deregistered.
-            _logger.LogInformationWithCaller($"Received a status report for an unknown or already completed order with ClientOrderId {report.ClientOrderId}.");
-        }
     }
 
     public void RaiseStatusChanged(IOrder order, OrderStatusReport report)
