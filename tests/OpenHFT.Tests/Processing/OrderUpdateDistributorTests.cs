@@ -137,5 +137,10 @@ public class TestOrder : IOrder, IOrderUpdatable
     public Task SubmitAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task ReplaceAsync(Price price, OrderType orderType, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task CancelAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task ReconcileStateAsync(CancellationToken cancellationToken = default)
+    {
+        throw new NotImplementedException();
+    }
     #endregion
 }

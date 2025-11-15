@@ -1,4 +1,5 @@
 using System;
+using OpenHFT.Core.Api;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
@@ -13,6 +14,11 @@ public class NullOrderGateway : IOrderGateway
     public ProductType ProdType => ProductType.PerpetualFuture;
 
     public Task CancelAllOrdersAsync(string symbol, CancellationToken cancellationToken = default)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<RestApiResult<OrderStatusReport>> FetchOrderStatusAsync(string exchangeOrderId, CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
     }

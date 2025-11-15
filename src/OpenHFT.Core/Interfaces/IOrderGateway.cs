@@ -1,4 +1,5 @@
 using System;
+using OpenHFT.Core.Api;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Orders;
@@ -37,6 +38,10 @@ public interface IOrderGateway
     /// <returns>A result object indicating the outcome of the cancellation attempt.</returns>
     Task<OrderModificationResult> SendCancelOrderAsync(CancelOrderRequest request, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Fetches the current status of an order from the exchange via REST API.
+    /// </summary>
+    Task<RestApiResult<OrderStatusReport>> FetchOrderStatusAsync(string exchangeOrderId, CancellationToken cancellationToken = default);
     /// <summary>
     /// Cancels all open orders for a specific symbol.
     /// Primarily used for cleanup in integration tests or emergency stops.

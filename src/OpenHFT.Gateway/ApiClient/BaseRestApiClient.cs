@@ -4,11 +4,11 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using OpenHFT.Core.Api;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
-using OpenHFT.Gateway.ApiClient.Exceptions;
 
 namespace OpenHFT.Gateway.ApiClient;
 

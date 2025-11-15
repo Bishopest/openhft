@@ -180,7 +180,6 @@ public class Program
                 // --- 4. IHostedService 등록 ---
                 services.AddHostedService<DisruptorService>();
                 services.AddHostedService<FeedOrchestrator>();
-                services.AddHostedService<SubscriptionInitializationService>();
                 services.AddHostedService<WebSocketHost>();
                 services.AddHostedService<WebSocketNotificationService>();
             }

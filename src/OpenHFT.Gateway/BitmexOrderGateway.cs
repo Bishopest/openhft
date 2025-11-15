@@ -1,5 +1,7 @@
 using System;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using OpenHFT.Core.Api;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
@@ -7,7 +9,6 @@ using OpenHFT.Core.Orders;
 using OpenHFT.Core.Utils;
 using OpenHFT.Gateway.ApiClient;
 using OpenHFT.Gateway.ApiClient.Bitmex;
-using OpenHFT.Gateway.ApiClient.Exceptions;
 
 namespace OpenHFT.Gateway;
 
@@ -97,6 +98,40 @@ public class BitmexOrderGateway : IOrderGateway
         }
 
         return new OrderModificationResult(true, request.OrderId);
+    }
+
+    public async Task<RestApiResult<OrderStatusReport>> FetchOrderStatusAsync(string exchangeOrderId, CancellationToken cancellationToken = default)
+    {
+        // BitMEX는 clOrdID로 주문을 필터링할 수 있습니다.
+        var filter = JsonSerializer.Serialize(new { orderID = exchangeOrderId });
+        var encodedFilter = Uri.EscapeDataString(filter);
+        var version = _apiClient.ExecutionMode == ExecutionMode.Realtime ? "/api/v2/order" : "/api/v1/order";
+        var endpoint = $"{version}?filter={encodedFilter}";
+
+        var apiResult = await _apiClient.SendPrivateRequestAsync<List<BitmexOrderResponse>>(
+            HttpMethod.Get, endpoint, cancellationToken: cancellationToken);
+
+        if (!apiResult.IsSuccess)
+        {
+            return RestApiResult<OrderStatusReport>.Failure(apiResult.Error);
+        }
+
+        var orderResponse = apiResult.Data.FirstOrDefault();
+        if (orderResponse == null)
+        {
+            var error = new RestApiException("Order not found on exchange.", System.Net.HttpStatusCode.NotFound, null);
+            return RestApiResult<OrderStatusReport>.Failure(error);
+        }
+
+        var instrument = _instrumentRepository.FindBySymbol(orderResponse.Symbol, this.ProdType, this.SourceExchange);
+        if (instrument == null)
+        {
+            var error = new RestApiException("Instrument not found for fetched order.", System.Net.HttpStatusCode.NotFound, null);
+            return RestApiResult<OrderStatusReport>.Failure(error);
+        }
+
+        var report = MapResponseToReport(orderResponse, instrument.InstrumentId);
+        return RestApiResult<OrderStatusReport>.Success(report);
     }
 
     // Helper to map exchange-specific response to our standard DTO
