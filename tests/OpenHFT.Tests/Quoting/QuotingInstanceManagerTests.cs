@@ -30,6 +30,7 @@ public class QuotingInstanceManagerTests_Integration
     private IQuotingInstanceManager _manager;
     private IInstrumentRepository _instrumentRepo;
     private string _testDirectory;
+    private Mock<IFeedHandler> _mockFeedHandler;
 
     [SetUp]
     public void SetUp()
@@ -64,6 +65,8 @@ public class QuotingInstanceManagerTests_Integration
         services.AddSingleton<IOrderGateway, NullOrderGateway>();
         services.AddSingleton<IOrderGatewayRegistry, OrderGatewayRegistry>();
         services.AddSingleton<MarketDataManager>();
+        _mockFeedHandler = new Mock<IFeedHandler>();
+        services.AddSingleton(_mockFeedHandler.Object);
         services.AddSingleton(provider =>
         {
             var disruptor = new Disruptor<MarketDataEventWrapper>(() => new MarketDataEventWrapper(), 1024);
@@ -226,5 +229,62 @@ public class QuotingInstanceManagerTests_Integration
         // Assert
         result.Should().NotBeNull();
         instance.IsActive.Should().BeFalse("because the instance should be deactivated by RetireInstance.");
+    }
+
+    [Test]
+    public void OnConnectionLost_ShouldDeactivateRelatedInstancesOnly()
+    {
+        // --- Arrange ---
+        // 1. 테스트에 사용할 Instrument 객체들을 가져옵니다.
+        var bitmexInstrument = _instrumentRepo.FindBySymbol("XBTUSD", ProductType.PerpetualFuture, ExchangeEnum.BITMEX)!;
+        var binanceInstrument = _instrumentRepo.FindBySymbol("BTCUSDT", ProductType.PerpetualFuture, ExchangeEnum.BINANCE)!;
+
+        // 2. BitMEX와 Binance에 대한 두 개의 다른 전략 파라미터를 정의합니다.
+        var bitmexParams = new QuotingParameters(
+            bitmexInstrument.InstrumentId, FairValueModel.Midp, binanceInstrument.InstrumentId,
+            10m, -10m, 0m, Quantity.FromDecimal(100), 1, QuoterType.Log, true);
+
+        var binanceParams = new QuotingParameters(
+            binanceInstrument.InstrumentId, FairValueModel.Midp, bitmexInstrument.InstrumentId,
+            5m, -5m, 0m, Quantity.FromDecimal(1), 1, QuoterType.Log, true);
+
+        // 3. 두 전략을 배포하고 2번 활성화합니다.
+        _manager.UpdateInstanceParameters(bitmexParams);
+        _manager.UpdateInstanceParameters(bitmexParams);
+        _manager.UpdateInstanceParameters(binanceParams);
+        _manager.UpdateInstanceParameters(binanceParams);
+
+        var bitmexInstance = _manager.GetInstance(bitmexInstrument.InstrumentId);
+        var binanceInstance = _manager.GetInstance(binanceInstrument.InstrumentId);
+
+        // 테스트 시작 전, 두 인스턴스가 모두 활성 상태인지 확인합니다.
+        bitmexInstance!.IsActive.Should().BeTrue();
+        binanceInstance!.IsActive.Should().BeTrue();
+
+        // --- Act ---
+        // 4. IFeedHandler의 Mock을 사용하여 "BitMEX 연결 끊김" 이벤트를 수동으로 발생시킵니다.
+        TestContext.WriteLine("Simulating connection loss for BITMEX...");
+        _mockFeedHandler.Raise(
+            handler => handler.AdapterConnectionStateChanged += null,
+            this, // sender (can be anything)
+            new ConnectionStateChangedEventArgs(false, ExchangeEnum.BITMEX, "Simulated connection drop")
+        );
+
+        // 이벤트 핸들러가 비동기적으로 동작할 수 있으므로, 처리를 위해 잠시 대기합니다.
+        // 실제로는 더 정교한 동기화 메커니즘을 사용할 수 있습니다.
+        Task.Delay(100).Wait();
+
+        // --- Assert ---
+        // 5. QuotingInstanceManager가 올바르게 반응했는지 검증합니다.
+
+        // BitMEX 인스턴스는 비활성화(Deactivated)되었어야 합니다.
+        bitmexInstance.IsActive.Should().BeFalse(
+            "because the BitMEX instance should be deactivated upon its exchange's connection loss.");
+
+        // Binance 인스턴스는 영향을 받지 않고 여전히 활성 상태여야 합니다.
+        binanceInstance.IsActive.Should().BeTrue(
+            "because the Binance instance should not be affected by a BitMEX connection loss.");
+
+        TestContext.WriteLine($"Validation successful: BitMEX instance IsActive={bitmexInstance.IsActive}, Binance instance IsActive={binanceInstance.IsActive}");
     }
 }

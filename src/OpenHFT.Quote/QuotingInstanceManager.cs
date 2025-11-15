@@ -7,29 +7,55 @@ using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
+using OpenHFT.Feed.Interfaces;
 using OpenHFT.Processing;
 using OpenHFT.Quoting.Interfaces;
 using OpenHFT.Quoting.Models;
 
 namespace OpenHFT.Quoting;
 
-public class QuotingInstanceManager : IQuotingInstanceManager
+public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
 {
     private readonly ILogger<QuotingInstanceManager> _logger;
     private readonly IQuotingInstanceFactory _factory;
     private readonly ConcurrentDictionary<int, QuotingInstance> _activeInstances = new();
     private readonly IInstrumentRepository _instrumentRepository;
-    public event EventHandler<QuotePair> InstanceQuotePairCalculated;
+    private readonly IFeedHandler _feedHandler;
+
+    public event EventHandler<QuotePair>? InstanceQuotePairCalculated;
 
     public QuotingInstanceManager(
         ILogger<QuotingInstanceManager> logger,
         IQuotingInstanceFactory factory,
-        IInstrumentRepository instrumentRepository
+        IInstrumentRepository instrumentRepository,
+        IFeedHandler feedHandler
         )
     {
         _logger = logger;
         _factory = factory;
         _instrumentRepository = instrumentRepository;
+        _feedHandler = feedHandler;
+
+        _feedHandler.AdapterConnectionStateChanged += OnAdapterConnectionStateChanged;
+    }
+
+    private void OnAdapterConnectionStateChanged(object? sender, ConnectionStateChangedEventArgs e)
+    {
+        if (e.IsConnected)
+        {
+            return;
+        }
+
+        _logger.LogWarningWithCaller($"Connection lost for exchange {e.SourceExchange}. Retiring all related quoting instances.");
+
+        foreach (var instance in _activeInstances.Values.ToList())
+        {
+            var instrument = _instrumentRepository.GetById(instance.InstrumentId);
+            if (instrument != null && instrument.SourceExchange == e.SourceExchange)
+            {
+                RetireInstance(instance.InstrumentId);
+            }
+        }
     }
 
     // --- IQuotingInstanceManager Implementation ---
@@ -160,5 +186,20 @@ public class QuotingInstanceManager : IQuotingInstanceManager
     private void OnEngineQuotePairCalculated(object? sender, QuotePair e)
     {
         InstanceQuotePairCalculated?.Invoke(sender, e);
+    }
+
+    public void Dispose()
+    {
+        _logger.LogInformationWithCaller("Disposing QuotingInstanceManager.");
+        _feedHandler.AdapterConnectionStateChanged -= OnAdapterConnectionStateChanged;
+
+        // 애플리케이션 종료 시 모든 인스턴스를 완전히 정리
+        foreach (var instrumentId in _activeInstances.Keys.ToList())
+        {
+            if (_activeInstances.TryRemove(instrumentId, out var instance))
+            {
+                instance.Stop();
+            }
+        }
     }
 }
