@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Text.Json;
+using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Models;
 using OpenHFT.Oms.Api.WebSocket;
 
@@ -27,6 +28,22 @@ public class OrderCacheService : IOrderCacheService, IDisposable
         _jsonOptions = jsonOptions;
         _connector = connector;
         _connector.OnMessageReceived += HandleRawMessage;
+        _connector.OnConnectionStatusChanged += HandleConnectionStatusChange;
+    }
+
+    /// <summary>
+    /// Handles connection status changes to clear caches for disconnected servers.
+    /// </summary>
+    private void HandleConnectionStatusChange((OmsServerConfig Server, ConnectionStatus Status) args)
+    {
+        // We only care about disconnections or errors.
+        if (args.Status == ConnectionStatus.Disconnected || args.Status == ConnectionStatus.Error)
+        {
+            var omsId = args.Server.OmsIdentifier;
+
+            // Try to remove the entire dictionary of orders for the disconnected OMS.
+            _activeOrdersByOms.TryRemove(omsId, out var removedOrders);
+        }
     }
 
     private void HandleRawMessage(string json)
