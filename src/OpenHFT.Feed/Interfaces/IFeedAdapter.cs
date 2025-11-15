@@ -63,6 +63,8 @@ public interface IFeedAdapter : IDisposable
     /// Event fired when connection state changes
     /// </summary>
     event EventHandler<ConnectionStateChangedEventArgs> ConnectionStateChanged;
+    event EventHandler<AuthenticationEventArgs> AuthenticationStateChanged;
+
 
     /// <summary>
     /// Event fired when an error occurs

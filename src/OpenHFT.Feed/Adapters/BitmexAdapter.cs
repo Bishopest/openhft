@@ -432,6 +432,19 @@ public class BitmexAdapter : BaseAuthFeedAdapter
 
                 _logger.LogWarningWithCaller($"BitMEX WebSocket API Error (Status {statusCode}): {errorMessage}");
             }
+
+            // Authentication response
+            if (root.TryGetProperty("success", out var successElement) && successElement.GetBoolean())
+            {
+                if (root.TryGetProperty("request", out var reqEl) && reqEl.TryGetProperty("op", out var opEl) &&
+                    opEl.GetString() == "authKeyExpires")
+                {
+                    _logger.LogInformationWithCaller("BitMEX WebSocket authentication successful.");
+                    OnAuthenticationStateChanged(true, "Authentication successful.");
+                }
+                return;
+            }
+
             // Subscription response, ignore it.
             if (root.TryGetProperty("success", out _) || root.TryGetProperty("subscribe", out _))
             {

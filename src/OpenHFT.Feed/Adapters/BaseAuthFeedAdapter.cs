@@ -16,7 +16,6 @@ public abstract class BaseAuthFeedAdapter : BaseFeedAdapter
 {
     protected string? ApiKey { get; private set; }
     protected string? ApiSecret { get; private set; }
-    public event EventHandler<AuthenticationEventArgs>? AuthenticationStateChanged;
     protected BaseAuthFeedAdapter(ILogger logger, ProductType type, IInstrumentRepository instrumentRepository, ExecutionMode executionMode)
         : base(logger, type, instrumentRepository, executionMode)
     {
@@ -34,11 +33,10 @@ public abstract class BaseAuthFeedAdapter : BaseFeedAdapter
         try
         {
             await DoAuthenticateAsync(cancellationToken);
-            AuthenticationStateChanged?.Invoke(this, new AuthenticationEventArgs(true, "Authentication successful."));
         }
         catch (Exception ex)
         {
-            AuthenticationStateChanged?.Invoke(this, new AuthenticationEventArgs(false, $"Authentication failed: {ex.Message}"));
+            OnAuthenticationStateChanged(false, $"Authentication failed: {ex.Message}");
             throw;
         }
     }

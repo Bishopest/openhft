@@ -27,6 +27,10 @@ public class FeedOrchestrator : IHostedService
         _feedAdapters = feedAdapterRegistry.GetAllAdapters();
         _configuration = configuration;
         _timeSyncManager = timeSyncManager;
+        foreach (var adapter in _feedAdapters)
+        {
+            adapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
+        }
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -82,5 +86,37 @@ public class FeedOrchestrator : IHostedService
         await Task.WhenAll(shutdownTasks);
         _timeSyncManager.Stop();
         _logger.LogInformationWithCaller("All feed adapters have been stopped.");
+    }
+
+    private void OnAdapterConnectionStateChanged(object? sender, ConnectionStateChangedEventArgs e)
+    {
+        if (e.IsConnected && sender is IFeedAdapter adapter)
+        {
+            _logger.LogInformationWithCaller($"Adapter {adapter.SourceExchange} reconnected. Attempting to re-authenticate.");
+            _ = AuthenticateAdapterAsync(adapter);
+        }
+    }
+
+    private async Task AuthenticateAdapterAsync(IFeedAdapter adapter)
+    {
+        // StartAdapterAsync의 인증 로직과 동일
+        if (adapter is BaseAuthFeedAdapter authAdapter)
+        {
+            var apiKey = _configuration[$"ApiCredentials:{adapter.SourceExchange}:ApiKey"];
+            var apiSecret = _configuration[$"ApiCredentials:{adapter.SourceExchange}:ApiSecret"];
+
+            if (!string.IsNullOrEmpty(apiKey) && !string.IsNullOrEmpty(apiSecret))
+            {
+                try
+                {
+                    _logger.LogInformationWithCaller($"Re-authenticating with {adapter.SourceExchange}...");
+                    await authAdapter.AuthenticateAsync(apiKey, apiSecret);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogErrorWithCaller(ex, $"Failed to re-authenticate with {adapter.SourceExchange}.");
+                }
+            }
+        }
     }
 }

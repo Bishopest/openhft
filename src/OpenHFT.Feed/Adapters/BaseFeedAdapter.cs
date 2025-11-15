@@ -51,6 +51,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     public event EventHandler<FeedErrorEventArgs>? Error;
     public event EventHandler<MarketDataEvent>? MarketDataReceived;
     public event EventHandler<OrderStatusReport>? OrderUpdateReceived;
+    public event EventHandler<AuthenticationEventArgs> AuthenticationStateChanged;
 
     public ProductType ProdType { get; }
 
@@ -221,6 +222,12 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         _logger.LogWarningWithCaller($"{GetType().Name} does not support authentication.");
         return Task.FromException(new NotSupportedException($"{GetType().Name} does not support authentication."));
     }
+
+    protected virtual void OnAuthenticationStateChanged(bool isAuthenticated, string reason)
+    {
+        AuthenticationStateChanged?.Invoke(this, new AuthenticationEventArgs(isAuthenticated, reason));
+    }
+
     public void Dispose()
     {
         Dispose(true);
@@ -368,6 +375,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         catch (WebSocketException ex)
         {
             var reason = $"{SourceExchange} WebSocket connection closed unexpectedly. Reason: {ex.Message}";
+            OnConnectionStateChanged(false, reason);
             _logger.LogErrorWithCaller(ex, reason);
             _ = InitiateReconnectAsync(reason);
         }
@@ -628,4 +636,16 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     }
 
     #endregion
+
+#if DEBUG
+    /// <summary>
+    /// FOR TESTING PURPOSES ONLY.
+    /// Simulates an abrupt network failure by aborting the underlying WebSocket.
+    /// </summary>
+    public void SimulateConnectionDrop()
+    {
+        _logger.LogWarningWithCaller("SIMULATING CONNECTION DROP FOR TESTING.");
+        _webSocket?.Abort();
+    }
+#endif
 }
