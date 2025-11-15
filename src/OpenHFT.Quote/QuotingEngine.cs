@@ -174,7 +174,8 @@ public class QuotingEngine : IQuotingEngine
             QuotingInstrument.InstrumentId,
             new Quote(Price.FromTicks(roundedBidTicks), currentParams.Size),
             new Quote(Price.FromTicks(roundedAskTicks), currentParams.Size),
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            currentParams.PostOnly
         );
 
         // Delegate execution to the MarketMaker

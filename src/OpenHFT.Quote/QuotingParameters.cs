@@ -16,6 +16,12 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     public readonly int FairValueSourceInstrumentId { get; }
 
     /// <summary>
+    /// If true, all limit orders will be submitted as Post-Only.
+    /// A Post-Only order is rejected if it would execute immediately as a taker.
+    /// </summary>
+    public readonly bool PostOnly { get; }
+
+    /// <summary>
     /// spread ratio in bp to calculate quotes on each side from fair value.
     /// Price of ask quote = fair value * (1 + AskSpreadBp * 1e-4 )
     /// Price of bid quote = fair value * (1 + BidSpreadBp * 1e-4 )
@@ -54,7 +60,17 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     /// <param name="depth">The number of quote levels on each side.</param>
     /// <param name="type">The type of quoter to be used.</param>
     [JsonConstructor]
-    public QuotingParameters(int instrumentId, FairValueModel fvModel, int fairValueSourceInstrumentId, decimal askSpreadBp, decimal bidSpreadBp, decimal skewBp, Quantity size, int depth, QuoterType type)
+    public QuotingParameters(
+        int instrumentId,
+        FairValueModel fvModel,
+        int fairValueSourceInstrumentId,
+        decimal askSpreadBp,
+        decimal bidSpreadBp,
+        decimal skewBp,
+        Quantity size,
+        int depth,
+        QuoterType type,
+        bool postOnly)
     {
         if (askSpreadBp <= bidSpreadBp)
         {
@@ -71,6 +87,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         Size = size;
         Depth = depth;
         Type = type;
+        PostOnly = postOnly;
     }
 
     public override string ToString()
@@ -83,6 +100,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
                $"\"Size\": {Size.ToDecimal()}, " +
                $"\"Depth\": {Depth}" +
                $"\"Type\": {Type}" +
+               $"\"PostOnly\": {PostOnly}" +
                $" }}";
     }
 
@@ -95,6 +113,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
                SkewBp == other.SkewBp &&
                Size == other.Size &&
                Depth == other.Depth &&
+               PostOnly == other.PostOnly &&
                Type == other.Type;
     }
     public override bool Equals(object? obj)
@@ -113,6 +132,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         hash.Add(Size);
         hash.Add(Depth);
         hash.Add(Type);
+        hash.Add(PostOnly);
         return hash.ToHashCode();
     }
 

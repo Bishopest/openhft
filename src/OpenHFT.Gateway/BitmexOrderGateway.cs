@@ -45,11 +45,14 @@ public class BitmexOrderGateway : IOrderGateway
             { "orderQty", request.Quantity.ToDecimal() },
             { "price", request.OrderType == OrderType.Limit ? request.Price.ToDecimal() : null },
             { "ordType", request.OrderType.ToString() },
-            { "clOrdID", request.ClientOrderId.ToString() }
+            { "clOrdID", request.ClientOrderId.ToString() },
         };
 
+        if (request.IsPostOnly)
+            payload.Add("execInst", "ParticipateDoNotInitiate");
+
         var result = await _apiClient.SendPrivateRequestAsync<BitmexOrderResponse>(
-            HttpMethod.Post, "/api/v1/order", queryParams: null, bodyParams: payload, cancellationToken);
+            HttpMethod.Post, _apiClient.ExecutionMode == ExecutionMode.Realtime ? "/api/v2/order" : "/api/v1/order", queryParams: null, bodyParams: payload, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -70,7 +73,7 @@ public class BitmexOrderGateway : IOrderGateway
         };
 
         var result = await _apiClient.SendPrivateRequestAsync<BitmexOrderResponse>(
-            HttpMethod.Put, "/api/v1/order", queryParams: null, bodyParams: payload, cancellationToken);
+            HttpMethod.Put, _apiClient.ExecutionMode == ExecutionMode.Realtime ? "/api/v2/order" : "/api/v1/order", queryParams: null, bodyParams: payload, cancellationToken);
         if (!result.IsSuccess)
         {
             _logger.LogWarningWithCaller($"Failed to replace order: {result.Error.Message}");
@@ -86,7 +89,7 @@ public class BitmexOrderGateway : IOrderGateway
 
         // BitMEX 취소 응답은 배열 형태
         var result = await _apiClient.SendPrivateRequestAsync<List<BitmexOrderResponse>>(
-            HttpMethod.Delete, "/api/v1/order", queryParams: null, bodyParams: payload, cancellationToken);
+            HttpMethod.Delete, _apiClient.ExecutionMode == ExecutionMode.Realtime ? "/api/v2/order" : "/api/v1/order", queryParams: null, bodyParams: payload, cancellationToken);
         if (!result.IsSuccess)
         {
             _logger.LogWarningWithCaller($"Failed to cancel order: {result.Error.Message}");
@@ -128,6 +131,6 @@ public class BitmexOrderGateway : IOrderGateway
         var payload = new Dictionary<string, object> { { "symbol", symbol } };
 
         await _apiClient.SendPrivateRequestAsync<List<BitmexOrderResponse>>(
-            HttpMethod.Delete, "/api/v1/order/all", bodyParams: payload, cancellationToken: cancellationToken);
+            HttpMethod.Delete, _apiClient.ExecutionMode == ExecutionMode.Realtime ? "/api/v2/order/all" : "/api/v1/order/all", bodyParams: payload, cancellationToken: cancellationToken);
     }
 }

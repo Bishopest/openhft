@@ -32,6 +32,11 @@ public readonly struct QuotePair : IEquatable<QuotePair>
     public readonly long CreationTimestamp { get; }
 
     /// <summary>
+    /// Indicates if the quotes in this pair should be submitted as Post-Only.
+    /// </summary>
+    public readonly bool IsPostOnly { get; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="QuotePair"/> struct.
     /// </summary>
     /// <param name="instrumentId">The unique ID of the instrument.</param>
@@ -39,12 +44,13 @@ public readonly struct QuotePair : IEquatable<QuotePair>
     /// <param name="ask">The ask quote to submit.</param>
     /// /// <param name="creationTimestamp">The UTC timestamp in Unix milliseconds.</param>
     [JsonConstructor]
-    public QuotePair(int instrumentId, Quote bid, Quote ask, long creationTimestamp)
+    public QuotePair(int instrumentId, Quote bid, Quote ask, long creationTimestamp, bool isPostOnly)
     {
         InstrumentId = instrumentId;
         Bid = bid;
         Ask = ask;
         CreationTimestamp = creationTimestamp;
+        IsPostOnly = isPostOnly;
     }
 
     /// <summary>

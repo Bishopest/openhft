@@ -67,6 +67,15 @@ public class OrderBuilder : IOrderBuilder
         return this;
     }
 
+    public IOrderBuilder WithPostOnly(bool isPostOnly)
+    {
+        if (_order is Order concreteOrder)
+        {
+            concreteOrder.IsPostOnly = isPostOnly; // Order 클래스에 IsPostOnly 속성 추가 필요
+        }
+        return this;
+    }
+
     public IOrder Build()
     {
         // Perform any final validation before returning the order.

@@ -76,7 +76,8 @@ public class QuotingBootstrapService : IHostedService
                 config.SkewBp,
                 Quantity.FromDecimal(config.Size),
                 config.Depth,
-                Enum.TryParse<QuoterType>(config.QuoterType, true, out var qType) ? qType : QuoterType.Log
+                Enum.TryParse<QuoterType>(config.QuoterType, true, out var qType) ? qType : QuoterType.Log,
+                config.PostOnly
             );
 
             if (_instanceManager.UpdateInstanceParameters(parameters) != null)

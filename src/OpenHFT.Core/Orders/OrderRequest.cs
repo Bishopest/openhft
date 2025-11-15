@@ -15,9 +15,10 @@ public readonly struct NewOrderRequest
     public readonly Price Price { get; }
     public readonly Quantity Quantity { get; }
     public readonly OrderType OrderType { get; }
+    public readonly bool IsPostOnly { get; }
     // Add other fields like TimeInForce, PostOnly, etc. as needed.
 
-    public NewOrderRequest(int instrumentId, long clientOrderId, Side side, Price price, Quantity quantity, OrderType orderType)
+    public NewOrderRequest(int instrumentId, long clientOrderId, Side side, Price price, Quantity quantity, OrderType orderType, bool isPostOnly)
     {
         InstrumentId = instrumentId;
         ClientOrderId = clientOrderId;
@@ -25,6 +26,7 @@ public readonly struct NewOrderRequest
         Price = price;
         Quantity = quantity;
         OrderType = orderType;
+        IsPostOnly = isPostOnly;
     }
 }
 

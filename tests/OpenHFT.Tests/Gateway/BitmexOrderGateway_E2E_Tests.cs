@@ -204,6 +204,7 @@ public class BitmexOrderGateway_E2E_Tests
     //         .WithPrice(takerBidPrice)
     //         .WithQuantity(orderQuantity)
     //         .WithOrderType(OrderType.Limit)
+    //         .WithPostOnly(false)
     //         .Build();
 
     //     TestContext.WriteLine($"Step 1: Submitting TAKER order to be filled. CID: {order.ClientOrderId}, Price: {takerBidPrice}, Qty: {orderQuantity}");
@@ -235,6 +236,77 @@ public class BitmexOrderGateway_E2E_Tests
     //     {
     //         await order.CancelAsync();
     //         await Task.Delay(2000); // 취소 확인 대기
+    //     }
+    // }
+
+    /// <summary>
+    /// Tests that a Post-Only order is correctly REJECTED if it would execute immediately.
+    /// </summary>
+    // [Test, Order(3)]
+    // public async Task E2E_PostOnlyTakerOrder_ShouldBeRejected()
+    // {
+    //     // --- Arrange ---
+    //     // IOrderFactory를 통해 'Order'의 기본 구현체를 생성합니다.
+    //     var orderBuilder = new OrderBuilder(_orderFactory, _btcUsdt.InstrumentId, Side.Buy);
+
+    //     // 시장의 매도 호가와 "동일한" 가격에 매수 주문을 넣어 즉시 체결될 상황을 만듭니다.
+    //     // Post-Only는 가격이 크로스되거나 같을 때 거부됩니다.
+    //     var takerBidPrice = await GetTakerPriceForPostOnlyTest(Side.Buy);
+    //     var orderQuantity = Quantity.FromDecimal(100m);
+
+    //     // IOrderBuilder를 사용하여 PostOnly 플래그가 설정된 Order 객체를 생성합니다.
+    //     var order = (Order)orderBuilder
+    //         .WithPrice(takerBidPrice)
+    //         .WithQuantity(orderQuantity)
+    //         .WithOrderType(OrderType.Limit)
+    //         .WithPostOnly(true) // <-- 여기가 핵심입니다!
+    //         .Build();
+
+    //     TestContext.WriteLine($"Step 1: Submitting POST-ONLY taker order. CID: {order.ClientOrderId}, Price: {takerBidPrice}, Qty: {orderQuantity}");
+
+    //     // --- Act ---
+    //     // 주문을 제출합니다. 이 API 호출 자체는 성공해야 합니다 (요청이 잘 전달됨).
+    //     await order.SubmitAsync();
+
+    //     // WebSocket을 통해 'Rejected' 상태 업데이트가 도착할 시간을 기다립니다.
+    //     // 또는 API 응답이 즉시 실패를 반환하는 경우도 있습니다.
+    //     await Task.Delay(3000);
+
+    //     // --- Assert ---
+    //     TestContext.WriteLine($"Asserting order status after delay. Current state: {order}");
+
+    //     // 1. 최종 주문 상태가 'Rejected'인지 확인합니다.
+    //     order.Status.Should().Be(OrderStatus.Cancelled, "because a Post-Only order that crosses the spread must be rejected.");
+
+    //     // 2. 체결 내역은 비어 있어야 합니다.
+    //     order.Fills.Should().BeEmpty("because a rejected order cannot have fills.");
+
+    //     // 3. 남은 수량은 원래 주문 수량과 동일해야 합니다.
+    //     order.LeavesQuantity.Should().Be(Quantity.FromDecimal(0m), "because a canceled order has no leaves quantity.");
+
+    //     // 4. (선택적) 거부 사유 확인
+    //     order.LatestReport.Should().NotBeNull();
+
+    //     TestContext.WriteLine($" -> Success. Final order status is '{order.Status}' as expected.");
+    // }
+
+    // private async Task<Price> GetTakerPriceForPostOnlyTest(Side side)
+    // {
+    //     var apiClient = _serviceProvider.GetRequiredService<BitmexRestApiClient>();
+    //     var book = await BitmexOrderGatewayTests.GetOrderBookL2Async(apiClient, _btcUsdt.Symbol);
+    //     if (side == Side.Buy)
+    //     {
+    //         // 매수 주문의 경우, 시장의 가장 낮은 매도 호가와 "같거나 높은" 가격을 설정
+    //         var bestAskPrice = book.FirstOrDefault(l => l.Side == "Sell")?.Price;
+    //         if (bestAskPrice == null) Assert.Fail("Could not get best ask price from testnet.");
+    //         return Price.FromDecimal(bestAskPrice.Value);
+    //     }
+    //     else // side == Side.Sell
+    //     {
+    //         // 매도 주문의 경우, 시장의 가장 높은 매수 호가와 "같거나 낮은" 가격을 설정
+    //         var bestBidPrice = book.FirstOrDefault(l => l.Side == "Buy")?.Price;
+    //         if (bestBidPrice == null) Assert.Fail("Could not get best bid price from testnet.");
+    //         return Price.FromDecimal(bestBidPrice.Value);
     //     }
     // }
 }

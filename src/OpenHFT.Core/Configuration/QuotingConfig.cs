@@ -72,4 +72,6 @@ public class QuotingConfig
 
     [JsonProperty("depth")]
     public int Depth { get; set; }
+    [JsonProperty("postOnly")]
+    public bool PostOnly { get; set; }
 }

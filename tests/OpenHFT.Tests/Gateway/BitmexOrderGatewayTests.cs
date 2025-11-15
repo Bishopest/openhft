@@ -97,15 +97,6 @@ public class BitmexOrderGatewayTests
         return result.Data;
     }
 
-    [TearDown]
-    public void TearDown()
-    {
-        if (Directory.Exists(_testDirectory))
-        {
-            Directory.Delete(_testDirectory, true);
-        }
-    }
-
     [Test, Order(1), Category("Lifecycle")]
     public async Task OrderLifecycle_Submit_Amend_Cancel_ShouldSucceed()
     {
@@ -117,7 +108,7 @@ public class BitmexOrderGatewayTests
         var book = await GetOrderBookL2Async(apiClient, _btcUsdt.Symbol);
         var safeBidPrice = Price.FromDecimal(book.First(l => l.Side == "Buy").Price - 500);
 
-        var newOrderRequest = new NewOrderRequest(_btcUsdt.InstrumentId, clientOrderId, Side.Buy, safeBidPrice, Quantity.FromDecimal(100m), OrderType.Limit);
+        var newOrderRequest = new NewOrderRequest(_btcUsdt.InstrumentId, clientOrderId, Side.Buy, safeBidPrice, Quantity.FromDecimal(100m), OrderType.Limit, true);
 
         // Act
         var placementResult = await _gateway.SendNewOrderAsync(newOrderRequest);
@@ -176,4 +167,14 @@ public class BitmexOrderGatewayTests
     //     // 즉시 체결되었으므로 상태는 'Filled'여야 함
     //     placementResult.InitialReport!.Value.Status.Should().Be(OrderStatus.Filled);
     // }
+
+    [TearDown]
+    public void TearDown()
+    {
+        if (Directory.Exists(_testDirectory))
+        {
+            Directory.Delete(_testDirectory, true);
+        }
+    }
+
 }

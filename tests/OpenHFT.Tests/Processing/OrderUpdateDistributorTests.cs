@@ -128,6 +128,9 @@ public class TestOrder : IOrder, IOrderUpdatable
     public Quantity LeavesQuantity => default;
     public long LastUpdateTime => 0;
     public OrderStatusReport? LatestReport => LastReceivedReport;
+
+    public bool IsPostOnly => true;
+
     public event EventHandler<OrderStatusReport>? StatusChanged;
     public event EventHandler<Fill> OrderFilled;
 

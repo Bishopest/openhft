@@ -129,11 +129,11 @@ public sealed class MarketMaker
 
         // 3. Create and execute the necessary actions for each side concurrently.
         var bidActionTask = (pairedStatus.BidStatus == QuoteStatus.Live)
-            ? _bidQuoter.UpdateQuoteAsync(target.Bid)
+            ? _bidQuoter.UpdateQuoteAsync(target.Bid, target.IsPostOnly)
             : _bidQuoter.CancelQuoteAsync();
 
         var askActionTask = (pairedStatus.AskStatus == QuoteStatus.Live)
-            ? _askQuoter.UpdateQuoteAsync(target.Ask)
+            ? _askQuoter.UpdateQuoteAsync(target.Ask, target.IsPostOnly)
             : _askQuoter.CancelQuoteAsync();
 
         try

@@ -14,9 +14,10 @@ public interface IQuoter
     /// and placing a new one (a cancel/replace operation).
     /// </summary>
     /// <param name="newQuote">The target quote containing the new price and size.</param>
+    /// <param name="isPostOnly">if true, order should be made with true postonly flag</param>
     /// <param name="cancellationToken">A token to signal the cancellation of the operation.</param>
     /// <returns>A task that represents the asynchronous update operation.</returns>
-    Task UpdateQuoteAsync(Quote newQuote, CancellationToken cancellationToken = default);
+    Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Cancels any active quote currently managed by this quoter.

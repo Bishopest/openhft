@@ -61,6 +61,7 @@ public partial class QuotingParametersController
         public decimal Size { get; set; } = 0.01m;
         public int Depth { get; set; } = 5;
         public QuoterType Type { get; set; }
+        public bool PostOnly { get; set; }
     }
 
     protected override void OnInitialized()
@@ -76,16 +77,14 @@ public partial class QuotingParametersController
     /// </summary>
     public async Task UpdateParametersAsync(QuotingParameters newParameters, OmsServerConfig? targetOms)
     {
-        _model = new ParameterFormModel
-        {
-            FvModel = newParameters.FvModel,
-            AskSpreadBp = newParameters.AskSpreadBp,
-            BidSpreadBp = newParameters.BidSpreadBp,
-            SkewBp = newParameters.SkewBp,
-            Size = newParameters.Size.ToDecimal(),
-            Depth = newParameters.Depth,
-            Type = newParameters.Type
-        };
+        _model.FvModel = newParameters.FvModel;
+        _model.AskSpreadBp = newParameters.AskSpreadBp;
+        _model.BidSpreadBp = newParameters.BidSpreadBp;
+        _model.SkewBp = newParameters.SkewBp;
+        _model.Size = newParameters.Size.ToDecimal();
+        _model.Depth = newParameters.Depth;
+        _model.Type = newParameters.Type;
+        _model.PostOnly = newParameters.PostOnly;
 
         // We need to update the instrument selection as well
         SelectedInstrument = _availableInstruments.FirstOrDefault(i => i.InstrumentId == newParameters.InstrumentId);
@@ -122,6 +121,11 @@ public partial class QuotingParametersController
         return instrument is not null ? $"{instrument.Symbol} ({instrument.SourceExchange}) ({instrument.ProductType})" : string.Empty;
     }
 
+    private void TogglePostOnly(bool isPostOnly)
+    {
+        _model.PostOnly = isPostOnly;
+    }
+
     private async Task HandleSubmit()
     {
         await _form.Validate();
@@ -147,7 +151,8 @@ public partial class QuotingParametersController
             _model.SkewBp,
             Quantity.FromDecimal(_model.Size), // Convert decimal to Quantity
             _model.Depth,
-            _model.Type
+            _model.Type,
+            _model.PostOnly
         );
 
         // Invoke the callback to notify the parent component

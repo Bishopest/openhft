@@ -24,6 +24,7 @@ public class Order : IOrder, IOrderUpdatable
     public Quantity Quantity { get; internal set; }
     public Quantity LeavesQuantity { get; internal set; }
     public OrderType OrderType { get; internal set; } // Added for completeness
+    public bool IsPostOnly { get; internal set; }
 
     public long LastUpdateTime { get; internal set; }
     public OrderStatusReport? LatestReport { get; internal set; }
@@ -70,7 +71,7 @@ public class Order : IOrder, IOrderUpdatable
         // Update internal state first to prevent race conditions
         Status = OrderStatus.NewRequest;
 
-        var request = new NewOrderRequest(InstrumentId, ClientOrderId, Side, Price, Quantity, OrderType);
+        var request = new NewOrderRequest(InstrumentId, ClientOrderId, Side, Price, Quantity, OrderType, IsPostOnly);
         var result = await _gateway.SendNewOrderAsync(request, cancellationToken);
 
         if (!result.IsSuccess)

@@ -42,6 +42,11 @@ public interface IOrder
     Quantity LeavesQuantity { get; }
 
     /// <summary>
+    /// Gets a value indicating whether this is a Post-Only order.
+    /// </summary>
+    bool IsPostOnly { get; }
+
+    /// <summary>
     /// The UTC Unix timestamp of the last update to this order's state.
     /// </summary>
     long LastUpdateTime { get; }

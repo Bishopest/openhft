@@ -24,6 +24,11 @@ public interface IOrderBuilder
     IOrderBuilder WithOrderType(OrderType orderType);
 
     /// <summary>
+    /// Sets the Post-Only option for the order.
+    /// </summary>
+    IOrderBuilder WithPostOnly(bool isPostOnly);
+
+    /// <summary>
     /// ADDED: Registers an event handler for the order's status changes.
     /// This should be called during the build process to ensure the order is fully configured upon creation.
     /// </summary>

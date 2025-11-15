@@ -45,7 +45,7 @@ public abstract class BaseRestApiClient : IDisposable
     /// </summary>
     protected abstract string GetBaseUrl(ExecutionMode mode);
     protected readonly ExecutionMode _executionMode;
-
+    public ExecutionMode ExecutionMode => _executionMode;
     public abstract ExchangeEnum SourceExchange { get; }
 
     protected BaseRestApiClient(

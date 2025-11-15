@@ -36,7 +36,7 @@ public sealed class SingleOrderQuoter : IQuoter
         _orderFactory = orderFactory;
     }
 
-    public async Task UpdateQuoteAsync(Quote newQuote, CancellationToken cancellationToken = default)
+    public async Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -49,7 +49,7 @@ public sealed class SingleOrderQuoter : IQuoter
             if (currentOrder is null)
             {
                 // No active order, so place a new one.
-                await StartNewQuoteAsync(newQuote, cancellationToken).ConfigureAwait(false);
+                await StartNewQuoteAsync(newQuote, isPostOnly, cancellationToken).ConfigureAwait(false);
             }
             else
             {
@@ -89,7 +89,7 @@ public sealed class SingleOrderQuoter : IQuoter
         }
     }
 
-    private async Task StartNewQuoteAsync(Quote quote, CancellationToken cancellationToken)
+    private async Task StartNewQuoteAsync(Quote quote, bool isPostOnly, CancellationToken cancellationToken)
     {
         // Use the factory and builder to create a new order object.
         // The builder logic is now encapsulated elsewhere.
@@ -98,6 +98,7 @@ public sealed class SingleOrderQuoter : IQuoter
             .WithPrice(quote.Price)
             .WithQuantity(quote.Size)
             .WithOrderType(OrderType.Limit)
+            .WithPostOnly(isPostOnly)
             .WithStatusChangedHandler(OnOrderStatusChanged)
             .Build();
 
