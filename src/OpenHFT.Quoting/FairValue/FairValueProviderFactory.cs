@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
+using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Quoting.Interfaces;
 
@@ -13,12 +14,15 @@ namespace OpenHFT.Quoting.FairValue;
 public class FairValueProviderFactory : IFairValueProviderFactory
 {
     private readonly ILogger<FairValueProviderFactory> _logger;
+    private readonly IInstrumentRepository _instrumentRepo;
+
     /// <summary>
     /// Initializes a new instance of the FairValueProviderFactory.
     /// </summary>
-    public FairValueProviderFactory(ILogger<FairValueProviderFactory> logger)
+    public FairValueProviderFactory(ILogger<FairValueProviderFactory> logger, IInstrumentRepository instrumentRepo)
     {
         _logger = logger;
+        _instrumentRepo = instrumentRepo;
     }
 
     /// <summary>
@@ -36,6 +40,12 @@ public class FairValueProviderFactory : IFairValueProviderFactory
                 return new MidpFairValueProvider(_logger, fvInstrumentId);
             case FairValueModel.BestMidp:
                 return new BestMidpFairValueProvider(_logger, fvInstrumentId);
+            case FairValueModel.VwapMidp:
+                return new VwapMidpFairValueProvider(_logger, fvInstrumentId);
+            case FairValueModel.GroupedMidp:
+                var instrument = _instrumentRepo.GetById(fvInstrumentId);
+                if (instrument is null) throw new Exception($"Instrument with ID {fvInstrumentId} not found.");
+                return new GroupedMidpFairValueProvider(_logger, fvInstrumentId, instrument.TickSize);
             case FairValueModel.FR:
                 throw new NotImplementedException($"FairValueModel '{model}' is not yet implemented in FairValueProviderFactory.");
             default:
