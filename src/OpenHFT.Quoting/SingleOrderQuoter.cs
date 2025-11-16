@@ -24,6 +24,8 @@ public sealed class SingleOrderQuoter : IQuoter
 
     private IOrder? _activeOrder;
 
+    public event Action OrderFullyFilled;
+
     public SingleOrderQuoter(
         ILogger logger,
         Side side,
@@ -146,6 +148,14 @@ public sealed class SingleOrderQuoter : IQuoter
             }
 
             _logger.LogInformationWithCaller($"({_side}) Order {_activeOrder.ClientOrderId} reached terminal state {finalReport.Status}. Clearing active order.");
+
+            // fully filled process
+            if (finalReport.Status == OrderStatus.Filled)
+            {
+                _logger.LogInformationWithCaller($"Active order {finalReport.ClientOrderId} has been fully filled. Trigerring cooldown.");
+                OrderFullyFilled?.Invoke();
+            }
+
 
             // Unsubscribe to prevent memory leaks
             _activeOrder.StatusChanged -= OnOrderStatusChanged;

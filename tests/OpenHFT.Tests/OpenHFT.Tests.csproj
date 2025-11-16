@@ -32,6 +32,7 @@
     <ProjectReference Include="../../src/OpenHFT.GUI/OpenHFT.GUI.csproj" />
     <ProjectReference Include="../../src/OpenHFT.Oms/OpenHFT.Oms.csproj" />
     <ProjectReference Include="../../src/OpenHFT.Quote/OpenHFT.Quoting.csproj" />
+    <ProjectReference Include="../../src/OpenHFT.Quoting/OpenHFT.Quoting.csproj" />
     <ProjectReference Include="..\..\src\OpenHFT.Core\OpenHFT.Core.csproj" />
     <ProjectReference Include="..\..\src\OpenHFT.Processing\OpenHFT.Processing.csproj" />
     <ProjectReference Include="..\..\src\OpenHFT.Book\OpenHFT.Book.csproj" />

@@ -22,6 +22,7 @@
     <ProjectReference Include="../OpenHFT.Feed/OpenHFT.Feed.csproj" />
     <ProjectReference Include="../OpenHFT.Processing/OpenHFT.Processing.csproj" />
     <ProjectReference Include="../OpenHFT.Quote/OpenHFT.Quoting.csproj" />
+    <ProjectReference Include="../OpenHFT.Quoting/OpenHFT.Quoting.csproj" />
   </ItemGroup>
 
 </Project>

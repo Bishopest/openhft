@@ -22,6 +22,9 @@ public class QuotingEngine : IQuotingEngine
     public Instrument QuotingInstrument { get; }
     public QuotingParameters CurrentParameters => _parameters;
     public bool IsActive { get; private set; }
+    private volatile bool _isPausedByFill = false;
+    private Timer? _pauseTimer;
+    private readonly object _pauseLock = new object();
 
     public QuotingEngine(
         ILogger logger,
@@ -144,6 +147,24 @@ public class QuotingEngine : IQuotingEngine
         }
     }
 
+    public void PauseQuoting(TimeSpan duration)
+    {
+        lock (_pauseLock)
+        {
+            _logger.LogWarningWithCaller($"Quoting for {QuotingInstrument.Symbol} is being paused for {duration.TotalSeconds} seconds");
+            _isPausedByFill = true;
+            _pauseTimer?.Dispose();
+            _pauseTimer = new Timer(ResumeQuotingAfterPause, null, duration, Timeout.InfiniteTimeSpan);
+        }
+
+    }
+
+    private void ResumeQuotingAfterPause(object? state)
+    {
+        _logger.LogInformationWithCaller($"Quoting pause for {QuotingInstrument.Symbol} has been resumed");
+        _isPausedByFill = false;
+    }
+
     private void Requote(Price fairValue)
     {
         QuotingParameters currentParams;
@@ -181,6 +202,11 @@ public class QuotingEngine : IQuotingEngine
         // Delegate execution to the MarketMaker
         // This is a fire-and-forget call to avoid blocking the fair value update thread.
         QuotePairCalculated?.Invoke(this, targetQuotePair);
+
+        if (_isPausedByFill)
+        {
+            return;
+        }
 
         if (IsActive)
         {

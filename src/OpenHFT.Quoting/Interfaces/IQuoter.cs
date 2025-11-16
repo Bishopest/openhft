@@ -9,6 +9,11 @@ namespace OpenHFT.Quoting.Interfaces;
 public interface IQuoter
 {
     /// <summary>
+    /// Fired when the quoter's active order is fully filled.
+    /// </summary>
+    event Action OrderFullyFilled;
+
+    /// <summary>
     /// Submits a new quote or modifies an existing one to the specified price and size.
     /// A typical implementation would handle the logic of cancelling the previous quote 
     /// and placing a new one (a cancel/replace operation).

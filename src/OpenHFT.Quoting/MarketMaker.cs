@@ -28,6 +28,8 @@ public sealed class MarketMaker
     // 0 = Idle, 1 = In Progress
     private int _isActionInProgress = 0;
 
+    // Event to notify the engine
+    public event Action? OrderFullyFilled;
     /// <summary>
     /// Fired whenever the status of the bid or ask quote changes (e.g., from Held to Live).
     /// </summary>
@@ -52,6 +54,8 @@ public sealed class MarketMaker
         _instrument = instrument;
         _bidQuoter = bidQuoter;
         _askQuoter = askQuoter;
+        _bidQuoter.OrderFullyFilled += OnQuoterFullyFilled;
+        _askQuoter.OrderFullyFilled += OnQuoterFullyFilled;
         _quoteValidator = quoteValidator;
         _quoteStatus = new TwoSidedQuoteStatus(instrument.InstrumentId, QuoteStatus.Held, QuoteStatus.Held);
     }
@@ -71,6 +75,11 @@ public sealed class MarketMaker
 
         // 현재 진행 중인 작업이 있는지 확인하고, 없다면 즉시 실행을 시도합니다.
         await TryProcessNextQuoteAsync();
+    }
+
+    private void OnQuoterFullyFilled()
+    {
+        OrderFullyFilled?.Invoke();
     }
 
     private async Task TryProcessNextQuoteAsync()

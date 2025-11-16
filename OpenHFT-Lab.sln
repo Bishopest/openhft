@@ -27,7 +27,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Processing", "src\O
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.FeedMonitor", "src\OpenHFT.FeedMonitor\OpenHFT.FeedMonitor.csproj", "{1908294F-C7FA-4C59-A5C3-B641B9F3D881}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Quoting", "src\OpenHFT.Quote\OpenHFT.Quoting.csproj", "{35907B64-15E5-4994-83B5-0218B657F0C9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.Quoting", "src\OpenHFT.Quoting\OpenHFT.Quoting.csproj", "{35907B64-15E5-4994-83B5-0218B657F0C9}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHFT.QuoteLogger", "src\OpenHFT.QuoteLogger\OpenHFT.QuoteLogger.csproj", "{F0093E57-2C1F-4DF4-8D53-07246C524A67}"
 EndProject

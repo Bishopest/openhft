@@ -14,6 +14,8 @@ public class LogQuoter : IQuoter
 {
     private readonly ILogger<LogQuoter> _logger;
 
+    public event Action OrderFullyFilled;
+
     public LogQuoter(ILogger<LogQuoter> logger)
     {
         _logger = logger;

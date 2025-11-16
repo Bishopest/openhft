@@ -19,5 +19,6 @@ public interface IQuotingEngine
     void Stop();
     void Activate();
     void Deactivate();
+    void PauseQuoting(TimeSpan duration);
     void UpdateParameters(QuotingParameters newParameters);
 }
