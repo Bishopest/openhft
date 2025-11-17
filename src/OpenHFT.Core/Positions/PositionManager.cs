@@ -27,7 +27,6 @@ public class PositionManager : IPositionManager, IDisposable
         _orderRouter.OrderFilled += OnOrderFilled;
     }
 
-
     private void OnOrderFilled(object? sender, Fill fill)
     {
         _logger.LogInformationWithCaller($"Updating position with new fill: {fill}");
@@ -42,7 +41,7 @@ public class PositionManager : IPositionManager, IDisposable
         }
     }
 
-    private async Task RestorePositionsAsync()
+    public async Task RestorePositionsAsync()
     {
         _logger.LogInformationWithCaller("Restoring positions from today's fills...");
         var todayFills = await _fillRepository.GetFillsByDateAsync(DateTime.UtcNow.Date);
