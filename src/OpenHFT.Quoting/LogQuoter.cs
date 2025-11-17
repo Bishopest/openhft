@@ -1,5 +1,6 @@
 using System;
 using Microsoft.Extensions.Logging;
+using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Quoting.Interfaces;
 using OpenHFT.Quoting.Models;
@@ -14,7 +15,8 @@ public class LogQuoter : IQuoter
 {
     private readonly ILogger<LogQuoter> _logger;
 
-    public event Action OrderFullyFilled;
+    public event Action? OrderFullyFilled;
+    public event Action<Fill>? OrderFilled;
 
     public LogQuoter(ILogger<LogQuoter> logger)
     {

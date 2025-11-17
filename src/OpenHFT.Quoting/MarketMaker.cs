@@ -30,6 +30,7 @@ public sealed class MarketMaker
 
     // Event to notify the engine
     public event Action? OrderFullyFilled;
+    public event Action<Fill>? OrderFilled;
     /// <summary>
     /// Fired whenever the status of the bid or ask quote changes (e.g., from Held to Live).
     /// </summary>
@@ -55,7 +56,9 @@ public sealed class MarketMaker
         _bidQuoter = bidQuoter;
         _askQuoter = askQuoter;
         _bidQuoter.OrderFullyFilled += OnQuoterFullyFilled;
+        _bidQuoter.OrderFilled += OnQuoterFilled;
         _askQuoter.OrderFullyFilled += OnQuoterFullyFilled;
+        _askQuoter.OrderFilled += OnQuoterFilled;
         _quoteValidator = quoteValidator;
         _quoteStatus = new TwoSidedQuoteStatus(instrument.InstrumentId, QuoteStatus.Held, QuoteStatus.Held);
     }
@@ -75,6 +78,11 @@ public sealed class MarketMaker
 
         // 현재 진행 중인 작업이 있는지 확인하고, 없다면 즉시 실행을 시도합니다.
         await TryProcessNextQuoteAsync();
+    }
+
+    private void OnQuoterFilled(Fill fill)
+    {
+        OrderFilled?.Invoke(fill);
     }
 
     private void OnQuoterFullyFilled()
@@ -121,12 +129,6 @@ public sealed class MarketMaker
         if (target.InstrumentId != _instrument.InstrumentId)
         {
             _logger.LogWarningWithCaller($"Received a quote target for the wrong instrument. Expected {_instrument.InstrumentId}, got {target.InstrumentId}.");
-            return;
-        }
-
-        if (target.Ask.Price <= target.Bid.Price)
-        {
-            _logger.LogWarningWithCaller($"Self-crossed quote! ask price => {target.Ask.Price} , bid price => {target.Bid.Price}");
             return;
         }
 
