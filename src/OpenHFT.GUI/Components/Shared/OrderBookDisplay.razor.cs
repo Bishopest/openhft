@@ -53,6 +53,49 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     private string _priceFormat = "F2"; // Default format
     private string _quantityFormat = "N4"; // Default format
 
+    /// <summary>
+    /// Calculates and formats the notional value of the theoretical Ask quote.
+    /// Returns null if not applicable.
+    /// </summary>
+    protected string? ExpectedAskValue
+    {
+        get
+        {
+            if (_myCurrentQuote is null) return null;
+
+            // This logic only applies if the instrument is a CryptoPerpetual
+            if (DisplayInstrument is CryptoPerpetual future)
+            {
+                var ask = _myCurrentQuote.Value.Ask;
+                // Formula: Price * Size * Multiplier
+                var value = ask.Price.ToDecimal() * ask.Size.ToDecimal() * future.Multiplier;
+                return ((long)value).ToString("N0"); // Format as a whole number with commas
+            }
+
+            return null; // Not a future, so no value to display
+        }
+    }
+
+    /// <summary>
+    /// Calculates and formats the notional value of the theoretical Bid quote.
+    /// Returns null if not applicable.
+    /// </summary>
+    protected string? ExpectedBidValue
+    {
+        get
+        {
+            if (_myCurrentQuote is null) return null;
+
+            if (DisplayInstrument is CryptoPerpetual future)
+            {
+                var bid = _myCurrentQuote.Value.Bid;
+                var value = bid.Price.ToDecimal() * bid.Size.ToDecimal() * future.Multiplier;
+                return ((long)value).ToString("N0");
+            }
+
+            return null;
+        }
+    }
 
     // --- SLIDER STATE MANAGEMENT ---
     private readonly int[] _groupingMultipliers = { 1, 10, 50, 100 };

@@ -12,14 +12,32 @@
     @if (_myCurrentQuote is not null)
     {
         <MudPaper Outlined="true" Class="mx-2 my-1 pa-1 d-flex justify-space-between">
-            <MudText Typo="Typo.body2">
-                <span class="mud-theme-error-text">Expected Ask:</span>
-                <span class="mud-theme-error-text" style="font-weight: bold;">@_myCurrentQuote.Value.Ask.Price.ToDecimal().ToString(_priceFormat)</span>
-            </MudText>
-            <MudText Typo="Typo.body2">
-                <span class="mud-theme-success-text">Expected Bid:</span>
-                <span class="mud-theme-success-text" style="font-weight: bold;">@_myCurrentQuote.Value.Bid.Price.ToDecimal().ToString(_priceFormat)</span>
-            </MudText>
+            <div>
+                <MudText Typo="Typo.body2">
+                    <span class="mud-theme-error-text">Expected Ask:</span>
+                    <span class="mud-theme-error-text" style="font-weight: bold;">@_myCurrentQuote.Value.Ask.Price.ToDecimal().ToString(_priceFormat)</span>
+                </MudText>
+                @if (ExpectedAskValue is not null)
+                    {
+                        <MudText Typo="Typo.caption">
+                            <span class="mud-text-secondary">Value:</span>
+                            <span class="mud-text-primary">@ExpectedAskValue</span>
+                        </MudText>
+                    }
+            </div>
+            <div style="text-align: right;">
+                <MudText Typo="Typo.body2">
+                    <span class="mud-theme-success-text">Expected Bid:</span>
+                    <span class="mud-theme-success-text" style="font-weight: bold;">@_myCurrentQuote.Value.Bid.Price.ToDecimal().ToString(_priceFormat)</span>
+                </MudText>
+                @if (ExpectedBidValue is not null)
+                    {
+                        <MudText Typo="Typo.caption">
+                            <span class="mud-text-secondary">Value:</span>
+                            <span class="mud-text-primary">@ExpectedBidValue</span>
+                        </MudText>
+                    }
+            </div>
         </MudPaper>
     }
 
