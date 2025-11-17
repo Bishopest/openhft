@@ -21,4 +21,5 @@ public interface IQuotingEngine
     void Deactivate();
     void PauseQuoting(TimeSpan duration);
     void UpdateParameters(QuotingParameters newParameters);
+    void OnFill(Fill fill);
 }

@@ -25,6 +25,7 @@ public sealed class SingleOrderQuoter : IQuoter
     private IOrder? _activeOrder;
 
     public event Action OrderFullyFilled;
+    public event Action<Fill> OrderFilled;
 
     public SingleOrderQuoter(
         ILogger logger,
@@ -103,6 +104,7 @@ public sealed class SingleOrderQuoter : IQuoter
             .WithPostOnly(isPostOnly)
             .WithStatusChangedHandler(OnOrderStatusChanged)
             .Build();
+        newOrder.OrderFilled += OnOrderFilled;
 
         lock (_stateLock)
         {
@@ -111,6 +113,7 @@ public sealed class SingleOrderQuoter : IQuoter
             {
                 _logger.LogWarningWithCaller($"({_side}) Aborting StartNewQuoteAsync; an active order was created concurrently.");
                 newOrder.StatusChanged -= OnOrderStatusChanged;
+                newOrder.OrderFilled -= OnOrderFilled;
                 return;
             }
 
@@ -137,6 +140,11 @@ public sealed class SingleOrderQuoter : IQuoter
         }
     }
 
+    private void OnOrderFilled(object? sender, Fill fill)
+    {
+        OrderFilled?.Invoke(fill);
+    }
+
     private void ClearActiveOrder(OrderStatusReport finalReport)
     {
         lock (_stateLock)
@@ -159,6 +167,7 @@ public sealed class SingleOrderQuoter : IQuoter
 
             // Unsubscribe to prevent memory leaks
             _activeOrder.StatusChanged -= OnOrderStatusChanged;
+            _activeOrder.OrderFilled -= OnOrderFilled;
             _activeOrder = null;
         }
     }
@@ -171,6 +180,7 @@ public sealed class SingleOrderQuoter : IQuoter
             if (_activeOrder != null)
             {
                 _activeOrder.StatusChanged -= OnOrderStatusChanged;
+                _activeOrder.OrderFilled -= OnOrderFilled;
                 _activeOrder = null; // Or consider sending a final cancel request.
             }
         }

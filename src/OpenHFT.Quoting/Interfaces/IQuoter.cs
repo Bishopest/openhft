@@ -1,4 +1,5 @@
 using System;
+using OpenHFT.Core.Models;
 using OpenHFT.Quoting.Models;
 namespace OpenHFT.Quoting.Interfaces;
 
@@ -12,6 +13,11 @@ public interface IQuoter
     /// Fired when the quoter's active order is fully filled.
     /// </summary>
     event Action OrderFullyFilled;
+
+    /// <summary>
+    /// Fired when the quoter's active order is filled anyway.
+    /// </summary>
+    event Action<Fill> OrderFilled;
 
     /// <summary>
     /// Submits a new quote or modifies an existing one to the specified price and size.

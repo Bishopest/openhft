@@ -17,13 +17,15 @@ public readonly struct QuotePair : IEquatable<QuotePair>
 
     /// <summary>
     /// The bid quote (buy side) to be submitted.
+    /// null means not quoting at all
     /// </summary>
-    public readonly Quote Bid { get; }
+    public readonly Quote? Bid { get; }
 
     /// <summary>
     /// The ask quote (sell side) to be submitted.
+    /// null means not quoting at all
     /// </summary>
-    public readonly Quote Ask { get; }
+    public readonly Quote? Ask { get; }
 
     /// <summary>
     /// The UTC timestamp in Unix milliseconds when this quote pair was created.
@@ -44,7 +46,7 @@ public readonly struct QuotePair : IEquatable<QuotePair>
     /// <param name="ask">The ask quote to submit.</param>
     /// /// <param name="creationTimestamp">The UTC timestamp in Unix milliseconds.</param>
     [JsonConstructor]
-    public QuotePair(int instrumentId, Quote bid, Quote ask, long creationTimestamp, bool isPostOnly)
+    public QuotePair(int instrumentId, Quote? bid, Quote? ask, long creationTimestamp, bool isPostOnly)
     {
         InstrumentId = instrumentId;
         Bid = bid;
@@ -56,7 +58,7 @@ public readonly struct QuotePair : IEquatable<QuotePair>
     /// <summary>
     /// Gets the intended spread of this quote pair.
     /// </summary>
-    public Price Spread => Ask.Price - Bid.Price;
+    public Price Spread => Ask is null || Bid is null ? Price.FromDecimal(0m) : Ask.Value.Price - Bid.Value.Price;
 
 
     /// <summary>

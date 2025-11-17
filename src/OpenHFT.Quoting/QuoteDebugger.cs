@@ -64,8 +64,8 @@ public class QuoteDebugger
     private void OnOrderBookUpdate(object? sender, OrderBook ob)
     {
         var currentQuotePair = _lastDisplayedQuotePair;
-        var myBid = currentQuotePair?.Bid.Size.ToTicks() > 0 ? currentQuotePair?.Bid : null;
-        var myAsk = currentQuotePair?.Ask.Size.ToTicks() > 0 ? currentQuotePair?.Ask : null;
+        var myBid = currentQuotePair?.Bid?.Size.ToTicks() > 0 ? currentQuotePair?.Bid : null;
+        var myAsk = currentQuotePair?.Ask?.Size.ToTicks() > 0 ? currentQuotePair?.Ask : null;
 
         PrintOrderBookWithQuotes(ob, myBid, myAsk);
     }

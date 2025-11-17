@@ -62,11 +62,12 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
         get
         {
             if (_myCurrentQuote is null) return null;
+            if (_myCurrentQuote.Value.Ask is null) return null;
 
             // This logic only applies if the instrument is a CryptoPerpetual
             if (DisplayInstrument is CryptoPerpetual future)
             {
-                var ask = _myCurrentQuote.Value.Ask;
+                var ask = _myCurrentQuote.Value.Ask.Value;
                 // Formula: Price * Size * Multiplier
                 var value = ask.Price.ToDecimal() * ask.Size.ToDecimal() * future.Multiplier;
                 return ((long)value).ToString("N0"); // Format as a whole number with commas
@@ -85,10 +86,11 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
         get
         {
             if (_myCurrentQuote is null) return null;
+            if (_myCurrentQuote.Value.Bid is null) return null;
 
             if (DisplayInstrument is CryptoPerpetual future)
             {
-                var bid = _myCurrentQuote.Value.Bid;
+                var bid = _myCurrentQuote.Value.Bid.Value;
                 var value = bid.Price.ToDecimal() * bid.Size.ToDecimal() * future.Multiplier;
                 return ((long)value).ToString("N0");
             }
@@ -231,9 +233,8 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
                 var currentPrice = Price.FromTicks(startAskPrice.ToTicks() + (groupingAsPrice.ToTicks() * i));
                 var currentPriceDecimal = currentPrice.ToDecimal();
 
-                bool isMyAsk = myQuote != null && Math.Ceiling(myQuote.Value.Ask.Price.ToDecimal() / PriceGrouping) * PriceGrouping == currentPriceDecimal;
+                bool isMyAsk = myQuote != null && myQuote.Value.Ask != null && Math.Ceiling(myQuote.Value.Ask.Value.Price.ToDecimal() / PriceGrouping) * PriceGrouping == currentPriceDecimal;
                 groupedAsks.TryGetValue(currentPriceDecimal, out var askQty);
-
                 newLevels.Add(new DisplayLevel(currentPrice, null, askQty.ToTicks() > 0 ? askQty : null, false, isMyAsk));
             }
         }
@@ -247,7 +248,7 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
                 var currentPrice = Price.FromTicks(startBidPrice.ToTicks() - (groupingAsPrice.ToTicks() * i));
                 var currentPriceDecimal = currentPrice.ToDecimal();
 
-                bool isMyBid = myQuote != null && Math.Floor(myQuote.Value.Bid.Price.ToDecimal() / PriceGrouping) * PriceGrouping == currentPriceDecimal;
+                bool isMyBid = myQuote != null && myQuote.Value.Bid != null && Math.Floor(myQuote.Value.Bid.Value.Price.ToDecimal() / PriceGrouping) * PriceGrouping == currentPriceDecimal;
                 groupedBids.TryGetValue(currentPriceDecimal, out var bidQty);
 
                 // Avoid adding duplicates if spread is zero or crossed

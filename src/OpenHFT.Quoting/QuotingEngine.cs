@@ -25,6 +25,12 @@ public class QuotingEngine : IQuotingEngine
     private volatile bool _isPausedByFill = false;
     private Timer? _pauseTimer;
     private readonly object _pauseLock = new object();
+    private long _totalBuyFillsInTicks;
+    private long _totalSellFillsInTicks;
+    // Public properties to expose the values as Quantity structs.
+    public Quantity TotalBuyFills => Quantity.FromTicks(Interlocked.Read(ref _totalBuyFillsInTicks));
+    public Quantity TotalSellFills => Quantity.FromTicks(Interlocked.Read(ref _totalSellFillsInTicks));
+
 
     public QuotingEngine(
         ILogger logger,
@@ -37,6 +43,7 @@ public class QuotingEngine : IQuotingEngine
         _logger = logger;
         QuotingInstrument = instrument;
         _marketMaker = marketMaker;
+        _marketMaker.OrderFilled += OnFill;
         _fairValueProvider = fairValueProvider;
         _parameters = initialParameters;
         _marketDataManager = marketDataManager;
@@ -163,6 +170,59 @@ public class QuotingEngine : IQuotingEngine
     {
         _logger.LogInformationWithCaller($"Quoting pause for {QuotingInstrument.Symbol} has been resumed");
         _isPausedByFill = false;
+    }
+
+    /// <summary>
+    /// Processes a fill event to update the internal absolute fill counters in a thread-safe manner.
+    /// </summary>
+    /// <param name="fill">The fill event from the exchange.</param>
+    public void OnFill(Fill fill)
+    {
+        if (fill.InstrumentId != QuotingInstrument.InstrumentId)
+        {
+            // This fill is not for us.
+            return;
+        }
+
+        var fillQuantityInTicks = fill.Quantity.ToTicks();
+
+        if (fill.Side == Side.Buy)
+        {
+            // Increase the absolute buy fills.
+            Interlocked.Add(ref _totalBuyFillsInTicks, fillQuantityInTicks);
+            _logger.LogInformationWithCaller($"Buy fill received for {QuotingInstrument.Symbol}. Quantity: {fill.Quantity}. New total buy: {TotalBuyFills}");
+
+            // Decrease the absolute sell fills, but not below zero.
+            InterlockedDecrementToZero(ref _totalSellFillsInTicks, fillQuantityInTicks);
+        }
+        else // Side.Sell
+        {
+            // Increase the absolute sell fills.
+            Interlocked.Add(ref _totalSellFillsInTicks, fillQuantityInTicks);
+            _logger.LogInformationWithCaller($"Sell fill received for {QuotingInstrument.Symbol}. Quantity: {fill.Quantity}. New total sell: {TotalSellFills}");
+
+            // Decrease the absolute buy fills, but not below zero.
+            InterlockedDecrementToZero(ref _totalBuyFillsInTicks, fillQuantityInTicks);
+        }
+    }
+
+    /// <summary>
+    /// Atomically decrements the target value by the amount, ensuring it does not go below zero.
+    /// </summary>
+    private void InterlockedDecrementToZero(ref long target, long amount)
+    {
+        long originalValue;
+        long newValue;
+        do
+        {
+            originalValue = Interlocked.Read(ref target);
+            newValue = Math.Max(0, originalValue - amount);
+
+            // Compare the original value with the current value. If they are the same,
+            // it means no other thread has changed it in the meantime, so we can safely update it.
+            // If they are different, it means another thread interfered, so we loop and try again.
+        }
+        while (Interlocked.CompareExchange(ref target, newValue, originalValue) != originalValue);
     }
 
     private void Requote(Price fairValue)

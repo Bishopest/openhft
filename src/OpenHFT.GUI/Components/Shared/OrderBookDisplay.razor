@@ -15,7 +15,7 @@
             <div>
                 <MudText Typo="Typo.body2">
                     <span class="mud-theme-error-text">Expected Ask:</span>
-                    <span class="mud-theme-error-text" style="font-weight: bold;">@_myCurrentQuote.Value.Ask.Price.ToDecimal().ToString(_priceFormat)</span>
+                    <span class="mud-theme-error-text" style="font-weight: bold;">@(_myCurrentQuote.Value.Ask?.Price.ToDecimal().ToString(_priceFormat) ?? "-")</span>
                 </MudText>
                 @if (ExpectedAskValue is not null)
                     {
@@ -28,7 +28,7 @@
             <div style="text-align: right;">
                 <MudText Typo="Typo.body2">
                     <span class="mud-theme-success-text">Expected Bid:</span>
-                    <span class="mud-theme-success-text" style="font-weight: bold;">@_myCurrentQuote.Value.Bid.Price.ToDecimal().ToString(_priceFormat)</span>
+                    <span class="mud-theme-success-text" style="font-weight: bold;">@(_myCurrentQuote.Value.Bid?.Price.ToDecimal().ToString(_priceFormat) ?? "-")</span>
                 </MudText>
                 @if (ExpectedBidValue is not null)
                     {
