@@ -190,19 +190,19 @@ public class QuotingEngine : IQuotingEngine
         {
             // Increase the absolute buy fills.
             Interlocked.Add(ref _totalBuyFillsInTicks, fillQuantityInTicks);
+            // Decrease the absolute sell fills, but not below zero.
+            // InterlockedDecrementToZero(ref _totalSellFillsInTicks, fillQuantityInTicks);
             _logger.LogInformationWithCaller($"Buy fill received for {QuotingInstrument.Symbol}. Quantity: {fill.Quantity}. New total buy: {TotalBuyFills}");
 
-            // Decrease the absolute sell fills, but not below zero.
-            InterlockedDecrementToZero(ref _totalSellFillsInTicks, fillQuantityInTicks);
         }
         else // Side.Sell
         {
             // Increase the absolute sell fills.
             Interlocked.Add(ref _totalSellFillsInTicks, fillQuantityInTicks);
+            // Decrease the absolute buy fills, but not below zero.
+            // InterlockedDecrementToZero(ref _totalBuyFillsInTicks, fillQuantityInTicks);
             _logger.LogInformationWithCaller($"Sell fill received for {QuotingInstrument.Symbol}. Quantity: {fill.Quantity}. New total sell: {TotalSellFills}");
 
-            // Decrease the absolute buy fills, but not below zero.
-            InterlockedDecrementToZero(ref _totalBuyFillsInTicks, fillQuantityInTicks);
         }
     }
 
@@ -251,10 +251,13 @@ public class QuotingEngine : IQuotingEngine
         var roundedAskTicks = (rawAskPrice.ToTicks() + tickSizeInTicks - 1) / tickSizeInTicks * tickSizeInTicks; // Ceiling
         var roundedBidTicks = rawBidPrice.ToTicks() / tickSizeInTicks * tickSizeInTicks; // Floor
 
+        var cumAskFillViolated = _parameters.MaxCumAskFills < TotalSellFills;
+        var cumBidFillViolated = _parameters.MaxCumBidFills < TotalBuyFills;
+
         var targetQuotePair = new QuotePair(
             QuotingInstrument.InstrumentId,
-            new Quote(Price.FromTicks(roundedBidTicks), currentParams.Size),
-            new Quote(Price.FromTicks(roundedAskTicks), currentParams.Size),
+            cumBidFillViolated ? null : new Quote(Price.FromTicks(roundedBidTicks), currentParams.Size),
+            cumAskFillViolated ? null : new Quote(Price.FromTicks(roundedAskTicks), currentParams.Size),
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             currentParams.PostOnly
         );

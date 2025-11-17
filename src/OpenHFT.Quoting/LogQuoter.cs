@@ -1,5 +1,6 @@
 using System;
 using Microsoft.Extensions.Logging;
+using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Quoting.Interfaces;
@@ -23,6 +24,7 @@ public class LogQuoter : IQuoter
         _logger = logger;
     }
 
+    private IOrder? _activeOrder;
     /// <summary>
     /// The most recent quote that was requested to be updated.
     /// Null if the last action was a cancellation.
@@ -41,5 +43,16 @@ public class LogQuoter : IQuoter
         LatestQuote = null;
         _logger.LogInformationWithCaller($"Cancel all quotes");
         return Task.CompletedTask;
+    }
+
+    // for test purpose
+    public void InvokeOrderFullyFilled()
+    {
+        OrderFullyFilled?.Invoke();
+    }
+
+    public void InvokeOrderFilled(Fill fill)
+    {
+        OrderFilled?.Invoke(fill);
     }
 }

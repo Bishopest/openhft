@@ -33,6 +33,14 @@
                 </MudItem>
             </MudGrid>
             <MudNumericField @bind-Value="_model.SkewBp" Label="Skew (bp)" Variant="Variant.Outlined" Required="true" />
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="_model.MaxCumBidFills" Label="Max Cum Bid Fills" Variant="Variant.Outlined" Required="true" Min="0" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="_model.MaxCumAskFills" Label="Max Cum Ask Fills" Variant="Variant.Outlined" Required="true" Min="0" />
+                </MudItem>
+            </MudGrid>
             <MudNumericField @bind-Value="_model.Size" Label="Size (Quantity)" Variant="Variant.Outlined"
                 Required="true" Min="0" Step="0.001m" />
             <MudNumericField @bind-Value="_model.Depth" Label="Depth (Levels)" Variant="Variant.Outlined"

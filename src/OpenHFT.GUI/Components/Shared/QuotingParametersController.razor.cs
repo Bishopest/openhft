@@ -62,6 +62,8 @@ public partial class QuotingParametersController
         public int Depth { get; set; } = 5;
         public QuoterType Type { get; set; }
         public bool PostOnly { get; set; }
+        public decimal MaxCumAskFills { get; set; } = 10000m;
+        public decimal MaxCumBidFills { get; set; } = 10000m;
     }
 
     protected override void OnInitialized()
@@ -85,6 +87,8 @@ public partial class QuotingParametersController
         _model.Depth = newParameters.Depth;
         _model.Type = newParameters.Type;
         _model.PostOnly = newParameters.PostOnly;
+        _model.MaxCumAskFills = newParameters.MaxCumAskFills.ToDecimal();
+        _model.MaxCumBidFills = newParameters.MaxCumBidFills.ToDecimal();
 
         // We need to update the instrument selection as well
         SelectedInstrument = _availableInstruments.FirstOrDefault(i => i.InstrumentId == newParameters.InstrumentId);
@@ -152,7 +156,9 @@ public partial class QuotingParametersController
             Quantity.FromDecimal(_model.Size), // Convert decimal to Quantity
             _model.Depth,
             _model.Type,
-            _model.PostOnly
+            _model.PostOnly,
+            Quantity.FromDecimal(_model.MaxCumBidFills),
+            Quantity.FromDecimal(_model.MaxCumAskFills)
         );
 
         // Invoke the callback to notify the parent component

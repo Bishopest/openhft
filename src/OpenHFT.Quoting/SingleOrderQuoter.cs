@@ -23,9 +23,14 @@ public sealed class SingleOrderQuoter : IQuoter
     private readonly object _stateLock = new();
 
     private IOrder? _activeOrder;
+    /// <summary>
+    /// The most recent quote that was requested to be updated.
+    /// Null if the last action was a cancellation.
+    /// </summary>
+    public Quote? LatestQuote { get; private set; }
 
-    public event Action OrderFullyFilled;
-    public event Action<Fill> OrderFilled;
+    public event Action? OrderFullyFilled;
+    public event Action<Fill>? OrderFilled;
 
     public SingleOrderQuoter(
         ILogger logger,
@@ -43,6 +48,7 @@ public sealed class SingleOrderQuoter : IQuoter
     {
         try
         {
+            LatestQuote = newQuote;
             IOrder? currentOrder;
             lock (_stateLock)
             {
@@ -72,6 +78,7 @@ public sealed class SingleOrderQuoter : IQuoter
     {
         try
         {
+            LatestQuote = null;
             IOrder? orderToCancel;
             lock (_stateLock)
             {
@@ -80,7 +87,7 @@ public sealed class SingleOrderQuoter : IQuoter
 
             if (orderToCancel is null)
             {
-                _logger.LogInformationWithCaller($"({_side}) No active quote to cancel.");
+                _logger.LogDebug($"({_side}) No active quote to cancel.");
                 return;
             }
 

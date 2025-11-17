@@ -40,6 +40,18 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     public readonly Quantity Size { get; }
 
     /// <summary>
+    /// The maximum cumulative net long fills allowed.
+    /// If the current cumulative net long fills exceeds this value, new bid quotes will be held (not placed).
+    /// </summary>
+    public readonly Quantity MaxCumBidFills { get; }
+
+    /// <summary>
+    /// The maximum cumulative net short position allowed (as a positive number).
+    /// If the absolute value of the current cumulative net short fills exceeds this value, new ask quotes will be held.
+    /// </summary>
+    public readonly Quantity MaxCumAskFills { get; }
+
+    /// <summary>
     /// # of price level on each side to quote
     /// </summary>
     public readonly int Depth { get; }
@@ -59,6 +71,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     /// <param name="size">The quantity for each quote level.</param>
     /// <param name="depth">The number of quote levels on each side.</param>
     /// <param name="type">The type of quoter to be used.</param>
+    /// <param name="postOnly">If true, all limit orders will be submitted as Post-Only.</param>
     [JsonConstructor]
     public QuotingParameters(
         int instrumentId,
@@ -70,11 +83,19 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         Quantity size,
         int depth,
         QuoterType type,
-        bool postOnly)
+        bool postOnly,
+        Quantity maxCumBidFills,
+        Quantity maxCumAskFills)
     {
         if (askSpreadBp <= bidSpreadBp)
         {
             throw new ArgumentException("AskSpreadBp must be strictly greater than BidSpreadBp to ensure a positive spread.",
+                                        nameof(QuotingParameters));
+        }
+
+        if (maxCumBidFills.ToDecimal() <= 0 || maxCumAskFills.ToDecimal() <= 0)
+        {
+            throw new ArgumentException("MaxCumBidFills and MaxCumAskFills must be greater than zero.",
                                         nameof(QuotingParameters));
         }
 
@@ -88,6 +109,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         Depth = depth;
         Type = type;
         PostOnly = postOnly;
+        MaxCumBidFills = maxCumBidFills;
+        MaxCumAskFills = maxCumAskFills;
     }
 
     public override string ToString()
@@ -101,6 +124,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
                $"\"Depth\": {Depth}" +
                $"\"Type\": {Type}" +
                $"\"PostOnly\": {PostOnly}" +
+               $"\"MaxCumBidFills\": {MaxCumBidFills.ToDecimal()}, " +
+               $"\"MaxCumAskFills\": {MaxCumAskFills.ToDecimal()}, " +
                $" }}";
     }
 
@@ -114,7 +139,9 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
                Size == other.Size &&
                Depth == other.Depth &&
                PostOnly == other.PostOnly &&
-               Type == other.Type;
+               Type == other.Type &&
+               MaxCumBidFills == other.MaxCumBidFills &&
+               MaxCumAskFills == other.MaxCumAskFills;
     }
     public override bool Equals(object? obj)
     {
@@ -133,6 +160,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         hash.Add(Depth);
         hash.Add(Type);
         hash.Add(PostOnly);
+        hash.Add(MaxCumBidFills);
+        hash.Add(MaxCumAskFills);
         return hash.ToHashCode();
     }
 

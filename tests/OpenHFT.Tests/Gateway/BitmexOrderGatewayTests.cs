@@ -155,7 +155,7 @@ public class BitmexOrderGatewayTests
     //     var book = await GetOrderBookL2Async(apiClient, _btcUsdt.Symbol);
     //     var takerBidPrice = Price.FromDecimal(book.First(l => l.Side == "Sell").Price + 10);
 
-    //     var takerOrderRequest = new NewOrderRequest(_btcUsdt.InstrumentId, clientOrderId, Side.Buy, takerBidPrice, Quantity.FromDecimal(100m), OrderType.Limit);
+    //     var takerOrderRequest = new NewOrderRequest(_btcUsdt.InstrumentId, clientOrderId, Side.Buy, takerBidPrice, Quantity.FromDecimal(100m), OrderType.Limit, false);
 
     //     // Act
     //     var placementResult = await _gateway.SendNewOrderAsync(takerOrderRequest);

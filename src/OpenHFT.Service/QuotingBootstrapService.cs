@@ -77,7 +77,9 @@ public class QuotingBootstrapService : IHostedService
                 Quantity.FromDecimal(config.Size),
                 config.Depth,
                 Enum.TryParse<QuoterType>(config.QuoterType, true, out var qType) ? qType : QuoterType.Log,
-                config.PostOnly
+                config.PostOnly,
+                Quantity.FromDecimal(config.MaxCumBidFills),
+                Quantity.FromDecimal(config.MaxCumAskFills)
             );
 
             if (_instanceManager.UpdateInstanceParameters(parameters) != null)

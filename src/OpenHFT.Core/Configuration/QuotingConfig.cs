@@ -74,4 +74,8 @@ public class QuotingConfig
     public int Depth { get; set; }
     [JsonProperty("postOnly")]
     public bool PostOnly { get; set; }
+    [JsonProperty("maxCumAskFills")]
+    public decimal MaxCumAskFills { get; set; }
+    [JsonProperty("maxCumBidFills")]
+    public decimal MaxCumBidFills { get; set; }
 }

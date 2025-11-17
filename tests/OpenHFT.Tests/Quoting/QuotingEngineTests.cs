@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestPlatform.Utilities;
 using Moq;
 using NUnit.Framework;
+using OpenHFT.Book.Core;
 using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
@@ -32,7 +33,7 @@ namespace OpenHFT.Tests.Quoting;
 public class QuotingEngineTests
 {
     private ServiceProvider _serviceProvider;
-    private IQuotingEngine _engine;
+    private QuotingEngine _engine;
     private LogQuoter _bidQuoter;
     private LogQuoter _askQuoter;
     private IInstrumentRepository _instrumentRepo;
@@ -43,6 +44,8 @@ public class QuotingEngineTests
     private string _testDirectory;
     private Instrument _xbtusd;
     private Instrument _btcusdt;
+    private IFairValueProvider? _fvProvider;
+
 
 
     [SetUp]
@@ -112,6 +115,8 @@ public class QuotingEngineTests
         _btcusdt = instrumentRepository.FindBySymbol("BTCUSDT", ProductType.PerpetualFuture, ExchangeEnum.BINANCE)!;
         _marketDataManager.Install(_xbtusd);
         _marketDataManager.Install(_btcusdt);
+        _fvProvider = _serviceProvider.GetRequiredService<IFairValueProviderFactory>()
+            .CreateProvider(FairValueModel.Midp, _btcusdt.InstrumentId);
 
         _bidQuoter = (LogQuoter)quoterFactory.CreateQuoter(_xbtusd, Side.Buy, QuoterType.Log);
         _askQuoter = (LogQuoter)quoterFactory.CreateQuoter(_xbtusd, Side.Sell, QuoterType.Log);
@@ -121,9 +126,6 @@ public class QuotingEngineTests
             _xbtusd, _bidQuoter, _askQuoter,
             _serviceProvider.GetRequiredService<IQuoteValidator>()
         );
-
-        var fvProvider = _serviceProvider.GetRequiredService<IFairValueProviderFactory>()
-            .CreateProvider(FairValueModel.Midp, _btcusdt.InstrumentId);
 
         var parameters = new QuotingParameters(
             _xbtusd.InstrumentId,
@@ -135,13 +137,15 @@ public class QuotingEngineTests
             Quantity.FromDecimal(100),
             1,
             QuoterType.Log,
-            true
+            true,
+            Quantity.FromDecimal(300),
+            Quantity.FromDecimal(300)
         );
         _engine = new QuotingEngine(
             _serviceProvider.GetRequiredService<ILogger<QuotingEngine>>(),
             _xbtusd,
             marketMaker,
-            fvProvider,
+            _fvProvider,
             parameters,
             _marketDataManager
         );
@@ -175,17 +179,7 @@ public class QuotingEngineTests
         TestContext.WriteLine("Simulating a full fill event...");
 
         // OrderRouter를 통해 'Filled' 상태의 OrderStatusReport를 직접 주입
-        var fillReport = new OrderStatusReport(
-            1234, "dummy-exo-id", null, _xbtusd.InstrumentId, Side.Buy,
-            OrderStatus.Filled,
-            initialQuotePrice,
-            Quantity.FromDecimal(100),
-            Quantity.FromDecimal(0), // LeavesQty = 0
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            lastQuantity: Quantity.FromDecimal(100) // LastQty
-        );
-        _orderRouter.RouteReport(fillReport);
-
+        _bidQuoter.InvokeOrderFullyFilled();
         await Task.Delay(200); // 이벤트 전파 대기
 
         // --- Assert 1: 호가가 중지되었는지 확인 ---
@@ -193,7 +187,7 @@ public class QuotingEngineTests
         TestContext.WriteLine("Triggering another market data update while paused...");
         var testUpdates2 = new PriceLevelEntryArray();
         testUpdates2[0] = new PriceLevelEntry(Side.Buy, 50000m, 100m);
-        testUpdates2[1] = new PriceLevelEntry(Side.Sell, 3000m, 200m);
+        testUpdates2[1] = new PriceLevelEntry(Side.Sell, 300m, 200m);
 
         var btcEvent2 = new MarketDataEvent(1, 1, EventKind.Snapshot, _btcusdt.InstrumentId, _btcusdt.SourceExchange, 0, BinanceTopic.DepthUpdate.TopicId, 2, testUpdates2);
         _mockBinanceAdapter.FireMarketDataEvent(btcEvent2);
@@ -216,6 +210,192 @@ public class QuotingEngineTests
 
         _bidQuoter.LatestQuote.Value.Price.ToDecimal().Should().NotBe(initialQuotePrice.ToDecimal());
         TestContext.WriteLine(" -> Quoting has resumed as expected.");
+    }
+
+    [Test]
+    public void OnFill_WithSingleBuyFill_CorrectlyIncrementsBuyFills()
+    {
+        _engine.Start();
+        _engine.Activate();
+
+        // Arrange
+        var fill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(100), 0);
+        // Act
+        _bidQuoter.InvokeOrderFilled(fill);
+
+        // Assert
+        _engine.TotalBuyFills.ToDecimal().Should().Be(100);
+        _engine.TotalSellFills.ToDecimal().Should().Be(0);
+    }
+
+    [Test]
+    public void OnFill_WithSingleSellFill_CorrectlyIncrementsSellFills()
+    {
+        // Arrange
+        var fill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Sell, Price.FromDecimal(50000), Quantity.FromDecimal(200), 0);
+
+        // Act
+        _askQuoter.InvokeOrderFilled(fill);
+
+        // Assert
+        _engine.TotalBuyFills.ToDecimal().Should().Be(0);
+        _engine.TotalSellFills.ToDecimal().Should().Be(200);
+    }
+
+    [Test]
+    public void OnFill_WithBuyThenSellFills_CorrectlyNetsValues()
+    {
+        // Arrange
+        var buyFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(100), 0);
+        var sellFill = new Fill(_xbtusd.InstrumentId, 2, "E2", "X2", Side.Sell, Price.FromDecimal(50001), Quantity.FromDecimal(30), 1);
+
+        // Act
+        _bidQuoter.InvokeOrderFilled(buyFill);
+        _askQuoter.InvokeOrderFilled(sellFill);
+
+        // Assert
+        // Buy fills should be reduced by the sell amount (100 - 30 = 70)
+        _engine.TotalBuyFills.ToDecimal().Should().Be(70);
+        // Sell fills are added, then reduced by the buy amount (0 + 30 - 30 = 0, no wait, the logic is increase sell and decrease buy)
+        // Correct logic: TotalSell = 30, TotalBuy becomes 100 - 30 = 70
+        _engine.TotalSellFills.ToDecimal().Should().Be(30);
+    }
+
+    [Test]
+    public void OnFill_WithSellThenBuyFills_CorrectlyNetsValues()
+    {
+        // Arrange
+        var sellFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Sell, Price.FromDecimal(50001), Quantity.FromDecimal(50), 0);
+        var buyFill = new Fill(_xbtusd.InstrumentId, 2, "E2", "X2", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(20), 1);
+
+        // Act
+        _askQuoter.InvokeOrderFilled(sellFill);
+        _bidQuoter.InvokeOrderFilled(buyFill);
+
+        // AssertSimulateFill(buyFill);
+
+        // Assert
+        // Sell fills should be reduced by the buy amount (50 - 20 = 30)
+        _engine.TotalSellFills.ToDecimal().Should().Be(30);
+        // TotalBuy = 20, TotalSell becomes 50 - 20 = 30
+        _engine.TotalBuyFills.ToDecimal().Should().Be(20);
+    }
+
+    [Test]
+    public void OnFill_DecrementingOppositeSide_ShouldNotGoBelowZero()
+    {
+        // Arrange
+        var buyFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(100), 0);
+        var largeSellFill = new Fill(_xbtusd.InstrumentId, 2, "E2", "X2", Side.Sell, Price.FromDecimal(50001), Quantity.FromDecimal(150), 1);
+
+        // Act
+        _bidQuoter.InvokeOrderFilled(buyFill); // TotalBuy = 100, TotalSell = 0
+        _askQuoter.InvokeOrderFilled(largeSellFill); // TotalSell = 150, TotalBuy becomes Max(0, 100 - 150) = 0
+
+        // Assert
+        _engine.TotalBuyFills.ToDecimal().Should().Be(0, "because a larger sell fill should reduce it to zero, not negative.");
+        _engine.TotalSellFills.ToDecimal().Should().Be(150);
+    }
+
+    [Test]
+    public void OnFill_WithFillForDifferentInstrument_ShouldBeIgnored()
+    {
+        // Arrange
+        // Note: This fill is for _btcusdt, not _xbtusd which the engine is quoting.
+        var otherInstrumentFill = new Fill(_btcusdt.InstrumentId, 1, "E1", "X1", Side.Buy, Price.FromDecimal(2000), Quantity.FromDecimal(10), 0);
+
+        // Act
+        _bidQuoter.InvokeOrderFilled(otherInstrumentFill);
+
+        // Assert
+        // The engine's fill counters should remain zero.
+        _engine.TotalBuyFills.ToDecimal().Should().Be(0);
+        _engine.TotalSellFills.ToDecimal().Should().Be(0);
+    }
+
+    [Test]
+    public void Requote_WhenMaxCumBidFillsExceeded_ShouldGenerateNullBidQuote()
+    {
+        _engine.Start();
+        _engine.Activate();
+
+        // Arrange
+        var parameters = new QuotingParameters(
+            _xbtusd.InstrumentId, FairValueModel.Midp, _btcusdt.InstrumentId,
+            10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true,
+            Quantity.FromDecimal(200), Quantity.FromDecimal(200) // MaxCumBidFills = 200
+        );
+        _engine.UpdateParameters(parameters);
+
+        QuotePair? generatedQuotePair = null;
+        _engine.QuotePairCalculated += (sender, qp) => generatedQuotePair = qp;
+
+        // Simulate fills exceeding the max bid fills limit
+        var buyFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(201), 0);
+        _bidQuoter.InvokeOrderFilled(buyFill);
+
+        _engine.TotalBuyFills.ToDecimal().Should().Be(201);
+
+        TriggerRequote(50000m);
+        var bidQ = _bidQuoter.LatestQuote;
+        var askQ = _askQuoter.LatestQuote;
+        // Assert
+        generatedQuotePair.Should().NotBeNull();
+        bidQ.Should().BeNull("because max cumulative bid fills was exceeded.");
+        askQ.Should().NotBeNull("because ask side is not affected.");
+    }
+
+    [Test]
+    public void Requote_WhenMaxCumAskFillsExceeded_ShouldGenerateNullAskQuote()
+    {
+        _engine.Start();
+        _engine.Activate();
+
+        // Arrange
+        var parameters = new QuotingParameters(
+            _xbtusd.InstrumentId, FairValueModel.Midp, _btcusdt.InstrumentId,
+            10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true,
+            Quantity.FromDecimal(150), Quantity.FromDecimal(150) // MaxCumAskFills = 150
+        );
+        _engine.UpdateParameters(parameters);
+
+        QuotePair? generatedQuotePair = null;
+        _engine.QuotePairCalculated += (sender, qp) => generatedQuotePair = qp;
+
+        // Simulate fills exceeding the max ask fills limit
+        var sellFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Sell, Price.FromDecimal(50001), Quantity.FromDecimal(151), 0);
+        _askQuoter.InvokeOrderFilled(sellFill);
+
+        _engine.TotalSellFills.ToDecimal().Should().Be(151);
+
+        TriggerRequote(50000m);
+        // Act
+        generatedQuotePair.Should().NotBeNull();
+        generatedQuotePair.Value.Ask.Should().BeNull("because max cumulative ask fills was exceeded.");
+        generatedQuotePair.Value.Bid.Should().NotBeNull("because bid side is not affected.");
+    }
+
+    private void TriggerRequote(decimal fairValue)
+    {
+        // To test Requote, we need to simulate a FairValueChanged event.
+        // We can do this by casting the provider and calling its Update method.
+        // This assumes the provider has a public Update method for testing.
+        if (_fvProvider is MidpFairValueProvider provider)
+        {
+            var book = new OrderBook(_btcusdt);
+            // We need to create a simple book state that results in the desired fair value.
+            // For Midp, FV = (BestBid + BestAsk) / 2.
+            var bidPrice = Price.FromDecimal(fairValue - 1);
+            var askPrice = Price.FromDecimal(fairValue + 1);
+
+            var updates = new PriceLevelEntryArray();
+            updates[0] = new PriceLevelEntry(Side.Buy, bidPrice.ToDecimal(), 1);
+            updates[1] = new PriceLevelEntry(Side.Sell, askPrice.ToDecimal(), 1);
+            var mdEvent = new MarketDataEvent(1, 0, EventKind.Snapshot, _btcusdt.InstrumentId, _btcusdt.SourceExchange, 0, 0, 2, updates);
+            book.ApplyEvent(mdEvent);
+
+            provider.Update(book); // This will fire the FairValueChanged event
+        }
     }
 }
 
