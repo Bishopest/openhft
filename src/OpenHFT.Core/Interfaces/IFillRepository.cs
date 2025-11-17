@@ -8,17 +8,17 @@ public interface IFillRepository
     /// <summary>
     /// Adds a new fill record to the repository.
     /// </summary>
-    void AddFill(Fill fill);
+    Task AddFillAsync(Fill fill);
 
     /// <summary>
     /// Retrieves all fills for a specific date.
     /// </summary>
-    IEnumerable<Fill> GetFillsByDate(DateTime date);
+    Task<IEnumerable<Fill>> GetFillsByDateAsync(DateTime date);
 
     /// <summary>
     /// Retrieves fills within a specific date range.
     /// </summary>
-    IEnumerable<Fill> GetFillsByDateRange(DateTime startDate, DateTime endDate);
+    Task<IEnumerable<Fill>> GetFillsByDateRangeAsync(DateTime startDate, DateTime endDate);
 
-    IEnumerable<Fill> GetFillsByInstrument(int instrumentId, DateTime date);
+    Task<IEnumerable<Fill>> GetFillsByInstrumentAsync(int instrumentId, DateTime date);
 }

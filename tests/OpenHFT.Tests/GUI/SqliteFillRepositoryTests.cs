@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
@@ -32,7 +33,7 @@ namespace OpenHFT.Tests.GUI
                 .Build();
 
             // Instantiate the repository to be tested.
-            _repository = new SqliteFillRepository(_configuration);
+            _repository = new SqliteFillRepository(new NullLogger<SqliteFillRepository>(), _configuration);
         }
 
         [TearDown]
@@ -46,13 +47,13 @@ namespace OpenHFT.Tests.GUI
         }
 
         [Test]
-        public void AddFill_ShouldStoreFillInDatabase()
+        public async Task AddFill_ShouldStoreFillInDatabase()
         {
             // Arrange
             var fill = new Fill(1001, 12345, "EXCH001", "EXEC001", Side.Buy, Price.FromDecimal(50000m), Quantity.FromDecimal(1.5m), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
             // Act
-            _repository.AddFill(fill);
+            await _repository.AddFillAsync(fill);
 
             // Assert
             // We'll directly access the database file to verify the data was written.
@@ -69,7 +70,7 @@ namespace OpenHFT.Tests.GUI
         }
 
         [Test]
-        public void GetFillsByDate_ShouldReturnCorrectFills()
+        public async Task GetFillsByDate_ShouldReturnCorrectFills()
         {
             // Arrange
             var today = DateTime.UtcNow;
@@ -79,17 +80,17 @@ namespace OpenHFT.Tests.GUI
             var fillToday2 = new Fill(1002, 2, "E2", "X2", Side.Sell, Price.FromDecimal(200), Quantity.FromDecimal(2), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             var fillYesterday = new Fill(1001, 3, "E3", "X3", Side.Buy, Price.FromDecimal(300), Quantity.FromDecimal(3), DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds());
 
-            _repository.AddFill(fillToday1);
-            _repository.AddFill(fillToday2);
+            await _repository.AddFillAsync(fillToday1);
+            await _repository.AddFillAsync(fillToday2);
 
             // Manually create a repository for yesterday to simulate data from another day
-            var yesterdayRepo = new SqliteFillRepository(_configuration);
+            var yesterdayRepo = new SqliteFillRepository(new NullLogger<SqliteFillRepository>(), _configuration);
             var yesterdayFillDbo = FillDbo.FromFill(fillYesterday);
             var yesterdayDbPath = Path.Combine(_testDirectory, $"fills_{yesterday:yyyy-MM-dd}.db");
             using (var db = new FillDbContext(yesterdayDbPath)) { db.Database.EnsureCreated(); db.Fills.Add(yesterdayFillDbo); db.SaveChanges(); }
 
             // Act
-            var result = _repository.GetFillsByDate(today);
+            var result = await _repository.GetFillsByDateAsync(today);
 
             // Assert
             result.Should().HaveCount(2);
@@ -99,7 +100,7 @@ namespace OpenHFT.Tests.GUI
         }
 
         [Test]
-        public void GetFillsByInstrument_ShouldReturnFilteredFills()
+        public async Task GetFillsByInstrument_ShouldReturnFilteredFills()
         {
             // Arrange
             var today = DateTime.UtcNow;
@@ -107,12 +108,12 @@ namespace OpenHFT.Tests.GUI
             var fill2_Inst1002 = new Fill(1002, 2, "E2", "X2", Side.Sell, Price.FromDecimal(200), Quantity.FromDecimal(2), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             var fill3_Inst1001 = new Fill(1001, 3, "E3", "X3", Side.Buy, Price.FromDecimal(300), Quantity.FromDecimal(3), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
-            _repository.AddFill(fill1_Inst1001);
-            _repository.AddFill(fill2_Inst1002);
-            _repository.AddFill(fill3_Inst1001);
+            await _repository.AddFillAsync(fill1_Inst1001);
+            await _repository.AddFillAsync(fill2_Inst1002);
+            await _repository.AddFillAsync(fill3_Inst1001);
 
             // Act
-            var result = _repository.GetFillsByInstrument(1001, today);
+            var result = await _repository.GetFillsByInstrumentAsync(1001, today);
 
             // Assert
             result.Should().HaveCount(2);

@@ -1,17 +1,21 @@
 using System;
+using Microsoft.EntityFrameworkCore;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.GUI.Data;
-using OpenHFT.Oms.Api.WebSocket;
+
 namespace OpenHFT.GUI.Services;
 
 public class SqliteFillRepository : IFillRepository
 {
+    private readonly ILogger<SqliteFillRepository> _logger;
     private readonly string _dataFolderPath;
     private readonly object _lock = new();
+    private static readonly SemaphoreSlim _writeSemaphore = new SemaphoreSlim(1, 1);
 
-    public SqliteFillRepository(IConfiguration configuration)
+    public SqliteFillRepository(ILogger<SqliteFillRepository> logger, IConfiguration configuration)
     {
+        _logger = logger;
         _dataFolderPath = configuration["dataFolder"]
             ?? throw new InvalidOperationException("'dataFolder' not configured in config.json.");
 
@@ -24,51 +28,65 @@ public class SqliteFillRepository : IFillRepository
         return Path.Combine(_dataFolderPath, $"fills_{date:yyyy-MM-dd}.db");
     }
 
-    public void AddFill(Fill fill)
+    public async Task AddFillAsync(Fill fill)
     {
         var dbPath = GetDbPathForDate(DateTime.UtcNow);
-        lock (_lock) // Simple lock to prevent concurrent write issues
+
+        // 동시 쓰기 문제를 방지하기 위해 SemaphoreSlim 사용
+        await _writeSemaphore.WaitAsync();
+        try
         {
-            using var db = new FillDbContext(dbPath);
-            db.Database.EnsureCreated(); // Creates the DB and table if they don't exist
+            await using var db = new FillDbContext(dbPath);
+            await db.Database.EnsureCreatedAsync(); // 비동기 버전 사용
+
             var fillDbo = FillDbo.FromFill(fill);
             db.Fills.Add(fillDbo);
-            db.SaveChanges();
+            await db.SaveChangesAsync(); // 비동기 버전 사용
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add fill to SQLite database. Fill: {@Fill}", fill);
+        }
+        finally
+        {
+            _writeSemaphore.Release();
         }
     }
 
-    public IEnumerable<Fill> GetFillsByDate(DateTime date)
+    public async Task<IEnumerable<Fill>> GetFillsByDateAsync(DateTime date)
     {
         var dbPath = GetDbPathForDate(date);
         if (!File.Exists(dbPath)) return Enumerable.Empty<Fill>();
 
-        using var db = new FillDbContext(dbPath);
-        return db.Fills
-                     .ToList() // Execute query to get DBOs
+        await using var db = new FillDbContext(dbPath);
+        return (await db.Fills
+                     .AsNoTracking()
+                     .ToListAsync()) // Execute query to get DBOs
                      .Select(dbo => dbo.ToFill()); // Convert to structs in memory
     }
 
-    public IEnumerable<Fill> GetFillsByDateRange(DateTime startDate, DateTime endDate)
+    public async Task<IEnumerable<Fill>> GetFillsByDateRangeAsync(DateTime startDate, DateTime endDate)
     {
         var allFills = new List<Fill>();
         for (var date = startDate.Date; date <= endDate.Date; date = date.AddDays(1))
         {
-            allFills.AddRange(GetFillsByDate(date));
+            allFills.AddRange(await GetFillsByDateAsync(date));
         }
         return allFills;
     }
 
-    public IEnumerable<Fill> GetFillsByInstrument(int instrumentId, DateTime date)
+    public async Task<IEnumerable<Fill>> GetFillsByInstrumentAsync(int instrumentId, DateTime date)
     {
         var dbPath = GetDbPathForDate(date);
         if (!File.Exists(dbPath)) return Enumerable.Empty<Fill>();
 
-        using var db = new FillDbContext(dbPath);
+        await using var db = new FillDbContext(dbPath);
 
         // --- CHANGE: Filter on DBOs, then convert back to Fill structs ---
-        return db.Fills
+        return (await db.Fills
+                 .AsNoTracking()
                  .Where(f => f.InstrumentId == instrumentId)
-                 .ToList()
+                 .ToListAsync())
                  .Select(dbo => dbo.ToFill());
     }
 }
