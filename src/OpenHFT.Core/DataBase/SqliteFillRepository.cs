@@ -1,10 +1,12 @@
 using System;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using OpenHFT.Core.DataBase.Data;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
-using OpenHFT.GUI.Data;
 
-namespace OpenHFT.GUI.Services;
+namespace OpenHFT.Core.DataBase;
 
 public class SqliteFillRepository : IFillRepository
 {

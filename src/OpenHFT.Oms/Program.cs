@@ -26,6 +26,7 @@ using Serilog;
 using DotNetEnv;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using OpenHFT.Core.DataBase;
 
 public class Program
 {
@@ -127,6 +128,7 @@ public class Program
                 services.AddSingleton<IWebSocketCommandHandler, GetActiveOrdersCommandHandler>();
                 services.AddSingleton<IWebSocketCommandHandler, GetFillsCommandHandler>();
                 services.AddSingleton<IWebSocketCommandRouter, WebSocketCommandRouter>();
+                services.AddSingleton<IFillRepository, SqliteFillRepository>();
 
                 // --- 3-1. Adapter 및 RestApiClient 등록 ---
                 var subscriptionTupLists = new List<(string Exchange, string ProductType)>();
@@ -182,6 +184,7 @@ public class Program
                 services.AddHostedService<FeedOrchestrator>();
                 services.AddHostedService<WebSocketHost>();
                 services.AddHostedService<WebSocketNotificationService>();
+                services.AddHostedService<FillPersistenceService>();
             }
         );
 }

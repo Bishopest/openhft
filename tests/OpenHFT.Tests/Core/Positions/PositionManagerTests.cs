@@ -3,15 +3,14 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using NUnit.Framework;
+using OpenHFT.Core.DataBase;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Orders;
 using OpenHFT.Core.Positions;
-using OpenHFT.GUI.Services;
 using OpenHFT.Service;
 
 namespace OpenHFT.Tests.Core.Positions;

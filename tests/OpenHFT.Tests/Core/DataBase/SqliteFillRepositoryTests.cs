@@ -2,12 +2,13 @@ using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
+using OpenHFT.Core.DataBase;
+using OpenHFT.Core.DataBase.Data;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
-using OpenHFT.GUI.Data;
 using OpenHFT.GUI.Services;
 
-namespace OpenHFT.Tests.GUI
+namespace OpenHFT.Tests.Core.DataBase
 {
     [TestFixture]
     public class SqliteFillRepositoryTests
