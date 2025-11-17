@@ -18,6 +18,7 @@ public class SqliteFillRepository : IFillRepository
         _logger = logger;
         _dataFolderPath = configuration["dataFolder"]
             ?? throw new InvalidOperationException("'dataFolder' not configured in config.json.");
+        _dataFolderPath = Path.Combine(_dataFolderPath, "fills");
 
         // Ensure the directory exists.
         Directory.CreateDirectory(_dataFolderPath);
