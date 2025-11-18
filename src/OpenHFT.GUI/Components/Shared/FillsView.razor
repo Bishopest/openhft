@@ -37,11 +37,11 @@
 @code {
     protected override void OnInitialized() => OrderCache.OnFillReceived += OnUpdateFills;
 
-    private void OnUpdateFills((string OmsIdentifier, Fill fill)args)
+    private async void OnUpdateFills((string OmsIdentifier, Fill fill)args)
     {
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
-protected string GetSymbol(int instrumentId)
+    protected string GetSymbol(int instrumentId)
     {
         var instrument = InstrumentRepository.GetById(instrumentId);
         return instrument?.Symbol ?? instrumentId.ToString();

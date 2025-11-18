@@ -80,6 +80,12 @@ public partial class Home : ComponentBase, IDisposable
             // Update existing instance
             existingInstance.IsActive = payload.IsActive;
             existingInstance.Parameters = payload.Parameters;
+            if (_quotingController != null)
+            {
+                var serverConfig = Configuration.GetSection("oms").Get<List<OmsServerConfig>>()?
+                                                .FirstOrDefault(s => s.OmsIdentifier == existingInstance.OmsIdentifier);
+                await _quotingController.UpdateParametersAsync(existingInstance.Parameters, serverConfig);
+            }
         }
         else
         {
