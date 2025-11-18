@@ -14,6 +14,7 @@ public interface IQuotingEngine
     Instrument QuotingInstrument { get; }
     bool IsActive { get; }
     QuotingParameters CurrentParameters { get; }
+    event EventHandler<QuotingParameters>? ParametersUpdated;
     event EventHandler<QuotePair> QuotePairCalculated;
     void Start();
     void Stop();

@@ -5,6 +5,8 @@ namespace OpenHFT.Quoting.Interfaces;
 
 public interface IQuotingInstanceManager
 {
+
+    event EventHandler<QuotingParameters> InstanceParametersUpdated;
     /// <summary>
     /// Fired whenever any active quoting instance calculates a new quote pair.
     /// </summary>

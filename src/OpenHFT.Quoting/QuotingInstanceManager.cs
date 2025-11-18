@@ -23,6 +23,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
     private readonly IFeedHandler _feedHandler;
 
     public event EventHandler<QuotePair>? InstanceQuotePairCalculated;
+    public event EventHandler<QuotingParameters>? InstanceParametersUpdated;
 
     public QuotingInstanceManager(
         ILogger<QuotingInstanceManager> logger,
@@ -90,6 +91,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
             if (_activeInstances.TryAdd(instrumentId, instance))
             {
                 instance.Engine.QuotePairCalculated += OnEngineQuotePairCalculated;
+                instance.Engine.ParametersUpdated += InstanceParametersUpdated;
                 instance.Start();
                 _logger.LogInformationWithCaller($"Successfully deployed quoting instance for instrument {instrument.Symbol}.");
                 return instance;
@@ -174,6 +176,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
         if (_activeInstances.TryRemove(instrumentId, out var instance))
         {
             instance.Engine.QuotePairCalculated -= OnEngineQuotePairCalculated;
+            instance.Engine.ParametersUpdated -= InstanceParametersUpdated;
             instance.Stop();
             return instance;
         }

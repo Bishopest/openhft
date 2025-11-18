@@ -18,7 +18,6 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
     private readonly object _lock = new();
     private IFairValueProvider? _fairValueProvider;
     private QuotingParameters _parameters;
-    public event EventHandler<QuotePair>? QuotePairCalculated;
     public Instrument QuotingInstrument { get; }
     public QuotingParameters CurrentParameters => _parameters;
     public bool IsActive { get; private set; }
@@ -30,6 +29,11 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
     // Public properties to expose the values as Quantity structs.
     public Quantity TotalBuyFills => Quantity.FromTicks(Interlocked.Read(ref _totalBuyFillsInTicks));
     public Quantity TotalSellFills => Quantity.FromTicks(Interlocked.Read(ref _totalSellFillsInTicks));
+    // Skew-related state fields
+    private long _unappliedBuyFillsInTicks = 0;
+    private long _unappliedSellFillsInTicks = 0;
+    public event EventHandler<QuotePair>? QuotePairCalculated;
+    public event EventHandler<QuotingParameters>? ParametersUpdated;
 
     public bool IsQuotingActive => IsActive && !_isPausedByFill;
 
@@ -48,7 +52,6 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
         _fairValueProvider = fairValueProvider;
         _parameters = initialParameters;
         _marketDataManager = marketDataManager;
-
     }
 
     public void Start()
@@ -189,22 +192,106 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
 
         if (fill.Side == Side.Buy)
         {
+            // 매수 체결이 들어오면, 먼저 _unappliedSellFillsInTicks와 상계하고,
+            // 남은 양을 _unappliedBuyFillsInTicks에 더합니다.
+            InterlockedNetAndAdd(
+                ref _unappliedBuyFillsInTicks,
+                ref _unappliedSellFillsInTicks,
+                fillQuantityInTicks
+            );
             // Increase the absolute buy fills.
             Interlocked.Add(ref _totalBuyFillsInTicks, fillQuantityInTicks);
             // Decrease the absolute sell fills, but not below zero.
             // InterlockedDecrementToZero(ref _totalSellFillsInTicks, fillQuantityInTicks);
-            _logger.LogInformationWithCaller($"Buy fill received for {QuotingInstrument.Symbol}. Quantity: {fill.Quantity}. New total buy: {TotalBuyFills}");
-
+            _logger.LogInformationWithCaller($"Buy fill received for {QuotingInstrument.Symbol}. Quantity: {fill.Quantity}. New total buy: {TotalBuyFills}. New Unapplied buy: {_unappliedBuyFillsInTicks}");
         }
         else // Side.Sell
         {
+            // 매도 체결이 들어오면, 먼저 _unappliedBuyFillsInTicks와 상계하고,
+            // 남은 양을 _unappliedSellFillsInTicks에 더합니다.
+            InterlockedNetAndAdd(
+                ref _unappliedSellFillsInTicks,
+                ref _unappliedBuyFillsInTicks,
+                fillQuantityInTicks
+            );
+
             // Increase the absolute sell fills.
             Interlocked.Add(ref _totalSellFillsInTicks, fillQuantityInTicks);
             // Decrease the absolute buy fills, but not below zero.
             // InterlockedDecrementToZero(ref _totalBuyFillsInTicks, fillQuantityInTicks);
-            _logger.LogInformationWithCaller($"Sell fill received for {QuotingInstrument.Symbol}. Quantity: {fill.Quantity}. New total sell: {TotalSellFills}");
-
+            _logger.LogInformationWithCaller($"Sell fill received for {QuotingInstrument.Symbol}. Quantity: {fill.Quantity}. New total sell: {TotalSellFills}. New Unapplied sell: {_unappliedSellFillsInTicks}");
         }
+    }
+
+    private void ApplySkew()
+    {
+        QuotingParameters currentParams;
+        lock (_lock)
+        {
+            currentParams = _parameters;
+        }
+
+        var orderSizeInTicks = currentParams.Size.ToTicks();
+        if (orderSizeInTicks <= 0) return;
+
+        var currentUnappliedBuys = Interlocked.Read(ref _unappliedBuyFillsInTicks);
+        var currentUnappliedSells = Interlocked.Read(ref _unappliedSellFillsInTicks);
+
+        // 1. 매수 체결에 대한 Skew 계산
+        long buyMultiples = currentUnappliedBuys / orderSizeInTicks;
+        if (buyMultiples >= 1)
+        {
+            // 사용한 만큼의 체결량을 차감
+            long usedAmount = buyMultiples * orderSizeInTicks;
+            Interlocked.Add(ref _unappliedBuyFillsInTicks, -usedAmount);
+
+            // SkewBp * 배수(N) 만큼 스프레드 조정
+            decimal skewAdjustment = currentParams.SkewBp * buyMultiples;
+
+            var newBidSpreadBp = currentParams.BidSpreadBp - skewAdjustment;
+            var newAskSpreadBp = currentParams.AskSpreadBp - skewAdjustment;
+
+            _logger.LogWarningWithCaller($"Buy fill threshold reached ({buyMultiples}x). Applying skew of {-skewAdjustment}bp. New BidSpread: {newBidSpreadBp}, New AskSpread: {newAskSpreadBp}");
+
+            // 새로운 파라미터 객체 생성 및 업데이트
+            UpdateSkewedParameters(newBidSpreadBp, newAskSpreadBp);
+        }
+
+        // 2. 매도 체결에 대한 Skew 계산
+        long sellMultiples = currentUnappliedSells / orderSizeInTicks;
+        if (sellMultiples >= 1)
+        {
+            long usedAmount = sellMultiples * orderSizeInTicks;
+            Interlocked.Add(ref _unappliedSellFillsInTicks, -usedAmount);
+
+            decimal skewAdjustment = currentParams.SkewBp * sellMultiples;
+
+            // 매도 체결 시에는 스프레드를 '증가'시킴
+            var newBidSpreadBp = currentParams.BidSpreadBp + skewAdjustment;
+            var newAskSpreadBp = currentParams.AskSpreadBp + skewAdjustment;
+
+            _logger.LogWarningWithCaller($"Sell fill threshold reached ({sellMultiples}x). Applying skew of {skewAdjustment}bp. New BidSpread: {newBidSpreadBp}, New AskSpread: {newAskSpreadBp}");
+
+            UpdateSkewedParameters(newBidSpreadBp, newAskSpreadBp);
+        }
+    }
+
+    private void UpdateSkewedParameters(decimal newBidSpreadBp, decimal newAskSpreadBp)
+    {
+        QuotingParameters newParams;
+        lock (_lock)
+        {
+            // 기존 파라미터를 기반으로 새로운 파라미터 객체를 생성
+            newParams = new QuotingParameters(
+                _parameters.InstrumentId, _parameters.FvModel, _parameters.FairValueSourceInstrumentId,
+                newAskSpreadBp, newBidSpreadBp, // <-- 변경된 스프레드
+                _parameters.SkewBp, _parameters.Size, _parameters.Depth, _parameters.Type, _parameters.PostOnly,
+                _parameters.MaxCumBidFills, _parameters.MaxCumAskFills
+            );
+            _parameters = newParams;
+        }
+
+        ParametersUpdated?.Invoke(this, newParams);
     }
 
     /// <summary>
@@ -226,8 +313,50 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
         while (Interlocked.CompareExchange(ref target, newValue, originalValue) != originalValue);
     }
 
+    /// <summary>
+    /// Atomically nets a new fill quantity against an opposing fill counter,
+    /// and adds any remainder to the target fill counter.
+    /// </summary>
+    /// <param name="targetFills">The counter to add the remainder to (e.g., _unappliedBuyFillsInTicks).</param>
+    /// <param name="oppositeFills">The counter to net against first (e.g., _unappliedSellFillsInTicks).</param>
+    /// <param name="newFillAmountInTicks">The quantity of the new fill.</param>
+    private void InterlockedNetAndAdd(ref long targetFills, ref long oppositeFills, long newFillAmountInTicks)
+    {
+        long amountToNet = newFillAmountInTicks;
+
+        // --- 1. 반대편 잔여량과 상계 ---
+        while (amountToNet > 0)
+        {
+            long originalOppositeValue = Interlocked.Read(ref oppositeFills);
+            if (originalOppositeValue == 0)
+            {
+                // 상계할 반대편 잔여량이 없으면 루프 종료
+                break;
+            }
+
+            // 차감할 양 계산 (반대편 잔여량을 0 이하로 내릴 수 없음)
+            long reduction = Math.Min(originalOppositeValue, amountToNet);
+
+            // Compare-and-swap (CAS) 루프: 다른 스레드가 값을 변경했으면 재시도
+            if (Interlocked.CompareExchange(ref oppositeFills, originalOppositeValue - reduction, originalOppositeValue) == originalOppositeValue)
+            {
+                // 상계 성공. 남은 체결량 업데이트
+                amountToNet -= reduction;
+            }
+            // CAS 실패 시, 루프는 재시도 (다음 originalOppositeValue 읽기부터)
+        }
+
+        // --- 2. 상계 후 남은 양을 자신 쪽에 누적 ---
+        if (amountToNet > 0)
+        {
+            Interlocked.Add(ref targetFills, amountToNet);
+        }
+    }
+
     private void Requote(Price fairValue)
     {
+        ApplySkew();
+
         QuotingParameters currentParams;
         lock (_lock)
         {

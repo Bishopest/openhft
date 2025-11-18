@@ -375,6 +375,133 @@ public class QuotingEngineTests
         generatedQuotePair.Value.Bid.Should().NotBeNull("because bid side is not affected.");
     }
 
+    [Test]
+    public void Requote_WhenBuyFillsExceedOrderSize_ShouldApplyNegativeSkewToSpreads()
+    {
+        // --- Arrange ---
+        // 1. SkewBp가 설정된 파라미터 정의
+        var initialParams = new QuotingParameters(
+            _xbtusd.InstrumentId, FairValueModel.Midp, _btcusdt.InstrumentId,
+            askSpreadBp: 10m,  // 초기 Ask Spread
+            bidSpreadBp: -10m, // 초기 Bid Spread
+            skewBp: 2m,        // 체결 시 2bp씩 skew
+            size: Quantity.FromDecimal(100), // 주문 사이즈 100
+            depth: 1, type: QuoterType.Log, postOnly: true,
+            maxCumBidFills: Quantity.FromDecimal(1000),
+            maxCumAskFills: Quantity.FromDecimal(1000)
+        );
+        _engine.Start();
+        _engine.UpdateParameters(initialParams);
+        _engine.Activate();
+
+        // 2. 주문 사이즈(100)를 초과하는 매수 체결 시뮬레이션
+        var buyFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(120), 0);
+        _engine.OnFill(buyFill); // 직접 OnFill 호출
+
+        // 3. Requote 트리거
+        TriggerRequote(50001m);
+
+        // --- Assert ---
+        // 4. Skew가 적용된 후의 파라미터를 확인
+        var newParams = _engine.CurrentParameters;
+
+        // 매수 체결(N=1)이 있었으므로, 스프레드는 SkewBp만큼 '감소'해야 함 (가격을 낮춤 -> 매수 확률 감소)
+        var expectedSkewAdjustment = 2m * 1; // SkewBp * (120 / 100)
+        newParams.BidSpreadBp.Should().Be(initialParams.BidSpreadBp - expectedSkewAdjustment, "because buy fills should skew bid price down.");
+        newParams.AskSpreadBp.Should().Be(initialParams.AskSpreadBp - expectedSkewAdjustment, "because buy fills should skew ask price down.");
+
+        // 5. Skew가 적용된 최종 호가 가격을 확인
+        // New Fair Value = 50001
+        // New Bid Spread = -12bp, New Ask Spread = 8bp
+        // Ask Spread Amount = 50001 * (8 / 10000) = 40.0008
+        // Bid Spread Amount = 50001 * (-12 / 10000) = -60.0012
+        // Raw Ask = 50001 + 40.0008 = 50041.0008 -> Rounded to 50041.5
+        // Raw Bid = 50001 - 60.0012 = 49940.9988 -> Rounded to 49940.5
+        var expectedAskPrice = Price.FromDecimal(50041.5m);
+        var expectedBidPrice = Price.FromDecimal(49940.5m);
+
+        _askQuoter.LatestQuote.Should().NotBeNull();
+        _askQuoter.LatestQuote.Value.Price.Should().Be(expectedAskPrice);
+        _bidQuoter.LatestQuote.Should().NotBeNull();
+        _bidQuoter.LatestQuote.Value.Price.Should().Be(expectedBidPrice);
+
+        TestContext.WriteLine($"Skew successful. New Bid Spread: {newParams.BidSpreadBp}, New Ask Spread: {newParams.AskSpreadBp}");
+    }
+
+    [Test]
+    public void Requote_WhenSellFillsExceedOrderSize_ShouldApplyPositiveSkewToSpreads()
+    {
+        // --- Arrange ---
+        var initialParams = new QuotingParameters(
+            _xbtusd.InstrumentId, FairValueModel.Midp, _btcusdt.InstrumentId,
+            askSpreadBp: 10m,
+            bidSpreadBp: -10m,
+            skewBp: 2m,
+            size: Quantity.FromDecimal(100),
+            depth: 1, type: QuoterType.Log, postOnly: true,
+            maxCumBidFills: Quantity.FromDecimal(1000),
+            maxCumAskFills: Quantity.FromDecimal(1000)
+        );
+        _engine.Start();
+        _engine.UpdateParameters(initialParams);
+        _engine.Activate();
+
+        // 주문 사이즈(100)의 2배를 초과하는 매도 체결 시뮬레이션 (N=2)
+        var sellFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Sell, Price.FromDecimal(50000), Quantity.FromDecimal(230), 0);
+        _engine.OnFill(sellFill);
+
+        // --- Act ---
+        TriggerRequote(50001m);
+
+        // --- Assert ---
+        var newParams = _engine.CurrentParameters;
+
+        // 매도 체결(N=2)이 있었으므로, 스프레드는 SkewBp * 2 만큼 '증가'해야 함 (가격을 높임 -> 매도 확률 감소)
+        var expectedSkewAdjustment = 2m * 2; // SkewBp * (230 / 100)
+        newParams.BidSpreadBp.Should().Be(initialParams.BidSpreadBp + expectedSkewAdjustment, "because sell fills should skew bid price up.");
+        newParams.AskSpreadBp.Should().Be(initialParams.AskSpreadBp + expectedSkewAdjustment, "because sell fills should skew ask price up.");
+    }
+
+    [Test]
+    public void Requote_WhenSellFillsExceedOrderSize_ThenOffsetBuyFills_ShouldApplyNetSkew()
+    {
+        // --- Arrange ---
+        var initialParams = new QuotingParameters(
+            _xbtusd.InstrumentId, FairValueModel.Midp, _btcusdt.InstrumentId,
+            askSpreadBp: 10m,
+            bidSpreadBp: -10m,
+            skewBp: 2m,
+            size: Quantity.FromDecimal(100),
+            depth: 1, type: QuoterType.Log, postOnly: true,
+            maxCumBidFills: Quantity.FromDecimal(1000),
+            maxCumAskFills: Quantity.FromDecimal(1000)
+        );
+        _engine.Start();
+        _engine.UpdateParameters(initialParams);
+        _engine.Activate();
+
+        // 주문 사이즈(100)의 2배를 초과하는 매도 체결 시뮬레이션 (N=2)
+        var sellFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Sell, Price.FromDecimal(50000), Quantity.FromDecimal(230), 0);
+        _engine.OnFill(sellFill);
+
+        // --- Act ---
+        TriggerRequote(50001m);
+
+        // 주문 사이즈(100)의 매수 체결 시뮬레이션 (N=1)
+        var buyFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(200), 0);
+        _engine.OnFill(buyFill);
+
+        // --- Act ---
+        TriggerRequote(50002m);
+        // --- Assert ---
+        var newParams = _engine.CurrentParameters;
+
+        // 매도 체결(N=2)이 있었으므로, 스프레드는 SkewBp * 2 만큼 '증가'해야 함 (가격을 높임 -> 매도 확률 감소)
+        var expectedSkewAdjustment = 2m * 2 - 2m * 1; // SkewBp * (170 / 100)
+        newParams.BidSpreadBp.Should().Be(initialParams.BidSpreadBp + expectedSkewAdjustment, "because sell fills should skew bid price up.");
+        newParams.AskSpreadBp.Should().Be(initialParams.AskSpreadBp + expectedSkewAdjustment, "because sell fills should skew ask price up.");
+    }
+
     private void TriggerRequote(decimal fairValue)
     {
         // To test Requote, we need to simulate a FairValueChanged event.

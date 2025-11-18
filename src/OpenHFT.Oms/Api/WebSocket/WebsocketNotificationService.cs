@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
+using OpenHFT.Quoting;
 using OpenHFT.Quoting.Interfaces;
 using OpenHFT.Quoting.Models;
 
@@ -44,6 +45,7 @@ public class WebSocketNotificationService : IHostedService
 
         // Subscribe to all relevant domain events
         _quotingManager.InstanceQuotePairCalculated += OnQuotePairCalculated;
+        _quotingManager.InstanceParametersUpdated += OnInstanceParametersUpdated;
         _orderRouter.OrderStatusChanged += OnOrderStatusChanged;
         _orderRouter.OrderFilled += OnOrderFilled;
         // _positionManager.PositionChanged += OnPositionChanged; // Example for future extension
@@ -57,6 +59,7 @@ public class WebSocketNotificationService : IHostedService
 
         // Unsubscribe to prevent memory leaks
         _quotingManager.InstanceQuotePairCalculated -= OnQuotePairCalculated;
+        _quotingManager.InstanceParametersUpdated -= OnInstanceParametersUpdated;
         _orderRouter.OrderStatusChanged -= OnOrderStatusChanged;
         _orderRouter.OrderFilled -= OnOrderFilled;
         // _positionManager.PositionChanged -= OnPositionChanged;
@@ -72,6 +75,25 @@ public class WebSocketNotificationService : IHostedService
 
         // Use the channel to send the message. Fire-and-forget is appropriate here.
         _ = _channel.SendAsync(updateEvent);
+    }
+
+    private void OnInstanceParametersUpdated(object? sender, QuotingParameters newParameters)
+    {
+        _logger.LogInformationWithCaller($"Broadcasting instance parameter update for InstrumentId {newParameters.InstrumentId}");
+
+        var instance = _quotingManager.GetInstance(newParameters.InstrumentId);
+        if (instance == null) return;
+
+        // InstanceStatusEvent를 재사용하여 UI에 최신 상태를 알림
+        var payload = new InstanceStatusPayload
+        {
+            OmsIdentifier = _omsIdentifier,
+            InstrumentId = instance.InstrumentId,
+            IsActive = instance.IsActive,
+            Parameters = newParameters
+        };
+        var statusEvent = new InstanceStatusEvent(payload);
+        _ = _channel.SendAsync(statusEvent);
     }
 
     private void OnOrderStatusChanged(object? sender, OrderStatusReport report)
