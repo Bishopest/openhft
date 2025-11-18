@@ -31,11 +31,13 @@ public readonly struct OrderModificationResult
     public readonly bool IsSuccess { get; }
     public readonly string OrderId { get; }
     public readonly string? FailureReason { get; }
+    public readonly OrderStatusReport? Report { get; }
 
-    public OrderModificationResult(bool isSuccess, string orderId, string? failureReason = null)
+    public OrderModificationResult(bool isSuccess, string orderId, string? failureReason = null, OrderStatusReport? report = null)
     {
         IsSuccess = isSuccess;
         OrderId = orderId;
         FailureReason = failureReason;
+        Report = report;
     }
 }

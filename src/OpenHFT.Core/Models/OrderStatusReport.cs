@@ -62,6 +62,12 @@ public readonly struct OrderStatusReport
     public readonly Quantity? LastQuantity { get; }
 
     /// <summary>
+    /// The price filled at this event. null if not yet filled.
+    /// </summary>
+    public readonly Price? LastPrice { get; }
+
+
+    /// <summary>
     /// The UTC timestamp in Unix milliseconds when the event occurred at the exchange.
     /// </summary>
     public readonly long Timestamp { get; }
@@ -84,7 +90,8 @@ public readonly struct OrderStatusReport
         Quantity leavesQuantity,
         long timestamp,
         string? rejectReason = null,
-        Quantity? lastQuantity = null)
+        Quantity? lastQuantity = null,
+        Price? lastPrice = null)
     {
         ClientOrderId = clientOrderId;
         ExchangeOrderId = exchangeOrderId;
@@ -96,7 +103,27 @@ public readonly struct OrderStatusReport
         Quantity = quantity;
         LeavesQuantity = leavesQuantity;
         LastQuantity = lastQuantity;
+        LastPrice = lastPrice;
         Timestamp = timestamp;
         RejectReason = rejectReason;
+    }
+
+    public override string ToString()
+    {
+        return $"{{ " +
+               $"\"ClientOrderId\": {ClientOrderId}, " +
+               $"\"ExchangeOrderId\": \"{ExchangeOrderId}\", " +
+               $"\"ExecutionId\": \"{ExecutionId}\", " +
+               $"\"InstrumentId\": {InstrumentId}, " +
+               $"\"Side\": {Side}, " +
+               $"\"Status\": {Status}, " +
+               $"\"Price\": {Price.ToDecimal()}, " +
+               $"\"Quantity\": {Quantity.ToDecimal()}, " +
+               $"\"LastQuantity\": {LastQuantity?.ToDecimal()}, " +
+               $"\"LastPrice\": {LastPrice?.ToDecimal()}, " +
+               $"\"LeavesQuantity\": {LeavesQuantity.ToDecimal()}, " +
+               $"\"Timestamp\": {Timestamp}, " +
+               $"\"RejectReason\": \"{RejectReason}\"" +
+               $" }}";
     }
 }

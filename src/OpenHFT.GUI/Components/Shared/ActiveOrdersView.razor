@@ -20,7 +20,7 @@
                     Style="@(context.Side == Side.Buy ? "color: var(--mud-palette-success);" : "color: var(--mud-palette-error);")">
                     @context.Side</MudTd>
                 <MudTd DataLabel="Price">@context.Price.ToDecimal()</MudTd>
-                <MudTd DataLabel="Qty">@context.Quantity.ToDecimal()</MudTd>
+                <MudTd DataLabel="Qty">@context.LeavesQuantity.ToDecimal()</MudTd>
                 <MudTd DataLabel="Status">@context.Status</MudTd>
                 <MudTd DataLabel="Dist(bp)">@GetDistanceInBps(context)</MudTd>
             </RowTemplate>

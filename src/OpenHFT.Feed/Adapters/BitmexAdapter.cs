@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,8 @@ public class BitmexAdapter : BaseAuthFeedAdapter
 
     protected override bool IsHeartbeatEnabled => true;
 
+    // Field to track the last execution ID per order id 
+    private readonly ConcurrentDictionary<string, string> _lastExecIds = new();
     public BitmexAdapter(ILogger<BitmexAdapter> logger, ProductType type, IInstrumentRepository instrumentRepository, ExecutionMode executionMode) : base(logger, type, instrumentRepository, executionMode)
     {
     }
@@ -115,8 +118,38 @@ public class BitmexAdapter : BaseAuthFeedAdapter
 
     private void ProcessExecution(JsonElement data)
     {
-        foreach (var exeJson in data.EnumerateArray())
+        var executions = data.EnumerateArray().ToList();
+        if (!executions.Any())
         {
+            return;
+        }
+
+        for (int i = executions.Count - 1; i >= 0; i--)
+        {
+            var exeJson = executions[i];
+
+            // 2. symbol과 instrumentId를 먼저 가져옵니다.
+            var orderId = exeJson.TryGetProperty("orderID", out var oiEl) ? oiEl.GetString() : null;
+            if (string.IsNullOrEmpty(orderId)) continue;
+
+            var execId = exeJson.TryGetProperty("execID", out var execIdEl) ? execIdEl.GetString() : null;
+            if (string.IsNullOrEmpty(execId)) continue;
+
+            if (_lastExecIds.TryGetValue(orderId, out var lastExecId) && lastExecId == execId)
+            {
+                // 이 execID는 이미 처리했으므로, 이 이전의 모든 메시지도 처리된 것입니다.
+                // 순회를 중단합니다.
+                break;
+            }
+
+            // 4. execType이 'Trade'인 경우에만 처리합니다.
+            var execType = exeJson.TryGetProperty("execType", out var execTypeEl) ? execTypeEl.GetString() : null;
+            if (execType != "Trade")
+            {
+                continue;
+            }
+
+            // 5. 파싱 및 이벤트 발생
             try
             {
                 var report = ParseExecution(exeJson);
@@ -124,17 +157,50 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             }
             catch (FeedParseException fe)
             {
-                _logger.LogErrorWithCaller(fe, $"Failed to parse BitMEX execution message. Inner message => {fe.RawMessage}");
+                _logger.LogErrorWithCaller(fe, $"Failed to parse BitMEX execution message. Raw: {fe.RawMessage}");
             }
             catch (Exception ex)
             {
-                _logger.LogErrorWithCaller(ex, "Failed to process BitMEX execution message.");
+                _logger.LogErrorWithCaller(ex, $"An unexpected error occurred while processing execution message: {exeJson.ToString()}");
+            }
+        }
+
+        // 6. 배열의 가장 마지막(가장 최신) 메시지의 execID를 저장합니다.
+        var lastExecutionInBatch = executions.Last();
+        var lastExecOi = lastExecutionInBatch.TryGetProperty("orderID", out var lastOiEl) ? lastOiEl.GetString() : null;
+        var lastExecStatus = lastExecutionInBatch.TryGetProperty("ordStatus", out var lastStatusEl) ? lastStatusEl.GetString() : null;
+
+        var isFinished = false;
+        if (!string.IsNullOrEmpty(lastExecStatus))
+        {
+            switch (lastExecStatus)
+            {
+                case "Filled":
+                case "Cancelled":
+                case "Rejected":
+                    isFinished = true;
+                    break;
+            }
+        }
+        if (!string.IsNullOrEmpty(lastExecOi))
+        {
+            if (isFinished)
+            {
+                _lastExecIds.TryRemove(lastExecOi, out var lastEle);
+                return;
+            }
+
+            var lastExecIdInBatch = lastExecutionInBatch.TryGetProperty("execID", out var lastIdEl) ? lastIdEl.GetString() : null;
+            if (!string.IsNullOrEmpty(lastExecIdInBatch))
+            {
+                _lastExecIds[lastExecOi] = lastExecIdInBatch;
             }
         }
     }
 
     private OrderStatusReport ParseExecution(JsonElement exeJson)
     {
+        // _logger.LogInformationWithCaller($"Parsing BitMEX execution message: {exeJson.ToString()}");
         // --- 1. 필수 필드 추출 및 검증 ---
         var symbol = exeJson.TryGetProperty("symbol", out var symEl) ? symEl.GetString() : null;
         if (string.IsNullOrEmpty(symbol))
@@ -185,11 +251,13 @@ public class BitmexAdapter : BaseAuthFeedAdapter
 
         // GetProperty는 실패 시 예외를 던지므로, TryGetProperty를 사용하는 것이 더 안전합니다.
         exeJson.TryGetProperty("price", out var priceEl);
+        exeJson.TryGetProperty("lastPx", out var lastPriceEl);
         exeJson.TryGetProperty("orderQty", out var qtyEl);
         exeJson.TryGetProperty("leavesQty", out var leavesEl);
         exeJson.TryGetProperty("lastQty", out var lastQtyEl);
 
         var price = Price.FromDecimal(priceEl.ValueKind == JsonValueKind.Number ? priceEl.GetDecimal() : 0);
+        var lastPrice = Price.FromDecimal(lastPriceEl.ValueKind == JsonValueKind.Number ? lastPriceEl.GetDecimal() : 0);
         var quantity = Quantity.FromDecimal(qtyEl.ValueKind == JsonValueKind.Number ? qtyEl.GetDecimal() : 0);
         var leavesQuantity = Quantity.FromDecimal(leavesEl.ValueKind == JsonValueKind.Number ? leavesEl.GetDecimal() : 0);
         var lastQuantity = lastQtyEl.ValueKind == JsonValueKind.Number ? (Quantity?)Quantity.FromDecimal(lastQtyEl.GetDecimal()) : null;
@@ -209,6 +277,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             leavesQuantity: leavesQuantity,
             timestamp: timestamp,
             rejectReason: rejectReason,
+            lastPrice: lastPrice,
             lastQuantity: lastQuantity
         );
 

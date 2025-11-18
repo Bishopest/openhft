@@ -47,7 +47,7 @@ public class GetFillsCommandHandler : IWebSocketCommandHandler
             var listEvent = new FillsListEvent(payload);
             await _channel.SendAsync(listEvent);
 
-            _logger.LogInformationWithCaller("Sent 0 fills to the client.");
+            _logger.LogInformationWithCaller($"Sent {allFills.Count()} fills to the client.");
         }
         catch (Exception ex)
         {

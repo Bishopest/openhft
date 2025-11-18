@@ -37,11 +37,13 @@ public readonly struct ReplaceOrderRequest
 {
     public readonly string OrderId { get; }
     public readonly Price NewPrice { get; }
+    public readonly int InstrumentId { get; }
 
-    public ReplaceOrderRequest(string orderId, Price newPrice)
+    public ReplaceOrderRequest(string orderId, Price newPrice, int instrumentId)
     {
         OrderId = orderId;
         NewPrice = newPrice;
+        InstrumentId = instrumentId;
     }
 }
 
@@ -51,9 +53,11 @@ public readonly struct ReplaceOrderRequest
 public readonly struct CancelOrderRequest
 {
     public readonly string OrderId { get; }
+    public readonly int InstrumentId { get; }
 
-    public CancelOrderRequest(string orderId)
+    public CancelOrderRequest(string orderId, int instrumentId)
     {
         OrderId = orderId;
+        InstrumentId = instrumentId;
     }
 }

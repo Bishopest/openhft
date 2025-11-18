@@ -114,7 +114,7 @@ public class Order : IOrder, IOrderUpdatable
         Status = OrderStatus.ReplaceRequest;
 
         // 3. Create request and call the gateway
-        var request = new ReplaceOrderRequest(ExchangeOrderId, newPrice);
+        var request = new ReplaceOrderRequest(ExchangeOrderId, newPrice, InstrumentId);
         var result = await _gateway.SendReplaceOrderAsync(request, cancellationToken);
 
         // 4. Handle immediate failure
@@ -124,6 +124,11 @@ public class Order : IOrder, IOrderUpdatable
                 ClientOrderId, ExchangeOrderId, null, InstrumentId, Side, Status, Price, Quantity, LeavesQuantity,
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), result.FailureReason);
             OnStatusReportReceived(failureReport);
+        }
+        else if (result.Report.HasValue)
+        {
+            // If the gateway returns an immediate report, process it.
+            OnStatusReportReceived(result.Report.Value);
         }
         // On success, we wait for a WebSocket update to confirm the replacement.
     }
@@ -150,7 +155,7 @@ public class Order : IOrder, IOrderUpdatable
         Status = OrderStatus.CancelRequest;
 
         // 3. Create request and call the gateway
-        var request = new CancelOrderRequest(ExchangeOrderId);
+        var request = new CancelOrderRequest(ExchangeOrderId, InstrumentId);
         var result = await _gateway.SendCancelOrderAsync(request, cancellationToken);
 
         // 4. Handle immediate failure
@@ -160,6 +165,11 @@ public class Order : IOrder, IOrderUpdatable
                 ClientOrderId, ExchangeOrderId, null, InstrumentId, Side, OrderStatus.Rejected, Price, Quantity, LeavesQuantity,
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), result.FailureReason);
             OnStatusReportReceived(failureReport);
+        }
+        else if (result.Report.HasValue)
+        {
+            // If the gateway returns an immediate report, process it.
+            OnStatusReportReceived(result.Report.Value);
         }
         // On success, we wait for a WebSocket update to confirm the cancellation.
     }
@@ -183,7 +193,11 @@ public class Order : IOrder, IOrderUpdatable
                 ExchangeOrderId = report.ExchangeOrderId;
             }
 
-            if (report.LastQuantity.HasValue && report.ExecutionId != null && report.LastQuantity.Value.ToDecimal() > 0m)
+            if (report.LastQuantity.HasValue &&
+                report.LastPrice.HasValue &&
+                report.ExecutionId != null &&
+                report.LastQuantity.Value.ToDecimal() > 0m &&
+                report.LastPrice.Value.ToDecimal() > 0m)
             {
                 var fill = new Fill(
                     instrumentId: InstrumentId,
@@ -191,7 +205,7 @@ public class Order : IOrder, IOrderUpdatable
                     exchangeOrderId: report.ExchangeOrderId ?? ExchangeOrderId ?? string.Empty,
                     executionId: report.ExecutionId,
                     side: Side,
-                    price: report.Price,
+                    price: report.LastPrice.Value,
                     quantity: report.LastQuantity.Value,
                     timestamp: report.Timestamp
                 );
@@ -207,6 +221,7 @@ public class Order : IOrder, IOrderUpdatable
             StatusChanged?.Invoke(this, report);
             _router.RaiseStatusChanged(this, report);
 
+            // _logger.LogInformationWithCaller($"[Changed] {ToString()}");
 
             switch (report.Status)
             {

@@ -81,7 +81,8 @@ public class BitmexOrderGateway : IOrderGateway
             return new OrderModificationResult(false, request.OrderId, result.Error.Message);
         }
 
-        return new OrderModificationResult(true, result.Data.OrderId);
+        var replaceReport = MapResponseToReport(result.Data, request.InstrumentId);
+        return new OrderModificationResult(true, result.Data.OrderId, report: replaceReport);
     }
 
     public async Task<OrderModificationResult> SendCancelOrderAsync(CancelOrderRequest request, CancellationToken cancellationToken = default)
@@ -97,7 +98,14 @@ public class BitmexOrderGateway : IOrderGateway
             return new OrderModificationResult(false, request.OrderId, result.Error.Message);
         }
 
-        return new OrderModificationResult(true, request.OrderId);
+        if (!result.Data.Any())
+        {
+            _logger.LogWarningWithCaller($"No cancel responses on instrument id {request.InstrumentId}");
+            return new OrderModificationResult(false, request.OrderId, $"No cancel responses on instrument id {request.InstrumentId}");
+        }
+
+        var cancelReport = MapResponseToReport(result.Data.FirstOrDefault(), request.InstrumentId);
+        return new OrderModificationResult(true, request.OrderId, report: cancelReport);
     }
 
     public async Task<RestApiResult<OrderStatusReport>> FetchOrderStatusAsync(string exchangeOrderId, CancellationToken cancellationToken = default)

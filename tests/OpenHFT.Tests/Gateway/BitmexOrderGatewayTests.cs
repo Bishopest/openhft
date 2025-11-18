@@ -124,7 +124,7 @@ public class BitmexOrderGatewayTests
         await Task.Delay(2000);
         // --- 2. 주문 정정 (Amend/Replace) ---
         var newPrice = safeBidPrice - Price.FromDecimal(10); // 가격을 10달러 더 낮춤
-        var replaceRequest = new ReplaceOrderRequest(exchangeOrderId, newPrice);
+        var replaceRequest = new ReplaceOrderRequest(exchangeOrderId, newPrice, _btcUsdt.InstrumentId);
         // Act
         var modificationResult = await _gateway.SendReplaceOrderAsync(replaceRequest);
 
@@ -135,7 +135,7 @@ public class BitmexOrderGatewayTests
         await Task.Delay(2000);
 
         // --- 3. 주문 취소 (Cancel) ---
-        var cancelRequest = new CancelOrderRequest(exchangeOrderId);
+        var cancelRequest = new CancelOrderRequest(exchangeOrderId, _btcUsdt.InstrumentId);
 
         // Act
         var cancelResult = await _gateway.SendCancelOrderAsync(cancelRequest);
