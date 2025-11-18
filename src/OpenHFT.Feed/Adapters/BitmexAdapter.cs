@@ -122,6 +122,10 @@ public class BitmexAdapter : BaseAuthFeedAdapter
                 var report = ParseExecution(exeJson);
                 OnOrderUpdateReceived(report);
             }
+            catch (FeedParseException fe)
+            {
+                _logger.LogErrorWithCaller(fe, $"Failed to parse BitMEX execution message. Inner message => {fe.RawMessage}");
+            }
             catch (Exception ex)
             {
                 _logger.LogErrorWithCaller(ex, "Failed to process BitMEX execution message.");

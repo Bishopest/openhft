@@ -191,6 +191,8 @@ public abstract class BaseRestApiClient : IDisposable
         // 2. add signature(abstract method) 
         AddSignatureToRequest(request, fullEndpoint, queryString, bodyParams);
 
+        var queryForLog = queryParams != null ? JsonSerializer.Serialize(queryParams) : "N/A";
+        var bodyForLog = bodyParams != null ? JsonSerializer.Serialize(bodyParams) : "N/A";
         // 3. send request & handle responses
         try
         {
@@ -200,7 +202,9 @@ public abstract class BaseRestApiClient : IDisposable
             if (!response.IsSuccessStatusCode)
             {
                 var ex = new RestApiException($"API Error: {response.StatusCode}", response.StatusCode, responseContent);
-                _logger.LogErrorWithCaller(ex, $"API request to {request.RequestUri} failed with status {response.StatusCode}. Response: {responseContent}");
+                // _logger.LogErrorWithCaller(ex, $"API request to {request.RequestUri} failed with status {response.StatusCode}. Response: {responseContent}");
+                _logger.LogErrorWithCaller(ex,
+                    $"API request to {request.RequestUri} failed with status {response.StatusCode}. Query: {queryForLog}, Body: {bodyForLog}, Response: {responseContent}");
                 return RestApiResult<T>.Failure(ex);
             }
             try
@@ -209,7 +213,9 @@ public abstract class BaseRestApiClient : IDisposable
                 if (result == null)
                 {
                     var ex = new RestApiException("Failed to deserialize response to a non-null object.", response.StatusCode, responseContent);
-                    _logger.LogErrorWithCaller(ex, $"Failed to deserialize API response from {request.RequestUri}. Response: {responseContent}");
+                    // _logger.LogErrorWithCaller(ex, $"Failed to deserialize API response from {request.RequestUri}. Response: {responseContent}");
+                    _logger.LogErrorWithCaller(ex,
+                        $"Failed to deserialize API response from {request.RequestUri}. Query: {queryForLog}, Body: {bodyForLog}, Response: {responseContent}");
                     return RestApiResult<T>.Failure(ex);
                 }
 
@@ -218,14 +224,17 @@ public abstract class BaseRestApiClient : IDisposable
             }
             catch (JsonException ex)
             {
-                _logger.LogErrorWithCaller(ex, $"Failed to parse JSON response from {request.RequestUri}");
+                _logger.LogErrorWithCaller(ex,
+                    $"Failed to parse JSON response from {request.RequestUri}. Query: {queryForLog}, Body: {bodyForLog}");
                 var error = new RestApiException($"JSON parsing error: {ex.Message}", ex);
                 return RestApiResult<T>.Failure(error);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogErrorWithCaller(ex, $"An unexpected error occurred during the request to {request.RequestUri}.");
+            // _logger.LogErrorWithCaller(ex, $"An unexpected error occurred during the request to {request.RequestUri}.");
+            _logger.LogErrorWithCaller(ex,
+                $"An unexpected error occurred during the request to {request.RequestUri}. Query: {queryForLog}, Body: {bodyForLog}");
             var error = new RestApiException($"Request failed: {ex.Message}", ex);
             return RestApiResult<T>.Failure(error);
         }
