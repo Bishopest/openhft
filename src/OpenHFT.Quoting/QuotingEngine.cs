@@ -10,7 +10,7 @@ using OpenHFT.Quoting.Models;
 
 namespace OpenHFT.Quoting;
 
-public class QuotingEngine : IQuotingEngine
+public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
 {
     private readonly ILogger _logger;
     private readonly MarketDataManager _marketDataManager;
@@ -31,6 +31,7 @@ public class QuotingEngine : IQuotingEngine
     public Quantity TotalBuyFills => Quantity.FromTicks(Interlocked.Read(ref _totalBuyFillsInTicks));
     public Quantity TotalSellFills => Quantity.FromTicks(Interlocked.Read(ref _totalSellFillsInTicks));
 
+    public bool IsQuotingActive => IsActive && !_isPausedByFill;
 
     public QuotingEngine(
         ILogger logger,

@@ -43,13 +43,15 @@ public class QuotingInstanceFactory : IQuotingInstanceFactory
         var askQuoter = _quoterFactory.CreateQuoter(instrument, Side.Sell, parameters.Type);
         var validator = new DefaultQuoteValidator(_loggerFactory.CreateLogger<DefaultQuoteValidator>());
 
+        var fvProvider = _fairValueProviderFactory.CreateProvider(parameters.FvModel, parameters.FairValueSourceInstrumentId);
         var mm = new MarketMaker(_loggerFactory.CreateLogger<MarketMaker>(),
             instrument,
             bidQuoter,
             askQuoter,
             validator);
-        var fvProvider = _fairValueProviderFactory.CreateProvider(parameters.FvModel, parameters.FairValueSourceInstrumentId);
         var engine = new QuotingEngine(_loggerFactory.CreateLogger<QuotingEngine>(), instrument, mm, fvProvider, parameters, _marketDataManager);
+
+        mm.SetQuotingStateProvider(engine);
         mm.OrderFullyFilled += () => engine.PauseQuoting(TimeSpan.FromSeconds(3));
 
         return new QuotingInstance(engine);

@@ -22,6 +22,7 @@ public sealed class MarketMaker
     private readonly object _statusLock = new();
 
 
+    private IQuotingStateProvider? _quotingStateProvider;
     private TwoSidedQuoteStatus _quoteStatus;
     private readonly object _targetLock = new();
     private QuotePair? _nextTargetQuotePair;
@@ -61,6 +62,11 @@ public sealed class MarketMaker
         _askQuoter.OrderFilled += OnQuoterFilled;
         _quoteValidator = quoteValidator;
         _quoteStatus = new TwoSidedQuoteStatus(instrument.InstrumentId, QuoteStatus.Held, QuoteStatus.Held);
+    }
+
+    public void SetQuotingStateProvider(IQuotingStateProvider provider)
+    {
+        _quotingStateProvider = provider;
     }
 
     /// <summary>
@@ -129,6 +135,13 @@ public sealed class MarketMaker
         if (target.InstrumentId != _instrument.InstrumentId)
         {
             _logger.LogWarningWithCaller($"Received a quote target for the wrong instrument. Expected {_instrument.InstrumentId}, got {target.InstrumentId}.");
+            return;
+        }
+
+        if (_quotingStateProvider != null && !_quotingStateProvider.IsQuotingActive)
+        {
+            _logger.LogInformationWithCaller($"Execution skipped: Quoting on {_instrument.Symbol} is currently paused or inactive.");
+            await CancelAllQuotesAsync();
             return;
         }
 
