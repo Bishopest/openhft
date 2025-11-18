@@ -17,7 +17,9 @@ public class OrderCacheService : IOrderCacheService, IDisposable
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, ConcurrentDictionary<long, OrderStatusReport>>> _activeOrdersByOms = new();
 
     // Fills are still stored in a single queue, but the Fill object itself should contain OmsIdentifier.
-    private readonly ConcurrentQueue<Fill> _fills = new();
+    private readonly ConcurrentDictionary<string, Fill> _fillsByExecutionId = new();
+    // Use a queue to maintain insertion order and easily remove the oldest.
+    private readonly ConcurrentQueue<string> _fillExecutionIdQueue = new();
     private const int MaxFillsToStore = 200;
 
     public event Action<(string OmsIdentifier, OrderStatusReport Report)>? OnOrderUpdated;
@@ -93,16 +95,43 @@ public class OrderCacheService : IOrderCacheService, IDisposable
 
     private void HandleOrderFill(FillsPayload payload)
     {
-        // It's crucial that the Fill object itself can store the OmsIdentifier.
-        // Let's assume the Fill class/struct has an OmsIdentifier property.
-        var fills = payload.Fills;
-        // fill.OmsIdentifier = payload.OmsIdentifier; // Assign if possible
-
-        foreach (var fill in fills)
+        foreach (var fill in payload.Fills)
         {
-            _fills.Enqueue(fill);
-            while (_fills.Count > MaxFillsToStore) _fills.TryDequeue(out _);
-            OnFillReceived?.Invoke((payload.OmsIdentifier, fill));
+            // A unique key for a fill is typically its execution ID.
+            // If ExecutionId can be null, you might need a composite key.
+            var uniqueKey = fill.ExecutionId;
+            if (string.IsNullOrEmpty(uniqueKey))
+            {
+                // Fallback key if ExecutionId is not available
+                uniqueKey = $"{fill.ExchangeOrderId}-{fill.ClientOrderId}-{fill.Timestamp}";
+            }
+
+            // --- THIS IS THE DUPLICATE CHECK ---
+            // TryAdd returns false if the key already exists.
+            if (_fillsByExecutionId.TryAdd(uniqueKey, fill))
+            {
+                // If successfully added, also add the key to the queue to track order.
+                _fillExecutionIdQueue.Enqueue(uniqueKey);
+
+                // Fire the event for the new fill.
+                OnFillReceived?.Invoke((payload.OmsIdentifier, fill));
+            }
+            else
+            {
+                // This fill is a duplicate, so we ignore it.
+                // You could add a log here for debugging if needed.
+            }
+        }
+
+        // After adding, enforce the size limit.
+        while (_fillExecutionIdQueue.Count > MaxFillsToStore)
+        {
+            // Remove the oldest key from the queue.
+            if (_fillExecutionIdQueue.TryDequeue(out var oldestKey))
+            {
+                // Remove the corresponding fill from the dictionary.
+                _fillsByExecutionId.TryRemove(oldestKey, out _);
+            }
         }
     }
 
@@ -119,7 +148,7 @@ public class OrderCacheService : IOrderCacheService, IDisposable
 
     public IEnumerable<Fill> GetAllFills()
     {
-        return _fills.OrderByDescending(f => f.Timestamp);
+        return _fillsByExecutionId.Values.OrderByDescending(f => f.Timestamp);
     }
 
     private bool IsActiveOrder(OrderStatusReport report)
