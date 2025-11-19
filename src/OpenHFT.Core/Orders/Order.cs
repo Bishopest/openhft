@@ -121,10 +121,10 @@ public class Order : IOrder, IOrderUpdatable
         // 4. Handle immediate failure
         if (!result.IsSuccess)
         {
-            var failureReport = new OrderStatusReport(
-                ClientOrderId, ExchangeOrderId, null, InstrumentId, Side, origStatus, Price, Quantity, LeavesQuantity,
-                LastUpdateTime, result.FailureReason);
-            OnStatusReportReceived(failureReport);
+            lock (_stateLock)
+            {
+                Status = origStatus;
+            }
         }
         else if (result.Report.HasValue)
         {
@@ -163,10 +163,10 @@ public class Order : IOrder, IOrderUpdatable
         // 4. Handle immediate failure
         if (!result.IsSuccess)
         {
-            var failureReport = new OrderStatusReport(
-                ClientOrderId, ExchangeOrderId, null, InstrumentId, Side, origStatus, Price, Quantity, LeavesQuantity,
-                LastUpdateTime, result.FailureReason);
-            OnStatusReportReceived(failureReport);
+            lock (_stateLock)
+            {
+                Status = origStatus;
+            }
         }
         else if (result.Report.HasValue)
         {
