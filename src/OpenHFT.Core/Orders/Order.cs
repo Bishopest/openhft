@@ -111,6 +111,7 @@ public class Order : IOrder, IOrderUpdatable
         }
 
         // 2. Update internal state to 'ReplaceRequest'
+        var origStatus = Status;
         Status = OrderStatus.ReplaceRequest;
 
         // 3. Create request and call the gateway
@@ -121,8 +122,8 @@ public class Order : IOrder, IOrderUpdatable
         if (!result.IsSuccess)
         {
             var failureReport = new OrderStatusReport(
-                ClientOrderId, ExchangeOrderId, null, InstrumentId, Side, Status, Price, Quantity, LeavesQuantity,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), result.FailureReason);
+                ClientOrderId, ExchangeOrderId, null, InstrumentId, Side, origStatus, Price, Quantity, LeavesQuantity,
+                LastUpdateTime, result.FailureReason);
             OnStatusReportReceived(failureReport);
         }
         else if (result.Report.HasValue)
@@ -152,6 +153,7 @@ public class Order : IOrder, IOrderUpdatable
         }
 
         // 2. Update internal state to 'CancelRequest'
+        var origStatus = Status;
         Status = OrderStatus.CancelRequest;
 
         // 3. Create request and call the gateway
@@ -162,8 +164,8 @@ public class Order : IOrder, IOrderUpdatable
         if (!result.IsSuccess)
         {
             var failureReport = new OrderStatusReport(
-                ClientOrderId, ExchangeOrderId, null, InstrumentId, Side, OrderStatus.Rejected, Price, Quantity, LeavesQuantity,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), result.FailureReason);
+                ClientOrderId, ExchangeOrderId, null, InstrumentId, Side, origStatus, Price, Quantity, LeavesQuantity,
+                LastUpdateTime, result.FailureReason);
             OnStatusReportReceived(failureReport);
         }
         else if (result.Report.HasValue)
