@@ -144,6 +144,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
         {
             engine.Activate();
         }
+        InstanceParametersUpdated?.Invoke(this, engine.CurrentParameters);
         return instance;
     }
 
