@@ -20,7 +20,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
     protected override bool IsHeartbeatEnabled => true;
 
     // Field to track the last execution ID per order id 
-    private readonly ConcurrentDictionary<string, string> _lastExecIds = new();
+    private readonly ConcurrentDictionary<string, HashSet<string>> _processedExecIDs = new();
     public BitmexAdapter(ILogger<BitmexAdapter> logger, ProductType type, IInstrumentRepository instrumentRepository, ExecutionMode executionMode) : base(logger, type, instrumentRepository, executionMode)
     {
     }
@@ -124,10 +124,8 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             return;
         }
 
-        for (int i = executions.Count - 1; i >= 0; i--)
+        foreach (var exeJson in executions)
         {
-            var exeJson = executions[i];
-
             // 2. symbol과 instrumentId를 먼저 가져옵니다.
             var orderId = exeJson.TryGetProperty("orderID", out var oiEl) ? oiEl.GetString() : null;
             if (string.IsNullOrEmpty(orderId)) continue;
@@ -135,11 +133,10 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             var execId = exeJson.TryGetProperty("execID", out var execIdEl) ? execIdEl.GetString() : null;
             if (string.IsNullOrEmpty(execId)) continue;
 
-            if (_lastExecIds.TryGetValue(orderId, out var lastExecId) && lastExecId == execId)
+            var execIdSet = _processedExecIDs.GetOrAdd(orderId, _ => new HashSet<string>());
+            if (!execIdSet.Add(execId))
             {
-                // 이 execID는 이미 처리했으므로, 이 이전의 모든 메시지도 처리된 것입니다.
-                // 순회를 중단합니다.
-                break;
+                continue;
             }
 
             // 4. execType이 'Trade'인 경우에만 처리합니다.
@@ -154,6 +151,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             {
                 var report = ParseExecution(exeJson);
                 OnOrderUpdateReceived(report);
+                _logger.LogInformationWithCaller($"Processed new execution for order {orderId}: ExecID={execId}");
             }
             catch (FeedParseException fe)
             {
@@ -165,35 +163,22 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             }
         }
 
-        // 6. 배열의 가장 마지막(가장 최신) 메시지의 execID를 저장합니다.
-        var lastExecutionInBatch = executions.Last();
-        var lastExecOi = lastExecutionInBatch.TryGetProperty("orderID", out var lastOiEl) ? lastOiEl.GetString() : null;
-        var lastExecStatus = lastExecutionInBatch.TryGetProperty("ordStatus", out var lastStatusEl) ? lastStatusEl.GetString() : null;
+        foreach (var exeJson in executions)
+        {
+            var orderId = exeJson.TryGetProperty("orderID", out var oiEl) ? oiEl.GetString() : null;
+            var ordStatus = exeJson.TryGetProperty("ordStatus", out var statEl) ? statEl.GetString() : null;
 
-        var isFinished = false;
-        if (!string.IsNullOrEmpty(lastExecStatus))
-        {
-            switch (lastExecStatus)
+            if (string.IsNullOrEmpty(orderId) || string.IsNullOrEmpty(ordStatus))
             {
-                case "Filled":
-                case "Cancelled":
-                case "Rejected":
-                    isFinished = true;
-                    break;
-            }
-        }
-        if (!string.IsNullOrEmpty(lastExecOi))
-        {
-            if (isFinished)
-            {
-                _lastExecIds.TryRemove(lastExecOi, out var lastEle);
-                return;
+                continue;
             }
 
-            var lastExecIdInBatch = lastExecutionInBatch.TryGetProperty("execID", out var lastIdEl) ? lastIdEl.GetString() : null;
-            if (!string.IsNullOrEmpty(lastExecIdInBatch))
+            if (ordStatus is "Filled" or "Canceled" or "Rejected")
             {
-                _lastExecIds[lastExecOi] = lastExecIdInBatch;
+                if (_processedExecIDs.TryRemove(orderId, out _))
+                {
+                    _logger.LogDebug("Cleaned up processed execution ID set for terminal order {OrderId}.", orderId);
+                }
             }
         }
     }
