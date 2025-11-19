@@ -87,12 +87,12 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
                 return null;
             }
 
-
             if (_activeInstances.TryAdd(instrumentId, instance))
             {
                 instance.Engine.QuotePairCalculated += OnEngineQuotePairCalculated;
                 instance.Engine.ParametersUpdated += InstanceParametersUpdated;
                 instance.Start();
+                InstanceParametersUpdated?.Invoke(this, instance.CurrentParameters);
                 _logger.LogInformationWithCaller($"Successfully deployed quoting instance for instrument {instrument.Symbol}.");
                 return instance;
             }
@@ -167,6 +167,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
         }
 
         instance.Deactivate();
+        InstanceParametersUpdated?.Invoke(this, instance.CurrentParameters);
         _logger.LogInformationWithCaller($"Successfully deactivate quoting strategy for instrument ID {instrumentId}.");
         return instance;
     }

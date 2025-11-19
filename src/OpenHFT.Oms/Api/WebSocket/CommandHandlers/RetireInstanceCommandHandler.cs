@@ -38,19 +38,7 @@ public class RetireInstanceCommandHandler : IWebSocketCommandHandler
 
             _logger.LogInformationWithCaller("Handling RETIRE_INSTANCE command.");
             var resultInstance = _manager.RetireInstance(id);
-            if (resultInstance != null)
-            {
-                var payload = new InstanceStatusPayload
-                {
-                    OmsIdentifier = _omsIdentifier,
-                    InstrumentId = resultInstance.InstrumentId,
-                    IsActive = resultInstance.IsActive,
-                    Parameters = resultInstance.CurrentParameters
-                };
-                var statusEvent = new InstanceStatusEvent(payload);
-                await _channel.SendAsync(statusEvent);
-            }
-            else
+            if (resultInstance == null)
             {
                 var ackPayload = new AckPayload(_omsIdentifier, correlationId ?? string.Empty, false, "Failed to retire quoting instance.");
                 var ackEvent = new AcknowledgmentEvent(ackPayload);
