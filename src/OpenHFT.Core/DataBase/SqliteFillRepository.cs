@@ -11,24 +11,23 @@ namespace OpenHFT.Core.DataBase;
 public class SqliteFillRepository : IFillRepository
 {
     private readonly ILogger<SqliteFillRepository> _logger;
-    private readonly string _dataFolderPath;
+    private readonly string _filePath;
     private readonly object _lock = new();
     private static readonly SemaphoreSlim _writeSemaphore = new SemaphoreSlim(1, 1);
 
     public SqliteFillRepository(ILogger<SqliteFillRepository> logger, IConfiguration configuration)
     {
         _logger = logger;
-        _dataFolderPath = configuration["dataFolder"]
-            ?? throw new InvalidOperationException("'dataFolder' not configured in config.json.");
-        _dataFolderPath = Path.Combine(_dataFolderPath, "fills");
+        _filePath = configuration["FILL_DB_PATH"]
+            ?? throw new InvalidOperationException("'FILL_DB_PATH' must be configured in .bash_profile.");
 
         // Ensure the directory exists.
-        Directory.CreateDirectory(_dataFolderPath);
+        Directory.CreateDirectory(_filePath);
     }
 
     private string GetDbPathForDate(DateTime date)
     {
-        return Path.Combine(_dataFolderPath, $"fills_{date:yyyy-MM-dd}.db");
+        return Path.Combine(_filePath, $"fills_{date:yyyy-MM-dd}.db");
     }
 
     public async Task AddFillAsync(Fill fill)
@@ -91,5 +90,10 @@ public class SqliteFillRepository : IFillRepository
                  .Where(f => f.InstrumentId == instrumentId)
                  .ToListAsync())
                  .Select(dbo => dbo.ToFill());
+    }
+
+    public string GetDBPath()
+    {
+        return _filePath;
     }
 }

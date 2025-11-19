@@ -5,6 +5,7 @@ namespace OpenHFT.Core.Interfaces;
 
 public interface IFillRepository
 {
+    string GetDBPath();
     /// <summary>
     /// Adds a new fill record to the repository.
     /// </summary>

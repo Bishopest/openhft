@@ -27,7 +27,7 @@ namespace OpenHFT.Tests.Core.DataBase
             // Create a mock IConfiguration that points to our temporary directory.
             var inMemorySettings = new Dictionary<string, string>
             {
-                { "dataFolder", _testDirectory }
+                { "FILL_DB_PATH", _testDirectory }
             };
             _configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(inMemorySettings!)
@@ -58,7 +58,7 @@ namespace OpenHFT.Tests.Core.DataBase
 
             // Assert
             // We'll directly access the database file to verify the data was written.
-            var dbPath = Path.Combine(_testDirectory, "fills", $"fills_{DateTime.UtcNow:yyyy-MM-dd}.db");
+            var dbPath = Path.Combine(_testDirectory, $"fills_{DateTime.UtcNow:yyyy-MM-dd}.db");
             Assert.That(File.Exists(dbPath), Is.True);
 
             using var db = new FillDbContext(dbPath);
