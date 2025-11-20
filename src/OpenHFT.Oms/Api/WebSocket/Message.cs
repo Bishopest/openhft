@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using OpenHFT.Core.Books;
 using OpenHFT.Core.Models;
 using OpenHFT.Quoting;
 using OpenHFT.Quoting.Models;
@@ -81,6 +82,16 @@ public record QuotePairUpdatePayload(
     [property: JsonPropertyName("omsIdentifier")] string OmsIdentifier,
     [property: JsonPropertyName("quotePair")] QuotePair QuotePair
 );
+
+public record BookUpdateEvent(
+    [property: JsonPropertyName("payload")] BookUpdatePayload Payload
+) : WebSocketMessage("BOOK_UPDATE");
+
+public record BookUpdatePayload(
+    [property: JsonPropertyName("omsIdentifier")] string OmsIdentifier,
+    [property: JsonPropertyName("bookElement")] BookElement Element
+);
+
 public record ErrorEvent(
         [property: JsonPropertyName("payload")] ErrorPayload Payload
     ) : WebSocketMessage("ERROR");
