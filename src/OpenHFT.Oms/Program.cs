@@ -27,6 +27,7 @@ using DotNetEnv;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using OpenHFT.Core.DataBase;
+using System.Runtime.InteropServices;
 
 public class Program
 {
@@ -35,7 +36,7 @@ public class Program
         Log.Logger = new LoggerConfiguration()
             .Enrich.FromLogContext()
             .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .WriteTo.File("logs/oms-.log", rollingInterval: RollingInterval.Day)
+            .WriteTo.File(GetLogPath(), rollingInterval: RollingInterval.Day)
             .CreateBootstrapLogger();
 
         Env.Load();
@@ -62,7 +63,7 @@ public class Program
                 .Enrich.FromLogContext()
                 .MinimumLevel.Override("System.Net.Http.HttpClient", Serilog.Events.LogEventLevel.Warning)
                 .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-                .WriteTo.File("logs/oms-.log", rollingInterval: RollingInterval.Day)
+                .WriteTo.File(GetLogPath(), rollingInterval: RollingInterval.Day)
             )
             .ConfigureAppConfiguration((hostingContext, configBuilder) =>
             {
@@ -187,4 +188,16 @@ public class Program
                 services.AddHostedService<FillPersistenceService>();
             }
         );
+
+    private static string GetLogPath()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            return "/var/log/openhft/oms-.log";
+        }
+        else
+        {
+            return "logs/oms-.log";
+        }
+    }
 }
