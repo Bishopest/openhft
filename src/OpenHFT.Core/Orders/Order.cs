@@ -218,6 +218,11 @@ public class Order : IOrder, IOrderUpdatable
                     OrderFilled?.Invoke(this, fill);
                     _router.RaiseOrderFilled(this, fill);
                 }
+
+                if (report.Status == OrderStatus.Filled)
+                {
+                    _router.DeregisterOrder(this);
+                }
             }
 
             StatusChanged?.Invoke(this, report);
@@ -227,7 +232,6 @@ public class Order : IOrder, IOrderUpdatable
 
             switch (report.Status)
             {
-                case OrderStatus.Filled:
                 case OrderStatus.Cancelled:
                 case OrderStatus.Rejected:
                     _router.DeregisterOrder(this);

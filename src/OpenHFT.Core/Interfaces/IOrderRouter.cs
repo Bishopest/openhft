@@ -32,7 +32,6 @@ public interface IOrderRouter
     /// </summary>
     /// <param name="report">The report to be routed.</param>
     void RouteReport(in OrderStatusReport report);
-
     void RaiseStatusChanged(IOrder order, OrderStatusReport report);
     void RaiseOrderFilled(IOrder order, Fill fill);
 }

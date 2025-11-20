@@ -151,7 +151,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             {
                 var report = ParseExecution(exeJson);
                 OnOrderUpdateReceived(report);
-                _logger.LogInformationWithCaller($"Processed new execution for order {orderId}: ExecID={execId}");
+                _logger.LogInformationWithCaller($"Processed new execution for order report => {report.ToString()}");
             }
             catch (FeedParseException fe)
             {

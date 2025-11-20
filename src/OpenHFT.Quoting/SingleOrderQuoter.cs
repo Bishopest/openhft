@@ -171,7 +171,6 @@ public sealed class SingleOrderQuoter : IQuoter
                 OrderFullyFilled?.Invoke();
             }
 
-
             // Unsubscribe to prevent memory leaks
             _activeOrder.StatusChanged -= OnOrderStatusChanged;
             _activeOrder.OrderFilled -= OnOrderFilled;
