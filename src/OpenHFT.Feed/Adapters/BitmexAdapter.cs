@@ -245,7 +245,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
         var lastPrice = Price.FromDecimal(lastPriceEl.ValueKind == JsonValueKind.Number ? lastPriceEl.GetDecimal() : 0);
         var quantity = Quantity.FromDecimal(qtyEl.ValueKind == JsonValueKind.Number ? qtyEl.GetDecimal() : 0);
         var leavesQuantity = Quantity.FromDecimal(leavesEl.ValueKind == JsonValueKind.Number ? leavesEl.GetDecimal() : 0);
-        var lastQuantity = lastQtyEl.ValueKind == JsonValueKind.Number ? (Quantity?)Quantity.FromDecimal(lastQtyEl.GetDecimal()) : null;
+        var lastQuantity = Quantity.FromDecimal(lastQtyEl.ValueKind == JsonValueKind.Number ? lastQtyEl.GetDecimal() : 0);
 
         var rejectReason = exeJson.TryGetProperty("text", out var textEl) ? textEl.GetString() : null;
 
