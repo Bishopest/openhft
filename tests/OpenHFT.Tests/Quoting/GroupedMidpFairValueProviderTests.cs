@@ -3,7 +3,6 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using NUnit.Framework;
-using OpenHFT.Core.OrderBook;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;

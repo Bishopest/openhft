@@ -4,7 +4,6 @@ using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
-using OpenHFT.Core.OrderBook;
 using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Models;
 using OpenHFT.Processing.Consumers;

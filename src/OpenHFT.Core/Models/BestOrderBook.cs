@@ -5,7 +5,7 @@ using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 
-namespace OpenHFT.Core.OrderBook;
+namespace OpenHFT.Core.Models;
 
 /// <summary>
 /// Represents an L1 (Top of Book) order book, optimized for tracking only the best bid and ask.

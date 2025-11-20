@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.SignalR;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Collections;
 using OpenHFT.Feed.Interfaces;
-using OpenHFT.Core.OrderBook;
 using OpenHFT.UI.Hubs;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Instruments;

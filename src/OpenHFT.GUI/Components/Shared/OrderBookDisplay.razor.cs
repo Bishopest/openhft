@@ -5,7 +5,6 @@ using Microsoft.JSInterop;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
-using OpenHFT.Core.OrderBook;
 using OpenHFT.GUI.Services;
 using OpenHFT.Oms.Api.WebSocket;
 using OpenHFT.Quoting.Models;

@@ -5,7 +5,6 @@ using Disruptor.Dsl;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Core.Collections;
-using OpenHFT.Core.OrderBook;
 using System.Threading.Channels;
 using OpenHFT.Core.Instruments;
 

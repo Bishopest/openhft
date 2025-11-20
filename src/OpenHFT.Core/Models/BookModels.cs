@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using OpenHFT.Core.Models;
 
-namespace OpenHFT.Core.OrderBook;
+namespace OpenHFT.Core.Models;
 
 /// <summary>
 /// Represents a single price level in the order book

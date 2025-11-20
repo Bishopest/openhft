@@ -8,7 +8,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestPlatform.Utilities;
 using Moq;
 using NUnit.Framework;
-using OpenHFT.Core.OrderBook;
 using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;

@@ -1,11 +1,10 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
-using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Core.Instruments;
 using System.Text;
 
-namespace OpenHFT.Core.OrderBook;
+namespace OpenHFT.Core.Models;
 
 /// <summary>
 /// High-performance order book implementation
