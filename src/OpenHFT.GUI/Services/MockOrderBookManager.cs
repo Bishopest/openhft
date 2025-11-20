@@ -1,7 +1,7 @@
 using System;
-using OpenHFT.Book.Core;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.OrderBook;
 using OpenHFT.Core.Utils;
 
 namespace OpenHFT.GUI.Services;

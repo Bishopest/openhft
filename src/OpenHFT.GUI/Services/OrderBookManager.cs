@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Concurrent;
-using OpenHFT.Book.Core;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.OrderBook;
 using OpenHFT.Core.Utils;
 
 namespace OpenHFT.GUI.Services;

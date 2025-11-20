@@ -16,7 +16,6 @@ using OpenHFT.Feed.Models;
 using OpenHFT.Processing;
 using Serilog;
 using OpenHFT.Gateway.ApiClient;
-using OpenHFT.Book.Core;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using OpenHFT.Core.Orders;

@@ -12,7 +12,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../OpenHFT.Book/OpenHFT.Book.csproj" />
     <ProjectReference Include="../OpenHFT.Core/OpenHFT.Core.csproj" />
     <ProjectReference Include="../OpenHFT.Oms/OpenHFT.Oms.csproj" />
   </ItemGroup>

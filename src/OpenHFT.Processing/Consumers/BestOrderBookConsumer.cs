@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
-using OpenHFT.Book.Core;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.OrderBook;
 using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Models;
 

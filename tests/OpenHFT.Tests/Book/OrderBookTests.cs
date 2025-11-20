@@ -3,7 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
-using OpenHFT.Book.Core;
+using OpenHFT.Core.OrderBook;
 using OpenHFT.Core.Instruments;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;

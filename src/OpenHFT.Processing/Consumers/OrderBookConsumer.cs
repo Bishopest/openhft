@@ -2,7 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using Disruptor;
 using Microsoft.Extensions.Logging;
-using OpenHFT.Book.Core;
+using OpenHFT.Core.OrderBook;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;

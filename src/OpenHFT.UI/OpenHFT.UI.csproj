@@ -20,7 +20,6 @@
     <ProjectReference Include="../OpenHFT.Processing/OpenHFT.Processing.csproj" />
     <ProjectReference Include="..\OpenHFT.Core\OpenHFT.Core.csproj" />
     <ProjectReference Include="..\OpenHFT.Feed\OpenHFT.Feed.csproj" />
-    <ProjectReference Include="..\OpenHFT.Book\OpenHFT.Book.csproj" />
     <ProjectReference Include="..\OpenHFT.Gateway\OpenHFT.Gateway.csproj" />
   </ItemGroup>
 
