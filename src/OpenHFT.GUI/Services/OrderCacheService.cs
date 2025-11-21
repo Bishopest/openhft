@@ -15,6 +15,8 @@ public class OrderCacheService : IOrderCacheService, IDisposable
     // --- KEY CHANGE: Outer key is OmsIdentifier, inner key is InstrumentId ---
     // { "OMS_A": { 1001: { ...orders... } } }
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, ConcurrentDictionary<long, OrderStatusReport>>> _activeOrdersByOms = new();
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, InstanceStatusPayload>> _activeInstancesByOms = new();
+    public event Action? OnInstancesUpdated;
 
     // Fills are still stored in a single queue, but the Fill object itself should contain OmsIdentifier.
     private readonly ConcurrentDictionary<string, Fill> _fillsByExecutionId = new();
@@ -63,9 +65,25 @@ public class OrderCacheService : IOrderCacheService, IDisposable
                 var fillEvent = JsonSerializer.Deserialize<FillsListEvent>(json, _jsonOptions);
                 if (fillEvent != null) HandleOrderFill(fillEvent.Payload);
                 break;
+            case "INSTANCE_STATUS":
+                var statusEvent = JsonSerializer.Deserialize<InstanceStatusEvent>(json, _jsonOptions);
+                if (statusEvent != null) HandleInstanceStatusUpdate(statusEvent.Payload);
+                break;
             default:
                 break;
         }
+    }
+
+    private void HandleInstanceStatusUpdate(InstanceStatusPayload payload)
+    {
+        var omsInstances = _activeInstancesByOms.GetOrAdd(payload.OmsIdentifier, new ConcurrentDictionary<int, InstanceStatusPayload>());
+        omsInstances[payload.InstrumentId] = payload;
+        OnInstancesUpdated?.Invoke();
+    }
+
+    public IEnumerable<InstanceStatusPayload> GetAllActiveInstances()
+    {
+        return _activeInstancesByOms.Values.SelectMany(dict => dict.Values);
     }
 
     private void HandleActiveOrdersList(ActiveOrdersPayload payload)

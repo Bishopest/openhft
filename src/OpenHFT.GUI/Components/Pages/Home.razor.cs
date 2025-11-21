@@ -38,54 +38,17 @@ public partial class Home : ComponentBase, IDisposable
     // --- Lifecycle Methods ---
     protected override void OnInitialized()
     {
+        _activeInstances = OrderCache.GetAllActiveInstances().ToList();
+
         var connectedOmsConfig = OmsConnector.GetConnectedServers();
         OmsConnector.OnConnectionStatusChanged += HandleStatusChange;
-        OmsConnector.OnMessageReceived += HandleRawMessage;
+        OrderCache.OnInstancesUpdated += HandleInstancesUpdated;
     }
 
-    private void HandleRawMessage(string json)
+    private async void HandleInstancesUpdated()
     {
-        using var doc = JsonDocument.Parse(json);
-        var type = doc.RootElement.GetProperty("type").GetString();
-
-        switch (type)
-        {
-            case "INSTANCE_STATUS":
-                var instanceStatusEvent = JsonSerializer.Deserialize<InstanceStatusEvent>(json, _jsonOptions);
-                if (instanceStatusEvent != null) HandleInstanceStatusUpdate(instanceStatusEvent.Payload);
-                break;
-            default:
-                break;
-        }
-    }
-
-    private async void HandleInstanceStatusUpdate(InstanceStatusPayload payload)
-    {
-        if (_isDisposed)
-        {
-            return; // Do nothing if disposed.
-        }
-        Logger.LogInformationWithCaller($"Received status update for Instrument ID: {payload.InstrumentId}, Active: {payload.IsActive}");
-
-        var existingInstance = _activeInstances.FirstOrDefault(i => i.InstrumentId == payload.InstrumentId && i.OmsIdentifier == payload.OmsIdentifier);
-        if (existingInstance != null)
-        {
-            // Update existing instance
-            existingInstance.IsActive = payload.IsActive;
-            existingInstance.Parameters = payload.Parameters;
-            if (_quotingController != null)
-            {
-                var serverConfig = Configuration.GetSection("oms").Get<List<OmsServerConfig>>()?
-                                                .FirstOrDefault(s => s.OmsIdentifier == existingInstance.OmsIdentifier);
-                await _quotingController.UpdateParametersAsync(existingInstance.Parameters, serverConfig);
-            }
-        }
-        else
-        {
-            // Add new instance
-            _activeInstances.Add(payload);
-        }
-
+        if (_isDisposed) return;
+        _activeInstances = OrderCache.GetAllActiveInstances().ToList();
         await InvokeAsync(StateHasChanged);
     }
 
@@ -207,7 +170,7 @@ public partial class Home : ComponentBase, IDisposable
         {
             // Unsubscribe from all events here.
             OmsConnector.OnConnectionStatusChanged -= HandleStatusChange;
-            OmsConnector.OnMessageReceived -= HandleRawMessage;
+            OrderCache.OnInstancesUpdated -= HandleInstancesUpdated;
         }
 
         _isDisposed = true;

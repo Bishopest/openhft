@@ -1,5 +1,6 @@
 using System;
 using OpenHFT.Core.Models;
+using OpenHFT.Oms.Api.WebSocket;
 
 namespace OpenHFT.GUI.Services;
 
@@ -15,13 +16,15 @@ public interface IOrderCacheService
     /// </summary>
     event Action<(string OmsIdentifier, Fill Fill)>? OnFillReceived;
 
+    event Action OnInstancesUpdated;
+
     /// <summary>
     /// Gets all active orders for a specific instrument on a specific OMS.
     /// </summary>
     IEnumerable<OrderStatusReport> GetActiveOrders(string omsIdentifier, int instrumentId);
-
     /// <summary>
     /// Gets all recent fills from all connected OMS servers.
     /// </summary>
     IEnumerable<Fill> GetAllFills();
+    IEnumerable<InstanceStatusPayload> GetAllActiveInstances();
 }
