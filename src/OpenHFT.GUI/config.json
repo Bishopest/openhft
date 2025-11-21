@@ -2,13 +2,13 @@
   "feed": [
     {
       "exchange": "binance",
-      "productType" : "perpetualfuture",
-      "executionMode": "testnet"
+      "productType": "perpetualfuture",
+      "executionMode": "live"
     },
     {
       "exchange": "bitmex",
-      "productType" : "perpetualfuture",
-      "executionMode": "testnet"
+      "productType": "perpetualfuture",
+      "executionMode": "live"
     }
   ],
   "oms": [
@@ -19,6 +19,10 @@
     {
       "omsIdentifier": "OH01",
       "url": "ws://18.183.233.162:5001"
+    },
+    {
+      "omsIdentifier": "OH02",
+      "url": "ws://18.181.198.155:5001"
     }
   ],
   "dataFolder": "/Users/jskim/workspace/openhft/data"
