@@ -10,11 +10,17 @@ public readonly struct BookElement : IEquatable<BookElement>
     public readonly Price AvgPrice;
     // + : buy, - : sell
     public readonly Quantity Quantity;
-    public readonly decimal RealizedPnL;
-    public readonly decimal VolumeInUsdt;
+    public readonly CurrencyAmount RealizedPnL;
+    public readonly CurrencyAmount VolumeInUsdt;
     public readonly long LastUpdateTime;
 
-    public BookElement(string bookName, int instrumentId, Price avgPrice, Quantity quantity, decimal realizedPnL, decimal volumeInUsdt, long lastUpdateTime)
+    public BookElement(string bookName,
+                       int instrumentId,
+                       Price avgPrice,
+                       Quantity quantity,
+                       CurrencyAmount realizedPnL,
+                       CurrencyAmount volumeInUsdt,
+                       long lastUpdateTime)
     {
         BookName = bookName;
         InstrumentId = instrumentId;
@@ -31,8 +37,11 @@ public readonly struct BookElement : IEquatable<BookElement>
     {
         // BookName, InstrumentId, Quantity 등 모든 주요 필드를 비교
         return BookName == other.BookName &&
-               InstrumentId == other.InstrumentId;
-        // LastUpdateTime은 상태 비교에서 제외하는 것이 일반적
+               InstrumentId == other.InstrumentId &&
+               AvgPrice.Equals(other.AvgPrice) &&
+               Quantity.Equals(other.Quantity) &&
+               RealizedPnL.Equals(other.RealizedPnL) &&
+               VolumeInUsdt.Equals(other.VolumeInUsdt);
     }
 
     public override int GetHashCode()

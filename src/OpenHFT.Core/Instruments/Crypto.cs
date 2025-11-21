@@ -20,4 +20,6 @@ public class Crypto : Instrument
     }
 
     public override ProductType ProductType => ProductType.Spot;
+
+    public override Currency DenominationCurrency => base.QuoteCurrency;
 }

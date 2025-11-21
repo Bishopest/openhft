@@ -28,4 +28,45 @@ public abstract class CryptoFuture : Instrument
     {
         Multiplier = multiplier;
     }
+
+    public override CurrencyAmount ValueInDenominationCurrency(Price p, Quantity q)
+    {
+        if (p == Price.FromDecimal(0m))
+        {
+            return CurrencyAmount.FromDecimal(0m, DenominationCurrency);
+        }
+
+        if (base.QuoteCurrency == Currency.USD)
+        {
+            var isBitmex = base.SourceExchange == ExchangeEnum.BITMEX;
+            if (isBitmex)
+            {
+                return base.BaseCurrency == Currency.BTC ? CurrencyAmount.FromDecimal(1 / p.ToDecimal() * q.ToDecimal() * Multiplier, Currency.BTC) :
+                                                           CurrencyAmount.FromDecimal(p.ToDecimal() * q.ToDecimal() * Multiplier, Currency.BTC);
+            }
+            else
+            {
+                return CurrencyAmount.FromDecimal(1 / p.ToDecimal() * q.ToDecimal() * Multiplier, DenominationCurrency);
+            }
+        }
+        else
+        {
+            return CurrencyAmount.FromDecimal(p.ToDecimal() * q.ToDecimal() * Multiplier, DenominationCurrency);
+        }
+    }
+
+    public override Currency DenominationCurrency => GetDenominationCurrency();
+
+    private Currency GetDenominationCurrency()
+    {
+        if (base.QuoteCurrency == Currency.USD)
+        {
+            var isBitmex = base.SourceExchange == ExchangeEnum.BITMEX;
+            if (isBitmex) return Currency.BTC;
+
+            return base.BaseCurrency;
+        }
+
+        return base.QuoteCurrency;
+    }
 }

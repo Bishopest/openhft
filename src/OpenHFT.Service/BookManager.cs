@@ -3,8 +3,10 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Books;
+using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.Utils;
 
 namespace OpenHFT.Service;
 
@@ -65,17 +67,29 @@ public class BookManager : IBookManager, IHostedService
 
     private BookElement ApplyFill(BookElement currentElement, Fill fill)
     {
+        var instrument = _instrumentRepo.GetById(fill.InstrumentId);
+        if (instrument == null)
+        {
+            _logger.LogWarningWithCaller($"Cannot apply fill. Instrument with ID {fill.InstrumentId} not found.");
+            return currentElement;
+        }
+
+        if (currentElement.InstrumentId != fill.InstrumentId)
+        {
+            _logger.LogWarningWithCaller($"Cannot apply fill. Instrument IDs do not match.");
+            return currentElement;
+        }
+
         var fillQtyDecimal = fill.Quantity.ToDecimal();
         var fillPriceDecimal = fill.Price.ToDecimal();
+        // Determine the direction of the fill relative to the position
+        var effectiveFillQtyDecimal = fill.Side == Side.Buy ? fillQtyDecimal : -fillQtyDecimal;
         var currentQtyDecimal = currentElement.Quantity.ToDecimal();
         var currentAvgPriceDecimal = currentElement.AvgPrice.ToDecimal();
 
         decimal newQtyDecimal;
         decimal newAvgPriceDecimal;
-        decimal realizedPnlDelta = 0;
-
-        // Determine the direction of the fill relative to the position
-        var effectiveFillQtyDecimal = fill.Side == Side.Buy ? fillQtyDecimal : -fillQtyDecimal;
+        CurrencyAmount realizedPnlDelta = CurrencyAmount.FromDecimal(0m, instrument.DenominationCurrency);
 
         newQtyDecimal = currentQtyDecimal + effectiveFillQtyDecimal;
 
@@ -86,14 +100,16 @@ public class BookManager : IBookManager, IHostedService
         // realized pnl calculation
         if (Math.Sign(currentQtyDecimal) != Math.Sign(newQtyDecimal))
         {
-            realizedPnlDelta = currentQtyDecimal * (fillPriceDecimal - currentAvgPriceDecimal);
+            realizedPnlDelta = instrument.ValueInDenominationCurrency(fill.Price, currentElement.Quantity) - instrument.ValueInDenominationCurrency(currentElement.AvgPrice, currentElement.Quantity);
         }
         else
         {
-            var qtyDiff = Math.Abs(currentQtyDecimal) - Math.Abs(newQtyDecimal);
-            if (qtyDiff > 0)
+            var qtyDiffDecimal = Math.Abs(currentQtyDecimal) - Math.Abs(newQtyDecimal);
+            var qtyDiff = Quantity.FromDecimal(qtyDiffDecimal);
+            if (qtyDiffDecimal > 0)
             {
-                realizedPnlDelta = Math.Sign(newQtyDecimal) * qtyDiff * (fillPriceDecimal - currentAvgPriceDecimal);
+                realizedPnlDelta = instrument.ValueInDenominationCurrency(fill.Price, qtyDiff) - instrument.ValueInDenominationCurrency(currentElement.AvgPrice, qtyDiff);
+                realizedPnlDelta *= Math.Sign(newQtyDecimal);
             }
         }
 
@@ -105,17 +121,17 @@ public class BookManager : IBookManager, IHostedService
         }
         else if (isCurrentQtyFlat || Math.Sign(currentQtyDecimal) != Math.Sign(newQtyDecimal))
         {
-            // 2. 포지션이 새로 시작되거나 (isCurrentQtyFlat), 
-            //    포지션 방향이 반전되면 (Reversal), 평균 단가를 채결 가격으로 초기화
-            //    (참고: 기존 로직에서는 반전 시에도 '증가/감소' 체크가 있었는데, 일반적으로 반전 시 초기화하는 경우가 많아 이를 따름)
             newAvgPriceDecimal = fillPriceDecimal;
         }
-        else // 포지션 방향이 유지되며, 포지션이 Flat이 아님
+        else
         {
             if (Math.Abs(currentQtyDecimal) < Math.Abs(newQtyDecimal))
             {
                 // 3. 포지션이 증가하면 가중 평균 계산 (같은 방향 추가)
-                newAvgPriceDecimal = ((currentQtyDecimal * currentAvgPriceDecimal) + (effectiveFillQtyDecimal * fillPriceDecimal)) / newQtyDecimal;
+                var currentValue = instrument.ValueInDenominationCurrency(currentElement.AvgPrice, currentElement.Quantity);
+                var newValue = instrument.ValueInDenominationCurrency(fill.Price, fill.Quantity);
+                var multiplier = instrument is CryptoFuture cf ? cf.Multiplier : 1m;
+                newAvgPriceDecimal = (currentValue.Amount + newValue.Amount) / newQtyDecimal / multiplier;
             }
             else
             {
@@ -124,12 +140,14 @@ public class BookManager : IBookManager, IHostedService
             }
         }
 
+        var volume = instrument.ValueInDenominationCurrency(fill.Price, fill.Quantity);
+        volume = CurrencyAmount.FromDecimal(volume.Amount, Currency.USDT);
         var newBookelement = new BookElement(currentElement.BookName,
                                             currentElement.InstrumentId,
                                             Price.FromDecimal(newAvgPriceDecimal),
                                             Quantity.FromDecimal(newQtyDecimal),
                                             currentElement.RealizedPnL + realizedPnlDelta,
-                                            currentElement.VolumeInUsdt + (fillPriceDecimal * fillQtyDecimal),
+                                            currentElement.VolumeInUsdt + volume,
                                             fill.Timestamp
                                             );
         return newBookelement;

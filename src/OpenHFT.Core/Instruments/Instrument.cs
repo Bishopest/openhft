@@ -74,4 +74,12 @@ public abstract class Instrument
     }
 
     public override string ToString() => $"{Symbol} on {SourceExchange}";
+
+    /// currency to quote pnl 
+    public abstract Currency DenominationCurrency { get; }
+
+    public virtual CurrencyAmount ValueInDenominationCurrency(Price p, Quantity q)
+    {
+        return CurrencyAmount.FromDecimal(p.ToDecimal() * q.ToDecimal(), DenominationCurrency);
+    }
 }

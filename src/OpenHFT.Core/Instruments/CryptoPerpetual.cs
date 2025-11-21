@@ -1,4 +1,5 @@
 using System;
+using System.Reflection.Metadata.Ecma335;
 using OpenHFT.Core.Models;
 
 namespace OpenHFT.Core.Instruments;
@@ -20,7 +21,5 @@ public class CryptoPerpetual : CryptoFuture
     }
 
     public override ProductType ProductType => ProductType.PerpetualFuture;
-
     public override string ToString() => $"{Symbol}-PERP on {SourceExchange}";
-
 }
