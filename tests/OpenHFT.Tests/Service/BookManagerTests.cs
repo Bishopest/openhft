@@ -1,12 +1,15 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using NUnit.Framework;
 using OpenHFT.Core.Books;
+using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
@@ -60,11 +63,37 @@ public class BookManagerTests_Linear
         services.AddSingleton(mockRepo.Object);
 
         _serviceProvider = services.BuildServiceProvider();
+        // ------------------------------------
+        // 1. 테스트에 사용할 BookConfig 데이터 정의
+        // ------------------------------------
+        var testConfigs = new List<BookConfig>
+        {
+            new BookConfig {  BookName = "BTC", Hedgeable = true },
+            new BookConfig {  BookName = "ETH", Hedgeable = false }
+        };
+
+        // ------------------------------------
+        // 2. IOptions<List<BookConfig>> Mock 객체 생성
+        // ------------------------------------
+        var mockOptions = new Mock<IOptions<List<BookConfig>>>();
+
+        // 3. Mock의 .Value 속성이 위에서 정의한 testConfigs 리스트를 반환하도록 설정
+        mockOptions.SetupGet(o => o.Value).Returns(testConfigs);
+        var inMemorySettings = new Dictionary<string, string>
+        {
+            { "omsIdentifier", "test-oms" }
+        };
+
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(inMemorySettings)
+            .Build();
         _bookManager = new BookManager(
             _serviceProvider.GetRequiredService<ILogger<BookManager>>(),
             mockOrderRouter.Object,
             mockRepo.Object,
-            mockBookRepository.Object
+            mockBookRepository.Object,
+            configuration,
+            mockOptions.Object
         );
 
         // _elements에 현재 테스트의 Instrument에 대한 초기 BookElement만 추가합니다.

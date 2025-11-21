@@ -67,6 +67,7 @@ public class OmsConnectorService : IOmsConnectorService, IAsyncDisposable
     {
         if (_connections.TryGetValue(server.Url, out var connection))
         {
+            _logger.LogWarningWithCaller($"Sending command to {server.OmsIdentifier} {command} ({server.Url})");
             await connection.SendCommandAsync(command);
         }
         else

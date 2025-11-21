@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using OpenHFT.Core.Books;
+using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
@@ -12,6 +15,7 @@ namespace OpenHFT.Service;
 
 public class BookManager : IBookManager, IHostedService
 {
+    private readonly List<BookConfig> _bookConfigs;
     private readonly ILogger<BookManager> _logger;
     private readonly IOrderRouter _orderRouter;
     private readonly IInstrumentRepository _instrumentRepo;
@@ -19,25 +23,45 @@ public class BookManager : IBookManager, IHostedService
 
     // Key: InstrumentId
     private readonly ConcurrentDictionary<int, BookElement> _elements = new();
-    private readonly ConcurrentDictionary<string, Book> _books = new();
+    private readonly ConcurrentDictionary<string, BookInfo> _books = new();
     private readonly object _lock = new();
+    private readonly string _omsIdentifier;
 
     public event EventHandler<BookElement>? BookElementUpdated;
 
-    public BookManager(ILogger<BookManager> logger, IOrderRouter orderRouter, IInstrumentRepository instrumentRepo, IBookRepository bookRepository)
+    public BookManager(ILogger<BookManager> logger,
+                       IOrderRouter orderRouter,
+                       IInstrumentRepository instrumentRepo,
+                       IBookRepository bookRepository,
+                       IConfiguration config,
+                       IOptions<List<BookConfig>> bookConfigs)
     {
         _logger = logger;
         _orderRouter = orderRouter;
         _instrumentRepo = instrumentRepo;
         _bookRepository = bookRepository;
+        _bookConfigs = bookConfigs.Value;
+        _omsIdentifier = config["omsIdentifier"] ?? throw new ArgumentNullException("omsIdentifier");
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformationWithCaller("Book Manager is starting...");
-        await RestoreBookStateAsync();
+        InitializeBooksFromConfig(); // 1. 설정 파일로부터 Book 구조를 먼저 생성
+        await RestoreBookStateAsync(); // 2. DB로부터 BookElement 상태를 로드
         _orderRouter.OrderFilled += OnOrderFilled;
         _logger.LogInformationWithCaller("Book Manager started.");
+    }
+
+    private void InitializeBooksFromConfig()
+    {
+        _logger.LogInformationWithCaller("Initializing books from configuration...");
+        foreach (var config in _bookConfigs)
+        {
+            var book = new BookInfo(_omsIdentifier, config.BookName, config.Hedgeable);
+            _books[config.BookName] = book;
+            _logger.LogInformationWithCaller($"Initialized book '{book.Name}' from {_omsIdentifier}.");
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
@@ -48,7 +72,6 @@ public class BookManager : IBookManager, IHostedService
 
     private void OnOrderFilled(object? sender, Fill fill)
     {
-        // 이 체결이 관리 대상 Book에 속하는지 확인
         if (!_elements.TryGetValue(fill.InstrumentId, out var currentElement))
         {
             return;
@@ -153,25 +176,18 @@ public class BookManager : IBookManager, IHostedService
 
     private async Task RestoreBookStateAsync()
     {
-        _logger.LogInformationWithCaller("Restoring book state from repository...");
+        _logger.LogInformationWithCaller("Restoring book element states from repository...");
         var savedElements = await _bookRepository.LoadAllElementsAsync();
 
-        int count = 0;
         foreach (var element in savedElements)
         {
             _elements[element.InstrumentId] = element;
-
-            // Book 객체도 복원/생성
-            var book = _books.GetOrAdd(element.BookName, name => new Book(name, new[] { element.InstrumentId }));
-            (book.InstrumentIds as HashSet<int>)?.Add(element.InstrumentId); // Add to existing book
-
-            count++;
         }
-        _logger.LogInformationWithCaller($"Restored {count} book elements from repository.");
     }
 
     public BookElement GetBookElement(int instrumentId) => _elements.TryGetValue(instrumentId, out var element) ? element : default;
     public IReadOnlyCollection<BookElement> GetAllBookElements() => _elements.Values.ToList().AsReadOnly();
+    public IReadOnlyCollection<BookInfo> GetAllBookInfos() => _books.Values.ToList().AsReadOnly();
     public IReadOnlyCollection<BookElement> GetElementsByBookName(string bookName) =>
         _elements.Values.Where(e => e.BookName == bookName).ToList().AsReadOnly();
 }

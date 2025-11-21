@@ -45,6 +45,7 @@ dotnet publish "$PROJECT_CSPROJ_PATH" -c Release
 echo "📑 Copying data files..."
 mkdir -p "${LOCAL_PUBLISH_DIR_ABSOLUTE}/data"
 cp "${LOCAL_DATA_SOURCE_DIR}/instruments.csv" "${LOCAL_PUBLISH_DIR_ABSOLUTE}/data/"
+cp "${LOCAL_DATA_SOURCE_DIR}/book_info.json" "${LOCAL_PUBLISH_DIR_ABSOLUTE}/data/"
 
 # --- 6. 배포용 config.json 수정 ---
 echo "🔧 Modifying config.json for '$TARGET_ENV' environment..."

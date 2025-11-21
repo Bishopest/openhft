@@ -68,10 +68,30 @@ public class Program
             .ConfigureAppConfiguration((hostingContext, configBuilder) =>
             {
                 configBuilder.AddJsonFile("config.json", optional: false, reloadOnChange: false);
+                var tempConfig = configBuilder.Build();
+                var dataFolder = tempConfig["dataFolder"];
+                if (string.IsNullOrEmpty(dataFolder))
+                {
+                    throw new InvalidOperationException("'dataFolder' not found in config.json.");
+                }
+
+                var bookInfoPath = Path.Combine(dataFolder, "book_info.json");
+
+                // book_info.json을 설정 소스로 추가합니다.
+                configBuilder.AddJsonFile(bookInfoPath, optional: false, reloadOnChange: true);
             })
             .ConfigureServices((hostContext, services) =>
             {
                 var configuration = hostContext.Configuration;
+                var omsIdentifier = configuration["omsIdentifier"];
+                if (string.IsNullOrEmpty(omsIdentifier))
+                {
+                    throw new InvalidOperationException("'omsIdentifier' is not defined in config.json.");
+                }
+                var booksSection = configuration.GetSection(omsIdentifier);
+                services.Configure<List<BookConfig>>(booksSection);
+                services.AddSingleton(provider =>
+                provider.GetRequiredService<IOptions<List<BookConfig>>>().Value);
                 services.Configure<SubscriptionConfig>(hostContext.Configuration);
                 services.AddSingleton(provider => provider.GetRequiredService<IOptions<SubscriptionConfig>>().Value);
                 services.Configure<QuotingConfig>(hostContext.Configuration);
@@ -132,6 +152,7 @@ public class Program
                 services.AddSingleton<IWebSocketCommandHandler, GetInstanceStatusesCommandHandler>();
                 services.AddSingleton<IWebSocketCommandHandler, GetActiveOrdersCommandHandler>();
                 services.AddSingleton<IWebSocketCommandHandler, GetFillsCommandHandler>();
+                services.AddSingleton<IWebSocketCommandHandler, GetBookUpdateCommandHandler>();
                 services.AddSingleton<IWebSocketCommandRouter, WebSocketCommandRouter>();
                 services.AddSingleton<IFillRepository, SqliteFillRepository>();
                 services.AddSingleton<IBookRepository, SqliteBookRepository>();

@@ -22,6 +22,7 @@ public partial class Home : ComponentBase, IDisposable
     [Inject] private IInstrumentRepository InstrumentRepository { get; set; } = default!;
     [Inject] private IExchangeFeedManager FeedManager { get; set; } = default!;
     [Inject] private IOrderCacheService OrderCache { get; set; } = default!;
+    [Inject] private IBookCacheService BookCache { get; set; } = default!;
     [Inject] private ILogger<Home> Logger { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
     [Inject] private JsonSerializerOptions _jsonOptions { get; set; } = default!;
@@ -38,14 +39,6 @@ public partial class Home : ComponentBase, IDisposable
     protected override void OnInitialized()
     {
         var connectedOmsConfig = OmsConnector.GetConnectedServers();
-        foreach (var config in connectedOmsConfig)
-        {
-            _ = OmsConnector.SendCommandAsync(config, new GetInstanceStatusesCommand());
-            _ = OmsConnector.SendCommandAsync(config, new GetActiveOrdersCommand());
-            _ = OmsConnector.SendCommandAsync(config, new GetFillsCommand());
-        }
-
-        // Subscribe to the connector's status changes to keep our UI in sync
         OmsConnector.OnConnectionStatusChanged += HandleStatusChange;
         OmsConnector.OnMessageReceived += HandleRawMessage;
     }
@@ -100,15 +93,7 @@ public partial class Home : ComponentBase, IDisposable
     {
         if (_isDisposed) return;
 
-        if (args.Status == ConnectionStatus.Connected)
-        {
-            Logger.LogInformationWithCaller($"Connection to {args.Server.OmsIdentifier} established. Requesting initial state.");
-            // Request initial state from the newly connected server.
-            await OmsConnector.SendCommandAsync(args.Server, new GetInstanceStatusesCommand());
-            await OmsConnector.SendCommandAsync(args.Server, new GetActiveOrdersCommand());
-            await OmsConnector.SendCommandAsync(args.Server, new GetFillsCommand());
-        }
-        else if (args.Status == ConnectionStatus.Disconnected || args.Status == ConnectionStatus.Error)
+        if (args.Status == ConnectionStatus.Disconnected || args.Status == ConnectionStatus.Error)
         {
             // If a connection is lost, remove instances belonging to that OMS.
             _activeInstances.RemoveAll(i => i.OmsIdentifier == args.Server.OmsIdentifier);

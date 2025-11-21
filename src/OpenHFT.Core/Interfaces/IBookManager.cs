@@ -9,8 +9,8 @@ public interface IBookManager
     /// Fired whenever a BookElement's state is updated.
     /// </summary>
     event EventHandler<BookElement> BookElementUpdated;
-
     BookElement GetBookElement(int instrumentId);
     IReadOnlyCollection<BookElement> GetAllBookElements();
+    IReadOnlyCollection<BookInfo> GetAllBookInfos();
     IReadOnlyCollection<BookElement> GetElementsByBookName(string bookName);
 }

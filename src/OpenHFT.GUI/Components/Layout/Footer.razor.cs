@@ -2,7 +2,9 @@ using System;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
 using OpenHFT.Core.Configuration;
+using OpenHFT.Core.Utils;
 using OpenHFT.GUI.Services;
+using OpenHFT.Oms.Api.WebSocket;
 
 namespace OpenHFT.GUI.Components.Layout;
 
@@ -12,6 +14,8 @@ public partial class Footer : ComponentBase, IDisposable
     private IConfiguration Configuration { get; set; } = default!;
     [Inject]
     private IOmsConnectorService OmsConnector { get; set; } = default!;
+    [Inject]
+    private ILogger<Footer> Logger { get; set; } = default!;
 
     private List<OmsServerConfig> _omsServers = new();
 
@@ -49,6 +53,17 @@ public partial class Footer : ComponentBase, IDisposable
     private async void HandleStatusChange((OmsServerConfig Server, ConnectionStatus Status) args)
     {
         _statuses[args.Server.OmsIdentifier] = args.Status;
+
+        if (args.Status == ConnectionStatus.Connected)
+        {
+            Logger.LogInformationWithCaller($"Connection to {args.Server.OmsIdentifier} established. Requesting initial state.");
+            // Request initial state from the newly connected server.
+            await OmsConnector.SendCommandAsync(args.Server, new GetInstanceStatusesCommand());
+            await OmsConnector.SendCommandAsync(args.Server, new GetActiveOrdersCommand());
+            await OmsConnector.SendCommandAsync(args.Server, new GetFillsCommand());
+            await OmsConnector.SendCommandAsync(args.Server, new GetBookUpdateCommand());
+        }
+
         await InvokeAsync(StateHasChanged);
     }
 

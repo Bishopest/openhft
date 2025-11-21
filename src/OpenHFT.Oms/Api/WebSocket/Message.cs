@@ -23,6 +23,7 @@ public record UpdateParametersCommand(
 public record GetInstanceStatusesCommand() : WebSocketMessage("GET_INSTANCE_STATUSES");
 public record GetActiveOrdersCommand() : WebSocketMessage("GET_ACTIVE_ORDERS");
 public record GetFillsCommand() : WebSocketMessage("GET_FILLS");
+public record GetBookUpdateCommand() : WebSocketMessage("GET_BOOK_UPDATE");
 
 // --- Server -> Client (Events / Responses) ---
 public record AcknowledgmentEvent(
@@ -89,7 +90,8 @@ public record BookUpdateEvent(
 
 public record BookUpdatePayload(
     [property: JsonPropertyName("omsIdentifier")] string OmsIdentifier,
-    [property: JsonPropertyName("bookElement")] BookElement Element
+    [property: JsonPropertyName("bookInfo")] IEnumerable<BookInfo> BookInfos,
+    [property: JsonPropertyName("bookElement")] IEnumerable<BookElement> Elements
 );
 
 public record ErrorEvent(

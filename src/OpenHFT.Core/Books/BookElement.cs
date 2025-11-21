@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 using OpenHFT.Core.Models;
 
 namespace OpenHFT.Core.Books;
@@ -14,13 +15,14 @@ public readonly struct BookElement : IEquatable<BookElement>
     public readonly CurrencyAmount VolumeInUsdt;
     public readonly long LastUpdateTime;
 
+    [JsonConstructor]
     public BookElement(string bookName,
-                       int instrumentId,
-                       Price avgPrice,
-                       Quantity size,
-                       CurrencyAmount realizedPnL,
-                       CurrencyAmount volumeInUsdt,
-                       long lastUpdateTime)
+                           int instrumentId,
+                           Price avgPrice,
+                           Quantity size,
+                           CurrencyAmount realizedPnL,
+                           CurrencyAmount volumeInUsdt,
+                           long lastUpdateTime)
     {
         BookName = bookName;
         InstrumentId = instrumentId;

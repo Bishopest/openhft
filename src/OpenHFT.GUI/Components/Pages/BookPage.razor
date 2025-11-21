@@ -1,0 +1,68 @@
+﻿@page "/book"
+@namespace OpenHFT.GUI.Components.Pages
+@using OpenHFT.Core.Books
+@using OpenHFT.Core.Models
+
+<PageTitle>Book</PageTitle>
+
+<MudPaper Class="pa-4 d-flex flex-column flex-grow-1" Elevation="2" Style="height: 90vh;">
+    <MudText Typo="Typo.h4" GutterBottom="true">Books</MudText>
+    
+    <div class="flex-grow-1" style="overflow-y: auto; min-height: 0;">
+        <MudTable Items="@_bookNames" T="string" Hover="true">
+            <HeaderContent>
+                <MudTh>Book Name</MudTh>
+                <MudTh>Total PnL</MudTh>
+                <MudTh>Total Volume</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Book Name">@context</MudTd>
+                <MudTd DataLabel="Total PnL">
+                    @* Calculate total PnL for the book *@
+                    @{
+                        var pnl = BookCache.GetElementsByBookName(context).Sum(e => e.RealizedPnL.Amount);
+                    }
+                    <span class="@(pnl >= 0 ? "mud-theme-success-text" : "mud-theme-error-text")">@pnl.ToString("N2")</span>
+                </MudTd>
+                <MudTd DataLabel="Total Volume">
+                    @BookCache.GetElementsByBookName(context).Sum(e => e.VolumeInUsdt.Amount).ToString("N0")
+                </MudTd>
+            </RowTemplate>
+            
+            @* --- THIS IS THE EXPANDABLE ROW TEMPLATE --- *@
+            <ChildRowContent>
+                <MudTr>
+                    <td colspan="4">
+                        <MudCard Outlined="true">
+                            <MudCardContent>
+                                <MudSimpleTable Dense="true" Hover="true">
+                                    <thead>
+                                        <tr>
+                                            <th>Instrument</th>
+                                            <th>Position Size</th>
+                                            <th>Avg. Entry Price</th>
+                                            <th>Realized PnL</th>
+                                            <th>Volume (USDT)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var element in BookCache.GetElementsByBookName(context).OrderBy(e => GetSymbolFromId(e.InstrumentId)))
+                                        {
+                                            <tr>
+                                                <td>@GetSymbolFromId(element.InstrumentId)</td>
+                                                <td>@element.Size.ToDecimal()</td>
+                                                <td>@element.AvgPrice.ToDecimal()</td>
+                                                <td>@element.RealizedPnL.Amount.ToString("N2")</td>
+                                                <td>@element.VolumeInUsdt.Amount.ToString("N0")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            </MudCardContent>
+                        </MudCard>
+                    </td>
+                </MudTr>
+            </ChildRowContent>
+        </MudTable>
+    </div>
+</MudPaper>
