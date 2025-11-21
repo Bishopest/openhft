@@ -120,6 +120,10 @@ public class Program
                 services.AddSingleton<IOrderGatewayRegistry, OrderGatewayRegistry>();
                 services.AddSingleton<IOrderFactory, OrderFactory>();
                 services.AddSingleton<QuoteDebugger>();
+                services.AddSingleton<BookManager>();
+                services.AddSingleton<BookManager>();
+                services.AddSingleton<IBookManager>(p => p.GetRequiredService<BookManager>());
+                services.AddHostedService(p => p.GetRequiredService<BookManager>());
                 services.AddSingleton<WebSocketChannel>();
                 services.AddSingleton<IWebSocketChannel>(provider =>
                     provider.GetRequiredService<WebSocketChannel>());
@@ -130,6 +134,7 @@ public class Program
                 services.AddSingleton<IWebSocketCommandHandler, GetFillsCommandHandler>();
                 services.AddSingleton<IWebSocketCommandRouter, WebSocketCommandRouter>();
                 services.AddSingleton<IFillRepository, SqliteFillRepository>();
+                services.AddSingleton<IBookRepository, SqliteBookRepository>();
 
                 // --- 3-1. Adapter 및 RestApiClient 등록 ---
                 var subscriptionTupLists = new List<(string Exchange, string ProductType)>();
@@ -186,6 +191,7 @@ public class Program
                 services.AddHostedService<WebSocketHost>();
                 services.AddHostedService<WebSocketNotificationService>();
                 services.AddHostedService<FillPersistenceService>();
+                services.AddHostedService<BookPersistenceService>();
             }
         );
 

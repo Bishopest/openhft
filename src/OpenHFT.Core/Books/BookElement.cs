@@ -9,7 +9,7 @@ public readonly struct BookElement : IEquatable<BookElement>
     public readonly int InstrumentId;
     public readonly Price AvgPrice;
     // + : buy, - : sell
-    public readonly Quantity Quantity;
+    public readonly Quantity Size;
     public readonly CurrencyAmount RealizedPnL;
     public readonly CurrencyAmount VolumeInUsdt;
     public readonly long LastUpdateTime;
@@ -17,7 +17,7 @@ public readonly struct BookElement : IEquatable<BookElement>
     public BookElement(string bookName,
                        int instrumentId,
                        Price avgPrice,
-                       Quantity quantity,
+                       Quantity size,
                        CurrencyAmount realizedPnL,
                        CurrencyAmount volumeInUsdt,
                        long lastUpdateTime)
@@ -25,7 +25,7 @@ public readonly struct BookElement : IEquatable<BookElement>
         BookName = bookName;
         InstrumentId = instrumentId;
         AvgPrice = avgPrice;
-        Quantity = quantity;
+        Size = size;
         RealizedPnL = realizedPnL;
         VolumeInUsdt = volumeInUsdt;
         LastUpdateTime = lastUpdateTime;
@@ -39,7 +39,7 @@ public readonly struct BookElement : IEquatable<BookElement>
         return BookName == other.BookName &&
                InstrumentId == other.InstrumentId &&
                AvgPrice.Equals(other.AvgPrice) &&
-               Quantity.Equals(other.Quantity) &&
+               Size.Equals(other.Size) &&
                RealizedPnL.Equals(other.RealizedPnL) &&
                VolumeInUsdt.Equals(other.VolumeInUsdt);
     }
@@ -50,7 +50,7 @@ public readonly struct BookElement : IEquatable<BookElement>
         hash.Add(BookName);
         hash.Add(InstrumentId);
         hash.Add(AvgPrice);
-        hash.Add(Quantity);
+        hash.Add(Size);
         hash.Add(RealizedPnL);
         hash.Add(VolumeInUsdt);
         return hash.ToHashCode();

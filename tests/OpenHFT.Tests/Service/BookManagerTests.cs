@@ -50,6 +50,8 @@ public class BookManagerTests_Linear
         services.AddLogging(b => b.AddConsole());
 
         var mockOrderRouter = new Mock<IOrderRouter>();
+        var mockBookRepository = new Mock<IBookRepository>();
+
         // IInstrumentRepository는 Mocking하여 테스트 격리성을 높입니다.
         var mockRepo = new Mock<IInstrumentRepository>();
         mockRepo.Setup(r => r.GetById(_instrument.InstrumentId)).Returns(_instrument);
@@ -61,7 +63,9 @@ public class BookManagerTests_Linear
         _bookManager = new BookManager(
             _serviceProvider.GetRequiredService<ILogger<BookManager>>(),
             mockOrderRouter.Object,
-            mockRepo.Object);
+            mockRepo.Object,
+            mockBookRepository.Object
+        );
 
         // _elements에 현재 테스트의 Instrument에 대한 초기 BookElement만 추가합니다.
         var elementsField = typeof(BookManager).GetField("_elements", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -98,7 +102,7 @@ public class BookManagerTests_Linear
         // Assert
         var element = _bookManager.GetBookElement(_instrument.InstrumentId);
         var multiplier = _instrument is CryptoFuture cf ? cf.Multiplier : 1m;
-        element.Quantity.ToDecimal().Should().Be(10m);
+        element.Size.ToDecimal().Should().Be(10m);
         element.AvgPrice.ToDecimal().Should().Be(100m);
         element.RealizedPnL.Amount.Should().Be(0m * multiplier);
         element.VolumeInUsdt.Amount.Should().Be(1000m * multiplier); // 100 * 10
@@ -119,7 +123,7 @@ public class BookManagerTests_Linear
 
         // Assert
         var element = _bookManager.GetBookElement(_instrument.InstrumentId);
-        element.Quantity.ToDecimal().Should().Be(20m);
+        element.Size.ToDecimal().Should().Be(20m);
         element.AvgPrice.ToDecimal().Should().Be(95m);
         element.RealizedPnL.Amount.Should().Be(0m);
     }
@@ -140,7 +144,7 @@ public class BookManagerTests_Linear
         // Assert
         var element = _bookManager.GetBookElement(_instrument.InstrumentId);
         var multiplier = _instrument is CryptoFuture cf ? cf.Multiplier : 1m;
-        element.Quantity.ToDecimal().Should().Be(6m); // 10 - 4
+        element.Size.ToDecimal().Should().Be(6m); // 10 - 4
         element.AvgPrice.ToDecimal().Should().Be(100m, "Avg price should not change on partial close.");
         element.RealizedPnL.Amount.Should().Be(40m * multiplier);
     }
@@ -162,7 +166,7 @@ public class BookManagerTests_Linear
         // Assert
         var element = _bookManager.GetBookElement(_instrument.InstrumentId);
         var multiplier = _instrument is CryptoFuture cf ? cf.Multiplier : 1m;
-        element.Quantity.ToDecimal().Should().Be(-5m); // 10 - 15
+        element.Size.ToDecimal().Should().Be(-5m); // 10 - 15
         element.AvgPrice.ToDecimal().Should().Be(120m, "Avg price should reset to the flipping trade's price.");
         element.RealizedPnL.Amount.Should().Be(200m * multiplier);
     }
@@ -179,7 +183,7 @@ public class BookManagerTests_Linear
         // Assert
         var element = _bookManager.GetBookElement(_instrument.InstrumentId);
         // Element should still be in its initial zero state
-        element.Quantity.ToTicks().Should().Be(0);
+        element.Size.ToTicks().Should().Be(0);
 
         // Event should not have been fired
         // This requires mocking the event handler subscription, which is more complex.

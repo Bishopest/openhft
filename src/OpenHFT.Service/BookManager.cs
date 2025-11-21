@@ -15,6 +15,8 @@ public class BookManager : IBookManager, IHostedService
     private readonly ILogger<BookManager> _logger;
     private readonly IOrderRouter _orderRouter;
     private readonly IInstrumentRepository _instrumentRepo;
+    private readonly IBookRepository _bookRepository;
+
     // Key: InstrumentId
     private readonly ConcurrentDictionary<int, BookElement> _elements = new();
     private readonly ConcurrentDictionary<string, Book> _books = new();
@@ -22,24 +24,20 @@ public class BookManager : IBookManager, IHostedService
 
     public event EventHandler<BookElement>? BookElementUpdated;
 
-    public BookManager(ILogger<BookManager> logger, IOrderRouter orderRouter, IInstrumentRepository instrumentRepo)
+    public BookManager(ILogger<BookManager> logger, IOrderRouter orderRouter, IInstrumentRepository instrumentRepo, IBookRepository bookRepository)
     {
         _logger = logger;
         _orderRouter = orderRouter;
         _instrumentRepo = instrumentRepo;
-
-        // db 로드 부분
-        InitializeBooks();
+        _bookRepository = bookRepository;
     }
 
-    private void InitializeBooks()
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-    }
-
-    public Task StartAsync(CancellationToken cancellationToken)
-    {
+        _logger.LogInformationWithCaller("Book Manager is starting...");
+        await RestoreBookStateAsync();
         _orderRouter.OrderFilled += OnOrderFilled;
-        return Task.CompletedTask;
+        _logger.LogInformationWithCaller("Book Manager started.");
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
@@ -84,7 +82,7 @@ public class BookManager : IBookManager, IHostedService
         var fillPriceDecimal = fill.Price.ToDecimal();
         // Determine the direction of the fill relative to the position
         var effectiveFillQtyDecimal = fill.Side == Side.Buy ? fillQtyDecimal : -fillQtyDecimal;
-        var currentQtyDecimal = currentElement.Quantity.ToDecimal();
+        var currentQtyDecimal = currentElement.Size.ToDecimal();
         var currentAvgPriceDecimal = currentElement.AvgPrice.ToDecimal();
 
         decimal newQtyDecimal;
@@ -100,7 +98,7 @@ public class BookManager : IBookManager, IHostedService
         // realized pnl calculation
         if (Math.Sign(currentQtyDecimal) != Math.Sign(newQtyDecimal))
         {
-            realizedPnlDelta = instrument.ValueInDenominationCurrency(fill.Price, currentElement.Quantity) - instrument.ValueInDenominationCurrency(currentElement.AvgPrice, currentElement.Quantity);
+            realizedPnlDelta = instrument.ValueInDenominationCurrency(fill.Price, currentElement.Size) - instrument.ValueInDenominationCurrency(currentElement.AvgPrice, currentElement.Size);
         }
         else
         {
@@ -128,7 +126,7 @@ public class BookManager : IBookManager, IHostedService
             if (Math.Abs(currentQtyDecimal) < Math.Abs(newQtyDecimal))
             {
                 // 3. 포지션이 증가하면 가중 평균 계산 (같은 방향 추가)
-                var currentValue = instrument.ValueInDenominationCurrency(currentElement.AvgPrice, currentElement.Quantity);
+                var currentValue = instrument.ValueInDenominationCurrency(currentElement.AvgPrice, currentElement.Size);
                 var newValue = instrument.ValueInDenominationCurrency(fill.Price, fill.Quantity);
                 var multiplier = instrument is CryptoFuture cf ? cf.Multiplier : 1m;
                 newAvgPriceDecimal = (currentValue.Amount + newValue.Amount) / newQtyDecimal / multiplier;
@@ -151,6 +149,25 @@ public class BookManager : IBookManager, IHostedService
                                             fill.Timestamp
                                             );
         return newBookelement;
+    }
+
+    private async Task RestoreBookStateAsync()
+    {
+        _logger.LogInformationWithCaller("Restoring book state from repository...");
+        var savedElements = await _bookRepository.LoadAllElementsAsync();
+
+        int count = 0;
+        foreach (var element in savedElements)
+        {
+            _elements[element.InstrumentId] = element;
+
+            // Book 객체도 복원/생성
+            var book = _books.GetOrAdd(element.BookName, name => new Book(name, new[] { element.InstrumentId }));
+            (book.InstrumentIds as HashSet<int>)?.Add(element.InstrumentId); // Add to existing book
+
+            count++;
+        }
+        _logger.LogInformationWithCaller($"Restored {count} book elements from repository.");
     }
 
     public BookElement GetBookElement(int instrumentId) => _elements.TryGetValue(instrumentId, out var element) ? element : default;
