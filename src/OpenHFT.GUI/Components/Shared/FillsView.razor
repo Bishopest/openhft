@@ -18,6 +18,7 @@
                 <MudTh>Side</MudTh>
                 <MudTh>Price</MudTh>
                 <MudTh>Qty</MudTh>
+                <MudTh>BookName</MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Time">
@@ -29,6 +30,7 @@
                     @context.Side</MudTd>
                 <MudTd DataLabel="Price">@context.Price.ToDecimal()</MudTd>
                 <MudTd DataLabel="Qty">@context.Quantity.ToDecimal()</MudTd>
+                <MudTd DataLabel="BookName">@context.BookName</MudTd>
             </RowTemplate>
         </MudTable>
     </div>

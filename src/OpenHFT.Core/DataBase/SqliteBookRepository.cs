@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Books;
 using OpenHFT.Core.Interfaces;
+using OpenHFT.Core.Utils;
 
 namespace OpenHFT.Core.DataBase;
 
@@ -82,8 +83,32 @@ public class SqliteBookRepository : IBookRepository
         try
         {
             await using var db = new BookDbContext(_databaseFile);
-            return (await db.BookElements.AsNoTracking().ToListAsync())
-                         .Select(dbo => dbo.ToBookElement());
+
+            // 1. DB에서 DBO 리스트 가져오기
+            var dbos = await db.BookElements.AsNoTracking().ToListAsync();
+
+            // 2. 메모리 내에서 변환 수행 (여기서 에러가 나는지 확인)
+            var result = new List<BookElement>();
+            foreach (var dbo in dbos)
+            {
+                try
+                {
+                    result.Add(dbo.ToBookElement());
+                }
+                catch (Exception ex)
+                {
+                    // ★ 여기서 어떤 데이터 때문에 죽는지 로그로 확인 ★
+                    _logger.LogErrorWithCaller(ex, $"Failed to convert DBO to BookElement. InstrumentId: {dbo.InstrumentId}, Currency: {dbo.RealizedPnLCurrency}");
+                    // 필요하다면 여기서 throw를 다시 하거나, 잘못된 데이터는 스킵하고 진행
+                }
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogErrorWithCaller(ex, "Error loading book elements from DB.");
+            return Enumerable.Empty<BookElement>();
         }
         finally
         {

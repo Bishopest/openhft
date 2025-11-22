@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 using OpenHFT.Core.Instruments;
 
 namespace OpenHFT.Core.Models;
@@ -21,7 +22,8 @@ public readonly struct CurrencyAmount : IEquatable<CurrencyAmount>
     public readonly decimal Amount { get; }
 
     // Private constructor ensures creation only through factory methods
-    private CurrencyAmount(decimal amount, Currency currency)
+    [JsonConstructor]
+    public CurrencyAmount(decimal amount, Currency currency)
     {
         Currency = currency;
         Amount = amount;

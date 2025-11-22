@@ -20,6 +20,7 @@ public sealed class SingleOrderQuoter : IQuoter
     private readonly Side _side;
     private readonly Instrument _instrument;
     private readonly IOrderFactory _orderFactory; // To create IOrder objects
+    private readonly string _bookName;
     private readonly object _stateLock = new();
 
     private IOrder? _activeOrder;
@@ -36,12 +37,14 @@ public sealed class SingleOrderQuoter : IQuoter
         ILogger logger,
         Side side,
         Instrument instrument,
-        IOrderFactory orderFactory)
+        IOrderFactory orderFactory,
+        string bookName)
     {
         _logger = logger;
         _side = side;
         _instrument = instrument;
         _orderFactory = orderFactory;
+        _bookName = bookName;
     }
 
     public async Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, CancellationToken cancellationToken = default)
@@ -103,7 +106,7 @@ public sealed class SingleOrderQuoter : IQuoter
     {
         // Use the factory and builder to create a new order object.
         // The builder logic is now encapsulated elsewhere.
-        var orderBuilder = new OrderBuilder(_orderFactory, _instrument.InstrumentId, _side);
+        var orderBuilder = new OrderBuilder(_orderFactory, _instrument.InstrumentId, _side, _bookName);
         var newOrder = orderBuilder
             .WithPrice(quote.Price)
             .WithQuantity(quote.Size)
@@ -191,6 +194,4 @@ public sealed class SingleOrderQuoter : IQuoter
             }
         }
     }
-
-
 }

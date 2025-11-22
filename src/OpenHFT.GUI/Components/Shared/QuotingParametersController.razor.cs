@@ -103,6 +103,8 @@ public partial class QuotingParametersController
         _selectedInstrument = _availableInstruments.FirstOrDefault();
         _availableOmsServers = Configuration.GetSection("oms").Get<List<OmsServerConfig>>() ?? new List<OmsServerConfig>();
         _selectedOmsIdentifier = _availableOmsServers.FirstOrDefault()?.OmsIdentifier;
+
+        _ = UpdateAvailableBooks();
     }
 
     /// <summary>

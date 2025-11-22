@@ -62,7 +62,7 @@ public class OrderUpdateDistributorTests
         _serviceProvider.GetRequiredService<IFeedHandler>();
 
         const long testClientOrderId = 12345L;
-        _testOrder = new TestOrder(testClientOrderId, 101, Side.Buy, orderRouter);
+        _testOrder = new TestOrder(testClientOrderId, 101, "test", Side.Buy, orderRouter);
 
         var ringBufer = disruptor.Start();
 
@@ -93,16 +93,18 @@ public class TestOrder : IOrder, IOrderUpdatable
     private readonly IOrderRouter _router;
     public long ClientOrderId { get; }
     public int InstrumentId { get; }
+    public string BookName { get; }
     public Side Side { get; }
 
     // --- Public properties to inspect results ---
     public OrderStatusReport? LastReceivedReport { get; private set; }
     public int ReportsReceivedCount { get; private set; }
 
-    public TestOrder(long clientOrderId, int instrumentId, Side side, IOrderRouter router)
+    public TestOrder(long clientOrderId, int instrumentId, string bookName, Side side, IOrderRouter router)
     {
         ClientOrderId = clientOrderId;
         InstrumentId = instrumentId;
+        BookName = bookName;
         Side = side;
         _router = router;
 
@@ -132,7 +134,7 @@ public class TestOrder : IOrder, IOrderUpdatable
     public bool IsPostOnly => true;
 
     public event EventHandler<OrderStatusReport>? StatusChanged;
-    public event EventHandler<Fill> OrderFilled;
+    public event EventHandler<Fill>? OrderFilled;
 
     public Task SubmitAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task ReplaceAsync(Price price, OrderType orderType, CancellationToken cancellationToken = default) => Task.CompletedTask;

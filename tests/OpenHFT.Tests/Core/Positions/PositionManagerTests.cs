@@ -106,7 +106,7 @@ public class PositionManagerTests
         var initialManager = _serviceProvider.GetRequiredService<PositionManager>();
 
         // Order 객체 생성 (자동으로 OrderRouter에 등록됨)
-        var order = _orderFactory.Create(instrument.InstrumentId, Side.Buy);
+        var order = _orderFactory.Create(instrument.InstrumentId, Side.Buy, "test");
 
         // 가짜 체결 리포트 2개 생성
         var fillReport1 = new OrderStatusReport(

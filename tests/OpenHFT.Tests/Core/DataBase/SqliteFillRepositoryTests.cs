@@ -51,7 +51,7 @@ namespace OpenHFT.Tests.Core.DataBase
         public async Task AddFill_ShouldStoreFillInDatabase()
         {
             // Arrange
-            var fill = new Fill(1001, 12345, "EXCH001", "EXEC001", Side.Buy, Price.FromDecimal(50000m), Quantity.FromDecimal(1.5m), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            var fill = new Fill(1001, "test", 12345, "EXCH001", "EXEC001", Side.Buy, Price.FromDecimal(50000m), Quantity.FromDecimal(1.5m), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
             // Act
             await _repository.AddFillAsync(fill);
@@ -77,9 +77,9 @@ namespace OpenHFT.Tests.Core.DataBase
             var today = DateTime.UtcNow;
             var yesterday = today.AddDays(-1);
 
-            var fillToday1 = new Fill(1001, 1, "E1", "X1", Side.Buy, Price.FromDecimal(100), Quantity.FromDecimal(1), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-            var fillToday2 = new Fill(1002, 2, "E2", "X2", Side.Sell, Price.FromDecimal(200), Quantity.FromDecimal(2), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-            var fillYesterday = new Fill(1001, 3, "E3", "X3", Side.Buy, Price.FromDecimal(300), Quantity.FromDecimal(3), DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds());
+            var fillToday1 = new Fill(1001, "test", 1, "E1", "X1", Side.Buy, Price.FromDecimal(100), Quantity.FromDecimal(1), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            var fillToday2 = new Fill(1002, "test", 2, "E2", "X2", Side.Sell, Price.FromDecimal(200), Quantity.FromDecimal(2), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            var fillYesterday = new Fill(1001, "test", 3, "E3", "X3", Side.Buy, Price.FromDecimal(300), Quantity.FromDecimal(3), DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds());
 
             await _repository.AddFillAsync(fillToday1);
             await _repository.AddFillAsync(fillToday2);
@@ -105,9 +105,9 @@ namespace OpenHFT.Tests.Core.DataBase
         {
             // Arrange
             var today = DateTime.UtcNow;
-            var fill1_Inst1001 = new Fill(1001, 1, "E1", "X1", Side.Buy, Price.FromDecimal(100), Quantity.FromDecimal(1), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-            var fill2_Inst1002 = new Fill(1002, 2, "E2", "X2", Side.Sell, Price.FromDecimal(200), Quantity.FromDecimal(2), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-            var fill3_Inst1001 = new Fill(1001, 3, "E3", "X3", Side.Buy, Price.FromDecimal(300), Quantity.FromDecimal(3), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            var fill1_Inst1001 = new Fill(1001, "test", 1, "E1", "X1", Side.Buy, Price.FromDecimal(100), Quantity.FromDecimal(1), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            var fill2_Inst1002 = new Fill(1002, "test", 2, "E2", "X2", Side.Sell, Price.FromDecimal(200), Quantity.FromDecimal(2), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            var fill3_Inst1001 = new Fill(1001, "test", 3, "E3", "X3", Side.Buy, Price.FromDecimal(300), Quantity.FromDecimal(3), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
             await _repository.AddFillAsync(fill1_Inst1001);
             await _repository.AddFillAsync(fill2_Inst1002);

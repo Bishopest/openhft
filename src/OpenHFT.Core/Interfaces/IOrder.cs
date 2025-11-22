@@ -6,6 +6,8 @@ namespace OpenHFT.Core.Interfaces;
 public interface IOrder
 {
     public int InstrumentId { get; }
+
+    public string BookName { get; }
     /// <summary>
     /// The unique client-side identifier for this order, assigned upon creation.
     /// </summary>

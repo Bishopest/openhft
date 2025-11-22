@@ -22,8 +22,8 @@ public class BookManager : IBookManager, IHostedService
     private readonly IBookRepository _bookRepository;
 
     // Key: InstrumentId
-    private readonly ConcurrentDictionary<int, BookElement> _elements = new();
-    private readonly ConcurrentDictionary<string, BookInfo> _books = new();
+    private readonly ConcurrentDictionary<(string BookName, int InstrumentId), BookElement> _elements = new();
+    private readonly ConcurrentDictionary<string, BookInfo> _bookInfos = new();
     private readonly object _lock = new();
     private readonly string _omsIdentifier;
 
@@ -59,7 +59,7 @@ public class BookManager : IBookManager, IHostedService
         foreach (var config in _bookConfigs)
         {
             var book = new BookInfo(_omsIdentifier, config.BookName, config.Hedgeable);
-            _books[config.BookName] = book;
+            _bookInfos[config.BookName] = book;
             _logger.LogInformationWithCaller($"Initialized book '{book.Name}' from {_omsIdentifier}.");
         }
     }
@@ -72,17 +72,40 @@ public class BookManager : IBookManager, IHostedService
 
     private void OnOrderFilled(object? sender, Fill fill)
     {
-        if (!_elements.TryGetValue(fill.InstrumentId, out var currentElement))
+        var key = (fill.BookName, fill.InstrumentId);
+
+        var instrument = _instrumentRepo.GetById(fill.InstrumentId);
+        if (instrument == null)
         {
+            _logger.LogWarningWithCaller($"Cannot process fill for unknown instrument ID {fill.InstrumentId}.");
             return;
         }
 
         lock (_lock)
         {
-            var currentBookEle = _elements[fill.InstrumentId];
-            var newBookelement = ApplyFill(currentBookEle, fill);
-            _elements[fill.InstrumentId] = newBookelement;
-            BookElementUpdated?.Invoke(this, newBookelement);
+            // 2. 현재 상태 가져오기 또는 초기화
+            if (!_elements.TryGetValue(key, out var currentElement))
+            {
+                // 초기 BookElement 생성 (Zero State)
+                currentElement = new BookElement(
+                    fill.BookName,
+                    fill.InstrumentId,
+                    Price.FromDecimal(0m),
+                    Quantity.FromDecimal(0m),
+                    CurrencyAmount.FromDecimal(0m, instrument.DenominationCurrency),
+                    CurrencyAmount.FromDecimal(0m, Currency.USDT), // Volume is usually in USDT or base currency
+                    0 // LastUpdateTime
+                );
+
+                _logger.LogInformationWithCaller($"Creating new BookElement for {key} triggered by fill.");
+            }
+
+            // 3. 체결 데이터 반영 (ApplyFill은 순수 함수)
+            var newBookElement = ApplyFill(currentElement, fill);
+
+            // 4. 저장 및 이벤트 발생
+            _elements[key] = newBookElement;
+            BookElementUpdated?.Invoke(this, newBookElement);
         }
     }
 
@@ -181,13 +204,17 @@ public class BookManager : IBookManager, IHostedService
 
         foreach (var element in savedElements)
         {
-            _elements[element.InstrumentId] = element;
+            var key = (element.BookName, element.InstrumentId);
+            _elements[key] = element;
         }
     }
 
-    public BookElement GetBookElement(int instrumentId) => _elements.TryGetValue(instrumentId, out var element) ? element : default;
+    public BookElement GetBookElement(string bookName, int instrumentId)
+    {
+        return _elements.TryGetValue((bookName, instrumentId), out var element) ? element : default;
+    }
     public IReadOnlyCollection<BookElement> GetAllBookElements() => _elements.Values.ToList().AsReadOnly();
-    public IReadOnlyCollection<BookInfo> GetAllBookInfos() => _books.Values.ToList().AsReadOnly();
+    public IReadOnlyCollection<BookInfo> GetAllBookInfos() => _bookInfos.Values.ToList().AsReadOnly();
     public IReadOnlyCollection<BookElement> GetElementsByBookName(string bookName) =>
         _elements.Values.Where(e => e.BookName == bookName).ToList().AsReadOnly();
 }

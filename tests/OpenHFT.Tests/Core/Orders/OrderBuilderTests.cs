@@ -29,7 +29,7 @@ public class OrderBuilderTests
 
     private Order CreateOrderShell()
     {
-        return new Order(InstrumentId, TestSide, _mockOrderRouter.Object, _mockOrderGateway.Object, _logger);
+        return new Order(InstrumentId, TestSide, "test", _mockOrderRouter.Object, _mockOrderGateway.Object, _logger);
     }
 
     [Test]
@@ -42,9 +42,9 @@ public class OrderBuilderTests
 
         // The factory will return a real, but basic, Order object.
         var orderShell = CreateOrderShell();
-        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide)).Returns(orderShell);
+        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test")).Returns(orderShell);
 
-        var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide);
+        var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide, "test");
 
         // Act
         var finalOrder = builder
@@ -72,8 +72,8 @@ public class OrderBuilderTests
     {
         // Arrange
         var orderShell = CreateOrderShell();
-        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide)).Returns(orderShell);
-        var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide);
+        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test")).Returns(orderShell);
+        var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide, "test");
 
         // Act & Assert
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -88,8 +88,8 @@ public class OrderBuilderTests
     {
         // Arrange
         var orderShell = CreateOrderShell();
-        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide)).Returns(orderShell);
-        var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide);
+        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test")).Returns(orderShell);
+        var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide, "test");
 
         // Act & Assert
         var ex = Assert.Throws<InvalidOperationException>(() =>

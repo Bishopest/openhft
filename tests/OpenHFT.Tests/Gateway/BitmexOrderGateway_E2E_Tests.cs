@@ -141,7 +141,7 @@ public class BitmexOrderGateway_E2E_Tests
     public async Task E2E_OrderLifecycle_ShouldReceiveStatusUpdatesViaWebSocket()
     {
         // --- 1. 신규 주문 (Submit) 및 'New' 상태 수신 대기 ---
-        var orderBuilder = new OrderBuilder(_orderFactory, _btcUsdt.InstrumentId, Side.Buy);
+        var orderBuilder = new OrderBuilder(_orderFactory, _btcUsdt.InstrumentId, Side.Buy, "test");
 
         // 오더북에서 안전한 가격 찾기
         var apiClient = _serviceProvider.GetRequiredService<BitmexRestApiClient>();

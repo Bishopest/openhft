@@ -19,7 +19,7 @@ public class QuoterFactory : IQuoterFactory
         _orderFactory = orderFactory;
     }
 
-    public IQuoter CreateQuoter(Instrument instrument, Side side, QuoterType type)
+    public IQuoter CreateQuoter(Instrument instrument, Side side, QuoterType type, string? bookName = null)
     {
         _loggerFactory.CreateLogger<QuoterFactory>().LogInformationWithCaller($"Creating quoter of type {type} for instrument {instrument.Symbol} on side {side}.");
         switch (type)
@@ -27,7 +27,8 @@ public class QuoterFactory : IQuoterFactory
             case QuoterType.Log:
                 return new LogQuoter(_loggerFactory.CreateLogger<LogQuoter>());
             case QuoterType.Single:
-                return new SingleOrderQuoter(_loggerFactory.CreateLogger<SingleOrderQuoter>(), side, instrument, _orderFactory);
+                if (bookName == null) throw new ArgumentNullException("bookName");
+                return new SingleOrderQuoter(_loggerFactory.CreateLogger<SingleOrderQuoter>(), side, instrument, _orderFactory, bookName);
             default:
                 throw new ArgumentException($"Unsupported quoter type: {type}");
         }

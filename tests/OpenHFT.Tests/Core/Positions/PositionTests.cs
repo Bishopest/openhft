@@ -15,7 +15,7 @@ public class PositionTests
     {
         // Arrange
         var initialPosition = Position.Zero(TestInstrumentId);
-        var fill = new Fill(TestInstrumentId, 1, "exo1", "exe1", Side.Buy,
+        var fill = new Fill(TestInstrumentId, "test", 1, "exo1", "exe1", Side.Buy,
                             Price.FromDecimal(100m), Quantity.FromDecimal(10m), 1);
 
         // Act
@@ -32,7 +32,7 @@ public class PositionTests
     {
         // Arrange
         var initialPosition = new Position(TestInstrumentId, Quantity.FromDecimal(10m), Price.FromDecimal(100m), 1);
-        var fill = new Fill(TestInstrumentId, 2, "exo2", "exe2", Side.Buy,
+        var fill = new Fill(TestInstrumentId, "test", 2, "exo2", "exe2", Side.Buy,
                             Price.FromDecimal(90m), Quantity.FromDecimal(10m), 2);
 
         // Expected Avg Price = (10 * 100 + 10 * 90) / (10 + 10) = 1900 / 20 = 95
@@ -52,7 +52,7 @@ public class PositionTests
     {
         // Arrange
         var initialPosition = new Position(TestInstrumentId, Quantity.FromDecimal(20m), Price.FromDecimal(95m), 2);
-        var fill = new Fill(TestInstrumentId, 3, "exo3", "exe3", Side.Sell,
+        var fill = new Fill(TestInstrumentId, "test", 3, "exo3", "exe3", Side.Sell,
                             Price.FromDecimal(110m), Quantity.FromDecimal(5m), 3);
 
         // Act
@@ -69,7 +69,7 @@ public class PositionTests
     {
         // Arrange
         var initialPosition = new Position(TestInstrumentId, Quantity.FromDecimal(15m), Price.FromDecimal(95m), 3);
-        var fill = new Fill(TestInstrumentId, 4, "exo4", "exe4", Side.Sell,
+        var fill = new Fill(TestInstrumentId, "test", 4, "exo4", "exe4", Side.Sell,
                             Price.FromDecimal(120m), Quantity.FromDecimal(15m), 4);
 
         // Act
@@ -86,7 +86,7 @@ public class PositionTests
     {
         // Arrange
         var initialPosition = new Position(TestInstrumentId, Quantity.FromDecimal(10m), Price.FromDecimal(100m), 4);
-        var fill = new Fill(TestInstrumentId, 5, "exo5", "exe5", Side.Sell,
+        var fill = new Fill(TestInstrumentId, "test", 5, "exo5", "exe5", Side.Sell,
                             Price.FromDecimal(130m), Quantity.FromDecimal(25m), 5);
 
         // Act
@@ -105,7 +105,7 @@ public class PositionTests
     {
         // Arrange
         var initialPosition = Position.Zero(TestInstrumentId);
-        var fill = new Fill(TestInstrumentId, 1, "exo1", "exe1", Side.Sell,
+        var fill = new Fill(TestInstrumentId, "test", 1, "exo1", "exe1", Side.Sell,
                             Price.FromDecimal(200m), Quantity.FromDecimal(5m), 0);
 
         // Act
@@ -121,7 +121,7 @@ public class PositionTests
     {
         // Arrange
         var initialPosition = new Position(TestInstrumentId, Quantity.FromDecimal(-5m), Price.FromDecimal(200m), 1);
-        var fill = new Fill(TestInstrumentId, 2, "exo2", "exe2", Side.Sell,
+        var fill = new Fill(TestInstrumentId, "test", 2, "exo2", "exe2", Side.Sell,
                             Price.FromDecimal(210m), Quantity.FromDecimal(5m), 0);
 
         // Expected Avg Price = ((-5 * 200) + (-5 * 210)) / (-5 + -5) = -2050 / -10 = 205
@@ -140,7 +140,7 @@ public class PositionTests
     {
         // Arrange
         var initialPosition = new Position(TestInstrumentId, Quantity.FromDecimal(-10m), Price.FromDecimal(205m), 2);
-        var fill = new Fill(TestInstrumentId, 3, "exo3", "exe3", Side.Buy,
+        var fill = new Fill(TestInstrumentId, "test", 3, "exo3", "exe3", Side.Buy,
                             Price.FromDecimal(190m), Quantity.FromDecimal(3m), 0);
 
         // Act
@@ -156,7 +156,7 @@ public class PositionTests
     {
         // Arrange
         var initialPosition = new Position(TestInstrumentId, Quantity.FromDecimal(-10m), Price.FromDecimal(205m), 3);
-        var fill = new Fill(TestInstrumentId, 4, "exo4", "exe4", Side.Buy,
+        var fill = new Fill(TestInstrumentId, "test", 4, "exo4", "exe4", Side.Buy,
                             Price.FromDecimal(180m), Quantity.FromDecimal(15m), 0);
 
         // Act

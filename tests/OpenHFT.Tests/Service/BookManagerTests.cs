@@ -122,14 +122,14 @@ public class BookManagerTests_Linear
     public void OnOrderFilled_WithInitialBuy_ShouldUpdateElementCorrectly()
     {
         // Arrange
-        var fill = new Fill(_instrument.InstrumentId, 1, "exo1", "exec1", Side.Buy,
+        var fill = new Fill(_instrument.InstrumentId, "test", 1, "exo1", "exec1", Side.Buy,
                             Price.FromDecimal(100m), Quantity.FromDecimal(10m), 0);
 
         // Act
         SimulateFill(fill);
 
         // Assert
-        var element = _bookManager.GetBookElement(_instrument.InstrumentId);
+        var element = _bookManager.GetBookElement("test", _instrument.InstrumentId);
         var multiplier = _instrument is CryptoFuture cf ? cf.Multiplier : 1m;
         element.Size.ToDecimal().Should().Be(10m);
         element.AvgPrice.ToDecimal().Should().Be(100m);
@@ -141,17 +141,17 @@ public class BookManagerTests_Linear
     public void OnOrderFilled_WithAdditionalBuy_ShouldUpdateAveragePrice()
     {
         // Arrange
-        var fill1 = new Fill(_instrument.InstrumentId, 1, "exo1", "exec1", Side.Buy, Price.FromDecimal(100m), Quantity.FromDecimal(10m), 0);
+        var fill1 = new Fill(_instrument.InstrumentId, "test", 1, "exo1", "exec1", Side.Buy, Price.FromDecimal(100m), Quantity.FromDecimal(10m), 0);
         SimulateFill(fill1);
 
-        var fill2 = new Fill(_instrument.InstrumentId, 2, "exo2", "exec2", Side.Buy, Price.FromDecimal(90m), Quantity.FromDecimal(10m), 0);
+        var fill2 = new Fill(_instrument.InstrumentId, "test", 2, "exo2", "exec2", Side.Buy, Price.FromDecimal(90m), Quantity.FromDecimal(10m), 0);
         // Expected Avg Price = (10 * 100 + 10 * 90) / (10 + 10) = 95
 
         // Act
         SimulateFill(fill2);
 
         // Assert
-        var element = _bookManager.GetBookElement(_instrument.InstrumentId);
+        var element = _bookManager.GetBookElement("test", _instrument.InstrumentId);
         element.Size.ToDecimal().Should().Be(20m);
         element.AvgPrice.ToDecimal().Should().Be(95m);
         element.RealizedPnL.Amount.Should().Be(0m);
@@ -161,17 +161,17 @@ public class BookManagerTests_Linear
     public void OnOrderFilled_WithPartialSell_ShouldCalculateRealizedPnl()
     {
         // Arrange
-        var fill1 = new Fill(_instrument.InstrumentId, 1, "exo1", "exec1", Side.Buy, Price.FromDecimal(100m), Quantity.FromDecimal(10m), 0);
+        var fill1 = new Fill(_instrument.InstrumentId, "test", 1, "exo1", "exec1", Side.Buy, Price.FromDecimal(100m), Quantity.FromDecimal(10m), 0);
         SimulateFill(fill1);
 
-        var fill2 = new Fill(_instrument.InstrumentId, 2, "exo2", "exec2", Side.Sell, Price.FromDecimal(110m), Quantity.FromDecimal(4m), 0);
+        var fill2 = new Fill(_instrument.InstrumentId, "test", 2, "exo2", "exec2", Side.Sell, Price.FromDecimal(110m), Quantity.FromDecimal(4m), 0);
         // PnL = (110 - 100) * 4 = 40
 
         // Act
         SimulateFill(fill2);
 
         // Assert
-        var element = _bookManager.GetBookElement(_instrument.InstrumentId);
+        var element = _bookManager.GetBookElement("test", _instrument.InstrumentId);
         var multiplier = _instrument is CryptoFuture cf ? cf.Multiplier : 1m;
         element.Size.ToDecimal().Should().Be(6m); // 10 - 4
         element.AvgPrice.ToDecimal().Should().Be(100m, "Avg price should not change on partial close.");
@@ -182,10 +182,10 @@ public class BookManagerTests_Linear
     public void OnOrderFilled_WithPositionFlipFromLongToShort_ShouldUpdateCorrectly()
     {
         // Arrange
-        var fill1 = new Fill(_instrument.InstrumentId, 1, "exo1", "exec1", Side.Buy, Price.FromDecimal(100m), Quantity.FromDecimal(10m), 0);
+        var fill1 = new Fill(_instrument.InstrumentId, "test", 1, "exo1", "exec1", Side.Buy, Price.FromDecimal(100m), Quantity.FromDecimal(10m), 0);
         SimulateFill(fill1);
 
-        var fill2 = new Fill(_instrument.InstrumentId, 2, "exo2", "exec2", Side.Sell, Price.FromDecimal(120m), Quantity.FromDecimal(15m), 0);
+        var fill2 = new Fill(_instrument.InstrumentId, "test", 2, "exo2", "exec2", Side.Sell, Price.FromDecimal(120m), Quantity.FromDecimal(15m), 0);
         // Position closed: 10 contracts. Realized PnL = (120 - 100) * 10 = 200
         // New position: -5 contracts @ 120
 
@@ -193,7 +193,7 @@ public class BookManagerTests_Linear
         SimulateFill(fill2);
 
         // Assert
-        var element = _bookManager.GetBookElement(_instrument.InstrumentId);
+        var element = _bookManager.GetBookElement("test", _instrument.InstrumentId);
         var multiplier = _instrument is CryptoFuture cf ? cf.Multiplier : 1m;
         element.Size.ToDecimal().Should().Be(-5m); // 10 - 15
         element.AvgPrice.ToDecimal().Should().Be(120m, "Avg price should reset to the flipping trade's price.");
@@ -204,13 +204,13 @@ public class BookManagerTests_Linear
     public void OnOrderFilled_WithFillForUnmanagedInstrument_ShouldDoNothing()
     {
         // Arrange
-        var unmanagedFill = new Fill(999, 1, "exo1", "exec1", Side.Buy, Price.FromDecimal(100m), Quantity.FromDecimal(10m), 0);
+        var unmanagedFill = new Fill(999, "test", 1, "exo1", "exec1", Side.Buy, Price.FromDecimal(100m), Quantity.FromDecimal(10m), 0);
 
         // Act
         SimulateFill(unmanagedFill);
 
         // Assert
-        var element = _bookManager.GetBookElement(_instrument.InstrumentId);
+        var element = _bookManager.GetBookElement("test", _instrument.InstrumentId);
         // Element should still be in its initial zero state
         element.Size.ToTicks().Should().Be(0);
 

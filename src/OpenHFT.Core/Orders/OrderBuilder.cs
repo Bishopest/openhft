@@ -18,12 +18,22 @@ public class OrderBuilder : IOrderBuilder
     /// <param name="orderFactory">The factory to create the base order object.</param>
     /// <param name="instrumentId">The ID of the instrument for the order.</param>
     /// <param name="side">The side (Buy/Sell) for the order.</param>
-    public OrderBuilder(IOrderFactory orderFactory, int instrumentId, Side side)
+    /// <param name="bookName">The name of the Book fills belongs to</param> 
+    public OrderBuilder(IOrderFactory orderFactory, int instrumentId, Side side, string bookName)
     {
         if (orderFactory == null) throw new ArgumentNullException(nameof(orderFactory));
 
         // The factory provides the basic shell of the order.
-        _order = orderFactory.Create(instrumentId, side);
+        _order = orderFactory.Create(instrumentId, side, bookName);
+    }
+
+    public IOrderBuilder WithBookName(string bookName)
+    {
+        if (_order is Order concreteOrder)
+        {
+            concreteOrder.BookName = bookName;
+        }
+        return this;
     }
 
     public IOrderBuilder WithPrice(Price price)

@@ -10,6 +10,8 @@ public readonly struct Fill : IEquatable<Fill>
     /// </summary>
     public readonly int InstrumentId { get; }
 
+    public readonly string BookName { get; }
+
     /// <summary>
     /// The client-side order ID of the order that was filled.
     /// </summary>
@@ -46,9 +48,18 @@ public readonly struct Fill : IEquatable<Fill>
     public readonly long Timestamp { get; }
 
     [JsonConstructor]
-    public Fill(int instrumentId, long clientOrderId, string exchangeOrderId, string executionId, Side side, Price price, Quantity quantity, long timestamp)
+    public Fill(int instrumentId,
+                string bookName,
+                long clientOrderId,
+                string exchangeOrderId,
+                string executionId,
+                Side side,
+                Price price,
+                Quantity quantity,
+                long timestamp)
     {
         InstrumentId = instrumentId;
+        BookName = bookName;
         ClientOrderId = clientOrderId;
         ExchangeOrderId = exchangeOrderId;
         ExecutionId = executionId;

@@ -17,7 +17,9 @@ public class Order : IOrder, IOrderUpdatable
     public string? ExchangeOrderId { get; internal set; }
     public OrderStatus Status { get; internal set; }
     public Side Side { get; }
-    public int InstrumentId { get; } // Added for completeness
+    public int InstrumentId { get; }
+    public string BookName { get; internal set; }
+
 
     // Mutable properties for the builder
     public Price Price { get; internal set; }
@@ -52,10 +54,11 @@ public class Order : IOrder, IOrderUpdatable
     /// Initializes a new instance of the <see cref="Order"/> class.
     /// Public for testing and direct instantiation, but in production, creation via IOrderFactory is recommended.
     /// </summary>
-    public Order(int instrumentId, Side side, IOrderRouter router, IOrderGateway gateway, ILogger<Order> logger)
+    public Order(int instrumentId, Side side, string bookName, IOrderRouter router, IOrderGateway gateway, ILogger<Order> logger)
     {
         InstrumentId = instrumentId;
         Side = side;
+        BookName = bookName;
         ClientOrderId = GenerateClientId(); // Should be a robust method
         Status = OrderStatus.Pending;
 
@@ -203,6 +206,7 @@ public class Order : IOrder, IOrderUpdatable
             {
                 var fill = new Fill(
                     instrumentId: InstrumentId,
+                    bookName: BookName,
                     clientOrderId: ClientOrderId,
                     exchangeOrderId: report.ExchangeOrderId ?? ExchangeOrderId ?? string.Empty,
                     executionId: report.ExecutionId,

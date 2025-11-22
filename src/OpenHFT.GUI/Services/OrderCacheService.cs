@@ -47,6 +47,8 @@ public class OrderCacheService : IOrderCacheService, IDisposable
 
             // Try to remove the entire dictionary of orders for the disconnected OMS.
             _activeOrdersByOms.TryRemove(omsId, out var removedOrders);
+            _activeInstancesByOms.TryRemove(omsId, out var removedInstances);
+            OnInstancesUpdated?.Invoke();
         }
     }
 

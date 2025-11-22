@@ -58,8 +58,6 @@ public partial class Home : ComponentBase, IDisposable
 
         if (args.Status == ConnectionStatus.Disconnected || args.Status == ConnectionStatus.Error)
         {
-            // If a connection is lost, remove instances belonging to that OMS.
-            _activeInstances.RemoveAll(i => i.OmsIdentifier == args.Server.OmsIdentifier);
             if (_selectedInstance?.OmsIdentifier == args.Server.OmsIdentifier)
             {
                 _selectedInstance = null;

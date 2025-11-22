@@ -2,6 +2,7 @@ using System;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using OpenHFT.Core.Books;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
@@ -20,6 +21,7 @@ public class WebSocketNotificationService : IHostedService
     private readonly ILogger<WebSocketNotificationService> _logger;
     private readonly IWebSocketChannel _channel;
     private readonly IQuotingInstanceManager _quotingManager;
+    private readonly IBookManager _bookManager;
     private readonly IOrderRouter _orderRouter;
     // Add other event sources here, e.g., IPositionManager, IRiskManager
     private readonly string _omsIdentifier;
@@ -28,6 +30,7 @@ public class WebSocketNotificationService : IHostedService
         ILogger<WebSocketNotificationService> logger,
         IWebSocketChannel channel,
         IQuotingInstanceManager quotingManager,
+        IBookManager bookManager,
         IOrderRouter orderRouter,
         IConfiguration config
     )
@@ -35,6 +38,7 @@ public class WebSocketNotificationService : IHostedService
         _logger = logger;
         _channel = channel;
         _quotingManager = quotingManager;
+        _bookManager = bookManager;
         _orderRouter = orderRouter;
         _omsIdentifier = config["omsIdentifier"] ?? throw new ArgumentNullException("omsIdentifier");
     }
@@ -46,6 +50,7 @@ public class WebSocketNotificationService : IHostedService
         // Subscribe to all relevant domain events
         _quotingManager.InstanceQuotePairCalculated += OnQuotePairCalculated;
         _quotingManager.InstanceParametersUpdated += OnInstanceParametersUpdated;
+        _bookManager.BookElementUpdated += OnBookElementUpdated;
         _orderRouter.OrderStatusChanged += OnOrderStatusChanged;
         _orderRouter.OrderFilled += OnOrderFilled;
         // _positionManager.PositionChanged += OnPositionChanged; // Example for future extension
@@ -60,6 +65,7 @@ public class WebSocketNotificationService : IHostedService
         // Unsubscribe to prevent memory leaks
         _quotingManager.InstanceQuotePairCalculated -= OnQuotePairCalculated;
         _quotingManager.InstanceParametersUpdated -= OnInstanceParametersUpdated;
+        _bookManager.BookElementUpdated -= OnBookElementUpdated;
         _orderRouter.OrderStatusChanged -= OnOrderStatusChanged;
         _orderRouter.OrderFilled -= OnOrderFilled;
         // _positionManager.PositionChanged -= OnPositionChanged;
@@ -94,6 +100,15 @@ public class WebSocketNotificationService : IHostedService
         };
         var statusEvent = new InstanceStatusEvent(payload);
         _ = _channel.SendAsync(statusEvent);
+    }
+
+    private void OnBookElementUpdated(object? sender, BookElement element)
+    {
+        _logger.LogInformationWithCaller($"Broadcasting book element update for InstrumentId {element.InstrumentId}");
+        var elements = new List<BookElement>() { element };
+        var payload = new BookUpdatePayload(_omsIdentifier, Enumerable.Empty<BookInfo>(), elements);
+        var updateEvent = new BookUpdateEvent(payload);
+        _ = _channel.SendAsync(updateEvent);
     }
 
     private void OnOrderStatusChanged(object? sender, OrderStatusReport report)

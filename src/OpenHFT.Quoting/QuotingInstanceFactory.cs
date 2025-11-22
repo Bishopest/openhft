@@ -39,8 +39,8 @@ public class QuotingInstanceFactory : IQuotingInstanceFactory
             _loggerFactory.CreateLogger<QuotingInstanceFactory>().LogWarningWithCaller($"Instrument with ID {parameters.InstrumentId} not found.");
             return null;
         }
-        var bidQuoter = _quoterFactory.CreateQuoter(instrument, Side.Buy, parameters.Type);
-        var askQuoter = _quoterFactory.CreateQuoter(instrument, Side.Sell, parameters.Type);
+        var bidQuoter = _quoterFactory.CreateQuoter(instrument, Side.Buy, parameters.Type, parameters.BookName);
+        var askQuoter = _quoterFactory.CreateQuoter(instrument, Side.Sell, parameters.Type, parameters.BookName);
         var validator = new DefaultQuoteValidator(_loggerFactory.CreateLogger<DefaultQuoteValidator>());
 
         var fvProvider = _fairValueProviderFactory.CreateProvider(parameters.FvModel, parameters.FairValueSourceInstrumentId);

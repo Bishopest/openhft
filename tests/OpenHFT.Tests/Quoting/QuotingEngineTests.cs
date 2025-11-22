@@ -219,7 +219,7 @@ public class QuotingEngineTests
         _engine.Activate();
 
         // Arrange
-        var fill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(100), 0);
+        var fill = new Fill(_xbtusd.InstrumentId, "test", 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(100), 0);
         // Act
         _bidQuoter.InvokeOrderFilled(fill);
 
@@ -232,7 +232,7 @@ public class QuotingEngineTests
     public void OnFill_WithSingleSellFill_CorrectlyIncrementsSellFills()
     {
         // Arrange
-        var fill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Sell, Price.FromDecimal(50000), Quantity.FromDecimal(200), 0);
+        var fill = new Fill(_xbtusd.InstrumentId, "test", 1, "E1", "X1", Side.Sell, Price.FromDecimal(50000), Quantity.FromDecimal(200), 0);
 
         // Act
         _askQuoter.InvokeOrderFilled(fill);
@@ -246,8 +246,8 @@ public class QuotingEngineTests
     public void OnFill_WithBuyThenSellFills_CorrectlyNetsValues()
     {
         // Arrange
-        var buyFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(100), 0);
-        var sellFill = new Fill(_xbtusd.InstrumentId, 2, "E2", "X2", Side.Sell, Price.FromDecimal(50001), Quantity.FromDecimal(30), 1);
+        var buyFill = new Fill(_xbtusd.InstrumentId, "test", 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(100), 0);
+        var sellFill = new Fill(_xbtusd.InstrumentId, "test", 2, "E2", "X2", Side.Sell, Price.FromDecimal(50001), Quantity.FromDecimal(30), 1);
 
         // Act
         _bidQuoter.InvokeOrderFilled(buyFill);
@@ -265,8 +265,8 @@ public class QuotingEngineTests
     public void OnFill_WithSellThenBuyFills_CorrectlyNetsValues()
     {
         // Arrange
-        var sellFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Sell, Price.FromDecimal(50001), Quantity.FromDecimal(50), 0);
-        var buyFill = new Fill(_xbtusd.InstrumentId, 2, "E2", "X2", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(20), 1);
+        var sellFill = new Fill(_xbtusd.InstrumentId, "test", 1, "E1", "X1", Side.Sell, Price.FromDecimal(50001), Quantity.FromDecimal(50), 0);
+        var buyFill = new Fill(_xbtusd.InstrumentId, "test", 2, "E2", "X2", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(20), 1);
 
         // Act
         _askQuoter.InvokeOrderFilled(sellFill);
@@ -285,8 +285,8 @@ public class QuotingEngineTests
     public void OnFill_DecrementingOppositeSide_ShouldNotGoBelowZero()
     {
         // Arrange
-        var buyFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(100), 0);
-        var largeSellFill = new Fill(_xbtusd.InstrumentId, 2, "E2", "X2", Side.Sell, Price.FromDecimal(50001), Quantity.FromDecimal(150), 1);
+        var buyFill = new Fill(_xbtusd.InstrumentId, "test", 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(100), 0);
+        var largeSellFill = new Fill(_xbtusd.InstrumentId, "test", 2, "E2", "X2", Side.Sell, Price.FromDecimal(50001), Quantity.FromDecimal(150), 1);
 
         // Act
         _bidQuoter.InvokeOrderFilled(buyFill); // TotalBuy = 100, TotalSell = 0
@@ -302,7 +302,7 @@ public class QuotingEngineTests
     {
         // Arrange
         // Note: This fill is for _btcusdt, not _xbtusd which the engine is quoting.
-        var otherInstrumentFill = new Fill(_btcusdt.InstrumentId, 1, "E1", "X1", Side.Buy, Price.FromDecimal(2000), Quantity.FromDecimal(10), 0);
+        var otherInstrumentFill = new Fill(_btcusdt.InstrumentId, "test", 1, "E1", "X1", Side.Buy, Price.FromDecimal(2000), Quantity.FromDecimal(10), 0);
 
         // Act
         _bidQuoter.InvokeOrderFilled(otherInstrumentFill);
@@ -331,7 +331,7 @@ public class QuotingEngineTests
         _engine.QuotePairCalculated += (sender, qp) => generatedQuotePair = qp;
 
         // Simulate fills exceeding the max bid fills limit
-        var buyFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(201), 0);
+        var buyFill = new Fill(_xbtusd.InstrumentId, "test", 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(201), 0);
         _bidQuoter.InvokeOrderFilled(buyFill);
 
         _engine.TotalBuyFills.ToDecimal().Should().Be(201);
@@ -363,7 +363,7 @@ public class QuotingEngineTests
         _engine.QuotePairCalculated += (sender, qp) => generatedQuotePair = qp;
 
         // Simulate fills exceeding the max ask fills limit
-        var sellFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Sell, Price.FromDecimal(50001), Quantity.FromDecimal(151), 0);
+        var sellFill = new Fill(_xbtusd.InstrumentId, "test", 1, "E1", "X1", Side.Sell, Price.FromDecimal(50001), Quantity.FromDecimal(151), 0);
         _askQuoter.InvokeOrderFilled(sellFill);
 
         _engine.TotalSellFills.ToDecimal().Should().Be(151);
@@ -395,7 +395,7 @@ public class QuotingEngineTests
         _engine.Activate();
 
         // 2. 주문 사이즈(100)를 초과하는 매수 체결 시뮬레이션
-        var buyFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(120), 0);
+        var buyFill = new Fill(_xbtusd.InstrumentId, "test", 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(120), 0);
         _engine.OnFill(buyFill); // 직접 OnFill 호출
 
         // 3. Requote 트리거
@@ -447,7 +447,7 @@ public class QuotingEngineTests
         _engine.Activate();
 
         // 주문 사이즈(100)의 2배를 초과하는 매도 체결 시뮬레이션 (N=2)
-        var sellFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Sell, Price.FromDecimal(50000), Quantity.FromDecimal(230), 0);
+        var sellFill = new Fill(_xbtusd.InstrumentId, "test", 1, "E1", "X1", Side.Sell, Price.FromDecimal(50000), Quantity.FromDecimal(230), 0);
         _engine.OnFill(sellFill);
 
         // --- Act ---
@@ -481,14 +481,14 @@ public class QuotingEngineTests
         _engine.Activate();
 
         // 주문 사이즈(100)의 2배를 초과하는 매도 체결 시뮬레이션 (N=2)
-        var sellFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Sell, Price.FromDecimal(50000), Quantity.FromDecimal(230), 0);
+        var sellFill = new Fill(_xbtusd.InstrumentId, "test", 1, "E1", "X1", Side.Sell, Price.FromDecimal(50000), Quantity.FromDecimal(230), 0);
         _engine.OnFill(sellFill);
 
         // --- Act ---
         TriggerRequote(50001m);
 
         // 주문 사이즈(100)의 매수 체결 시뮬레이션 (N=1)
-        var buyFill = new Fill(_xbtusd.InstrumentId, 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(200), 0);
+        var buyFill = new Fill(_xbtusd.InstrumentId, "test", 1, "E1", "X1", Side.Buy, Price.FromDecimal(50000), Quantity.FromDecimal(200), 0);
         _engine.OnFill(buyFill);
 
         // --- Act ---

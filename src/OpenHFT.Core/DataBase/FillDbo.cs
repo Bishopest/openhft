@@ -11,6 +11,7 @@ public class FillDbo
     public long FillDboId { get; set; }
 
     public int InstrumentId { get; set; }
+    public string BookName { get; set; } = string.Empty;
     public long ClientOrderId { get; set; }
     public string ExchangeOrderId { get; set; } = string.Empty;
     public string ExecutionId { get; set; } = string.Empty;
@@ -28,6 +29,7 @@ public class FillDbo
         return new FillDbo
         {
             InstrumentId = fill.InstrumentId,
+            BookName = fill.BookName,
             ClientOrderId = fill.ClientOrderId,
             ExchangeOrderId = fill.ExchangeOrderId,
             ExecutionId = fill.ExecutionId,
@@ -43,6 +45,7 @@ public class FillDbo
     {
         return new Fill(
             InstrumentId,
+            BookName,
             ClientOrderId,
             ExchangeOrderId,
             ExecutionId,

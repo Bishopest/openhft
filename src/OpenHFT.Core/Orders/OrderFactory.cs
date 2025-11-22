@@ -32,8 +32,9 @@ public class OrderFactory : IOrderFactory
     /// </summary>
     /// <param name="instrumentId">The ID of the instrument for the order.</param>
     /// <param name="side">The side (Buy/Sell) of the order.</param>
+    /// <param name="bookName">The name of the Book fills belongs to</param> 
     /// <returns>A new, initialized IOrder instance.</returns>
-    public IOrder Create(int instrumentId, Side side)
+    public IOrder Create(int instrumentId, Side side, string bookName)
     {
         // 1. Get the correct Order Gateway for the instrument.
         // This assumes you have a way to know the exchange from the instrumentId.
@@ -44,6 +45,7 @@ public class OrderFactory : IOrderFactory
         var order = new Order(
             instrumentId,
             side,
+            bookName,
             _orderRouter,
             orderGateway ?? throw new ArgumentNullException("orderGateway"),
             _orderLogger

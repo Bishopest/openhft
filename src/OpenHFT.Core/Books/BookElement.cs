@@ -6,14 +6,13 @@ namespace OpenHFT.Core.Books;
 
 public readonly struct BookElement : IEquatable<BookElement>
 {
-    public readonly string BookName;
-    public readonly int InstrumentId;
-    public readonly Price AvgPrice;
-    // + : buy, - : sell
-    public readonly Quantity Size;
-    public readonly CurrencyAmount RealizedPnL;
-    public readonly CurrencyAmount VolumeInUsdt;
-    public readonly long LastUpdateTime;
+    public string BookName { get; }
+    public int InstrumentId { get; }
+    public Price AvgPrice { get; }
+    public Quantity Size { get; }
+    public CurrencyAmount RealizedPnL { get; }
+    public CurrencyAmount VolumeInUsdt { get; }
+    public long LastUpdateTime { get; }
 
     [JsonConstructor]
     public BookElement(string bookName,
