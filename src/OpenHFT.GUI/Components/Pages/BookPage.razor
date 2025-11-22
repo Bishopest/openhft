@@ -9,28 +9,37 @@
     <MudText Typo="Typo.h4" GutterBottom="true">Books</MudText>
     
     <div class="flex-grow-1" style="overflow-y: auto; min-height: 0;">
-        <MudTable Items="@_bookNames" T="string" Hover="true">
+        <MudTable Items="@_bookNames" T="string" Hover="true" OnRowClick="OnRowClick">
             <HeaderContent>
                 <MudTh>Book Name</MudTh>
-                <MudTh>Total PnL</MudTh>
-                <MudTh>Total Volume</MudTh>
+                <MudTh>Net Value (USDT)</MudTh>
+                <MudTh>Total Realized PnL</MudTh>
+                <MudTh>Total Volume (USDT)</MudTh>
             </HeaderContent>
             <RowTemplate>
-                <MudTd DataLabel="Book Name">@context</MudTd>
-                <MudTd DataLabel="Total PnL">
+                <MudTd DataLabel="Book Name">
+                <MudIcon Icon="@(_expandedBooks.Contains(context) ? Icons.Material.Filled.KeyboardArrowDown : Icons.Material.Filled.KeyboardArrowRight)" 
+                             Class="mr-3" Size="Size.Small"/>
+                    @context
+                </MudTd>
+                <MudTd DataLabel="Net Value (USDT)">
+                </MudTd>
+                <MudTd DataLabel="Total Realized PnL">
                     @* Calculate total PnL for the book *@
                     @{
                         var pnl = BookCache.GetElementsByBookName(context).Sum(e => e.RealizedPnL.Amount);
                     }
                     <span class="@(pnl >= 0 ? "mud-theme-success-text" : "mud-theme-error-text")">@pnl.ToString("N2")</span>
                 </MudTd>
-                <MudTd DataLabel="Total Volume">
+                <MudTd DataLabel="Total Volume (USDT)">
                     @BookCache.GetElementsByBookName(context).Sum(e => e.VolumeInUsdt.Amount).ToString("N0")
                 </MudTd>
             </RowTemplate>
             
             @* --- THIS IS THE EXPANDABLE ROW TEMPLATE --- *@
             <ChildRowContent>
+                @if (_expandedBooks.Contains(context))
+                {
                 <MudTr>
                     <td colspan="4">
                         <MudCard Outlined="true">
@@ -39,9 +48,11 @@
                                     <thead>
                                         <tr>
                                             <th>Instrument</th>
-                                            <th>Position Size</th>
+                                            <th>Size</th>
+                                            <th>Value(USDT)</th>
                                             <th>Avg. Entry Price</th>
                                             <th>Realized PnL</th>
+                                            <th>Unrealized PnL</th>
                                             <th>Volume (USDT)</th>
                                         </tr>
                                     </thead>
@@ -51,8 +62,10 @@
                                             <tr>
                                                 <td>@GetSymbolFromId(element.InstrumentId)</td>
                                                 <td>@element.Size.ToDecimal()</td>
+                                                <td></td>
                                                 <td>@element.AvgPrice.ToDecimal()</td>
                                                 <td>@element.RealizedPnL.Amount.ToString("N2")</td>
+                                                <td></td>
                                                 <td>@element.VolumeInUsdt.Amount.ToString("N0")</td>
                                             </tr>
                                         }
@@ -62,6 +75,7 @@
                         </MudCard>
                     </td>
                 </MudTr>
+                }
             </ChildRowContent>
         </MudTable>
     </div>

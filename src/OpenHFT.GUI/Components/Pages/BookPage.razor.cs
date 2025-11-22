@@ -1,5 +1,6 @@
 using System;
 using Microsoft.AspNetCore.Components;
+using MudBlazor;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.GUI.Services;
 
@@ -13,11 +14,23 @@ public partial class BookPage : ComponentBase, IDisposable
     private IInstrumentRepository InstrumentRepository { get; set; } = default!;
 
     private IEnumerable<string> _bookNames = Enumerable.Empty<string>();
+    private HashSet<string> _expandedBooks = new();
 
     protected override void OnInitialized()
     {
         _bookNames = BookCache.GetBookNames();
         BookCache.OnBookUpdated += OnBookCacheUpdated;
+    }
+    private void OnRowClick(TableRowClickEventArgs<string> args)
+    {
+        if (_expandedBooks.Contains(args.Item))
+        {
+            _expandedBooks.Remove(args.Item);
+        }
+        else
+        {
+            _expandedBooks.Add(args.Item);
+        }
     }
 
     private async void OnBookCacheUpdated()
