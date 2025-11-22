@@ -48,6 +48,8 @@ public class QuotingConfig
 
     [JsonProperty("productType")]
     public string ProductType { get; set; } = string.Empty;
+    [JsonProperty("bookName")]
+    public string BookName { get; set; } = string.Empty;
 
     [JsonProperty("quoterType")]
     public string QuoterType { get; set; } = string.Empty;

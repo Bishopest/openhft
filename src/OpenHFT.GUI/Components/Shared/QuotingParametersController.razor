@@ -4,12 +4,25 @@
 <MudPaper Class="pa-4" Style="height: 100%;">
     <MudForm @ref="_form">
         <MudStack Spacing="3">
+            <MudSelect T="string" @bind-Value="SelectedOmsIdentifier" Label="Target OMS" Variant="Variant.Outlined" Required="true"
+                       Disabled="IsStrategyActive"> @* Disable if a strategy is already active/selected *@
+                @foreach (var server in _availableOmsServers)
+                {
+                    <MudSelectItem T="string" Value="@server.OmsIdentifier">@server.OmsIdentifier</MudSelectItem>
+                }
+            </MudSelect>
             <MudAutocomplete T="Instrument" Label="Instrument" SearchFunc="@SearchInstruments"
                 ToStringFunc="@ConvertInstrumentToString" @bind-Value="SelectedInstrument" Variant="Variant.Outlined"
                 Required="true" ResetValueOnEmptyText="true" CoerceText="true" CoerceValue="true">
                 <ItemTemplate Context="instrument">@instrument.Symbol (@instrument.SourceExchange)
                     (@instrument.ProductType)</ItemTemplate>
             </MudAutocomplete>
+            <MudSelect T="string" @bind-Value="SelectedBookName" Label="Book Name" Variant="Variant.Outlined" Required="true">
+                @foreach (var bookName in _availableBookNames)
+                {
+                    <MudSelectItem Value="bookName">@bookName</MudSelectItem>
+                }
+            </MudSelect>
             <MudSelect @bind-Value="_model.FvModel" Label="Fair Value Model" Variant="Variant.Outlined" Required="true">
                 @foreach (FairValueModel fv in Enum.GetValues(typeof(FairValueModel)))
                 {
@@ -56,13 +69,6 @@
                 </NoItemsTemplate>
             </MudAutocomplete>
             <MudSwitch T="bool" Value="@_model.PostOnly" ValueChanged="TogglePostOnly" Label="PostOnly" Color="Color.Success" />
-            <MudSelect T="string" @bind-Value="_selectedOmsIdentifier" Label="Target OMS" Variant="Variant.Outlined" Required="true"
-                       Disabled="IsStrategyActive"> @* Disable if a strategy is already active/selected *@
-                @foreach (var server in _availableOmsServers)
-                {
-                    <MudSelectItem T="string" Value="@server.OmsIdentifier">@server.OmsIdentifier</MudSelectItem>
-                }
-            </MudSelect>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleSubmit" Class="mt-4">Submit
             </MudButton>
             <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="HandleCancel">Cancel</MudButton>

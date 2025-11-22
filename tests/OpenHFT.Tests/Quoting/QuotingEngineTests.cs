@@ -128,6 +128,7 @@ public class QuotingEngineTests
 
         var parameters = new QuotingParameters(
             _xbtusd.InstrumentId,
+            "test",
             FairValueModel.Midp,
             _btcusdt.InstrumentId,
             10m,
@@ -320,7 +321,7 @@ public class QuotingEngineTests
 
         // Arrange
         var parameters = new QuotingParameters(
-            _xbtusd.InstrumentId, FairValueModel.Midp, _btcusdt.InstrumentId,
+            _xbtusd.InstrumentId, "test", FairValueModel.Midp, _btcusdt.InstrumentId,
             10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true,
             Quantity.FromDecimal(200), Quantity.FromDecimal(200) // MaxCumBidFills = 200
         );
@@ -352,7 +353,7 @@ public class QuotingEngineTests
 
         // Arrange
         var parameters = new QuotingParameters(
-            _xbtusd.InstrumentId, FairValueModel.Midp, _btcusdt.InstrumentId,
+            _xbtusd.InstrumentId, "test", FairValueModel.Midp, _btcusdt.InstrumentId,
             10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true,
             Quantity.FromDecimal(150), Quantity.FromDecimal(150) // MaxCumAskFills = 150
         );
@@ -380,7 +381,7 @@ public class QuotingEngineTests
         // --- Arrange ---
         // 1. SkewBp가 설정된 파라미터 정의
         var initialParams = new QuotingParameters(
-            _xbtusd.InstrumentId, FairValueModel.Midp, _btcusdt.InstrumentId,
+            _xbtusd.InstrumentId, "test", FairValueModel.Midp, _btcusdt.InstrumentId,
             askSpreadBp: 10m,  // 초기 Ask Spread
             bidSpreadBp: -10m, // 초기 Bid Spread
             skewBp: 2m,        // 체결 시 2bp씩 skew
@@ -432,7 +433,7 @@ public class QuotingEngineTests
     {
         // --- Arrange ---
         var initialParams = new QuotingParameters(
-            _xbtusd.InstrumentId, FairValueModel.Midp, _btcusdt.InstrumentId,
+            _xbtusd.InstrumentId, "test", FairValueModel.Midp, _btcusdt.InstrumentId,
             askSpreadBp: 10m,
             bidSpreadBp: -10m,
             skewBp: 2m,
@@ -466,7 +467,7 @@ public class QuotingEngineTests
     {
         // --- Arrange ---
         var initialParams = new QuotingParameters(
-            _xbtusd.InstrumentId, FairValueModel.Midp, _btcusdt.InstrumentId,
+            _xbtusd.InstrumentId, "test", FairValueModel.Midp, _btcusdt.InstrumentId,
             askSpreadBp: 10m,
             bidSpreadBp: -10m,
             skewBp: 2m,

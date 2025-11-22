@@ -6,6 +6,7 @@ using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
+using OpenHFT.GUI.Services;
 using OpenHFT.Quoting;
 
 namespace OpenHFT.GUI.Components.Shared;
@@ -16,6 +17,9 @@ public partial class QuotingParametersController
     private ISnackbar Snackbar { get; set; } = default!;
     [Inject]
     private IInstrumentRepository InstrumentRepository { get; set; } = default!;
+    [Inject]
+    private IBookCacheService BookCache { get; set; } = default!;
+
     [Inject] private IConfiguration Configuration { get; set; } = default!;
     /// <summary>
     /// This event is triggered when the user clicks the Submit button with valid data.
@@ -36,6 +40,7 @@ public partial class QuotingParametersController
     private List<OmsServerConfig> _availableOmsServers = new();
     private string? _selectedOmsIdentifier;
     private IEnumerable<Instrument> _availableInstruments = Enumerable.Empty<Instrument>();
+    private IEnumerable<string> _availableBookNames = Enumerable.Empty<string>();
     private Instrument? _selectedInstrument;
     private Instrument? SelectedInstrument
     {
@@ -49,11 +54,37 @@ public partial class QuotingParametersController
             }
         }
     }
+
+    private string? SelectedBookName
+    {
+        get => _model.BookName;
+        set
+        {
+            _model.BookName = value ?? string.Empty;
+            ValidateBookSelection();
+        }
+    }
+
+    private string? SelectedOmsIdentifier
+    {
+        get => _selectedOmsIdentifier;
+        set
+        {
+            if (_selectedOmsIdentifier != value)
+            {
+                _selectedOmsIdentifier = value;
+                _ = UpdateAvailableBooks();
+                ValidateBookSelection();
+            }
+        }
+    }
+
     private Instrument? _selectedFvSourceInstrument;
 
     // A private class to hold form data. This is often cleaner than binding directly to a struct.
     private class ParameterFormModel
     {
+        public string BookName { get; set; }
         public FairValueModel FvModel { get; set; }
         public decimal AskSpreadBp { get; set; } = 2.5m;
         public decimal BidSpreadBp { get; set; } = -2.5m;
@@ -75,10 +106,38 @@ public partial class QuotingParametersController
     }
 
     /// <summary>
+    /// Updates the list of available books based on the selected OMS.
+    /// </summary>
+    private async Task UpdateAvailableBooks()
+    {
+        _availableBookNames = BookCache.GetBookNames(SelectedOmsIdentifier);
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Checks if the currently selected book is valid for the selected OMS.
+    /// </summary>
+    private bool ValidateBookSelection()
+    {
+        if (string.IsNullOrEmpty(_model.BookName)) return false;
+        if (string.IsNullOrEmpty(SelectedOmsIdentifier)) return false;
+
+        if (!_availableBookNames.Contains(_model.BookName))
+        {
+            Snackbar.Add($"Warning: Book '{_model.BookName}' is not available on OMS '{SelectedOmsIdentifier}'.", Severity.Warning);
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Public method that can be called by a parent component to update the form's data.
     /// </summary>
     public async Task UpdateParametersAsync(QuotingParameters newParameters, OmsServerConfig? targetOms)
     {
+        _model.BookName = newParameters.BookName;
         _model.FvModel = newParameters.FvModel;
         _model.AskSpreadBp = newParameters.AskSpreadBp;
         _model.BidSpreadBp = newParameters.BidSpreadBp;
@@ -145,9 +204,15 @@ public partial class QuotingParametersController
             return;
         }
 
+        if (!ValidateBookSelection())
+        {
+            return;
+        }
+
         // Convert the form model to the actual QuotingParameters struct
         var parameters = new QuotingParameters(
             _selectedInstrument.InstrumentId,
+            _model.BookName,
             _model.FvModel,
             _selectedFvSourceInstrument?.InstrumentId ?? 0,
             _model.AskSpreadBp,

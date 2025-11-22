@@ -10,9 +10,8 @@ namespace OpenHFT.Quoting;
 public readonly struct QuotingParameters : IEquatable<QuotingParameters>
 {
     public readonly int InstrumentId { get; }
-
+    public readonly string BookName { get; }
     public readonly FairValueModel FvModel { get; }
-
     public readonly int FairValueSourceInstrumentId { get; }
 
     /// <summary>
@@ -64,6 +63,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     /// Initializes a new instance of the QuotingParameters struct with all required values.
     /// </summary>
     /// <param name="instrumentId">The ID of the instrument these parameters apply to.</param>
+    /// <param name="bookName">The name of the book that generate book info or this quoting instance</param> 
     /// <param name="fvModel">The fair value model to be used.</param>
     /// <param name="fairValueSourceInstrumentId"></param>
     /// <param name="spreadBp">The spread in basis points.</param>
@@ -75,6 +75,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     [JsonConstructor]
     public QuotingParameters(
         int instrumentId,
+        string bookName,
         FairValueModel fvModel,
         int fairValueSourceInstrumentId,
         decimal askSpreadBp,
@@ -100,6 +101,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         }
 
         InstrumentId = instrumentId;
+        BookName = bookName;
         FvModel = fvModel;
         FairValueSourceInstrumentId = fairValueSourceInstrumentId;
         AskSpreadBp = askSpreadBp;
@@ -117,6 +119,9 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     {
         return $"{{ " +
                $"\"InstrumentId\": {InstrumentId}, " +
+               $"\"BookName\": {BookName}, " +
+               $"\"FvModel\": {FvModel}, " +
+               $"\"FairValueSourceInstrumentId\": {FairValueSourceInstrumentId}, " +
                $"\"AskSpreadBp\": {AskSpreadBp}, " +
                $"\"BidSpreadBp\": {BidSpreadBp}, " +
                $"\"SkewBp\": {SkewBp}, " +
@@ -132,6 +137,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     public bool Equals(QuotingParameters other)
     {
         return InstrumentId == other.InstrumentId &&
+               BookName == other.BookName &&
+               FairValueSourceInstrumentId == other.FairValueSourceInstrumentId &&
                FvModel == other.FvModel &&
                AskSpreadBp == other.AskSpreadBp &&
                BidSpreadBp == other.BidSpreadBp &&
@@ -152,7 +159,9 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     {
         var hash = new HashCode();
         hash.Add(InstrumentId);
+        hash.Add(BookName);
         hash.Add(FvModel);
+        hash.Add(FairValueSourceInstrumentId);
         hash.Add(AskSpreadBp);
         hash.Add(BidSpreadBp);
         hash.Add(SkewBp);

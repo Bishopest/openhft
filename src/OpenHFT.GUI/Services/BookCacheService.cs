@@ -81,12 +81,21 @@ public class BookCacheService : IBookCacheService, IDisposable
     }
 
 
-    public IEnumerable<string> GetBookNames()
+    public IEnumerable<string> GetBookNames(string? omsIdentifier = null)
     {
-        // Get a distinct, sorted list of all book names from all connected OMS.
+        if (!string.IsNullOrEmpty(omsIdentifier))
+        {
+            if (_booksByOms.TryGetValue(omsIdentifier, out var books))
+            {
+                return books.Keys.OrderBy(name => name);
+            }
+
+            return Enumerable.Empty<string>();
+        }
+
         return _booksByOms.Values
                           .SelectMany(dict => dict.Keys)
-                          .Distinct()
+                          .Distinct() // 서로 다른 OMS에 같은 이름의 Book이 있을 수 있으므로 중복 제거
                           .OrderBy(name => name);
     }
 

@@ -1,17 +1,21 @@
+using Disruptor.Dsl;
 using DotNetEnv;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
+using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.Orders;
 using OpenHFT.Feed;
 using OpenHFT.Feed.Adapters;
 using OpenHFT.Feed.Interfaces;
 using OpenHFT.Gateway;
 using OpenHFT.Gateway.Interfaces;
+using OpenHFT.Processing;
 using OpenHFT.Service;
 
 namespace OpenHFT.Tests.Service
@@ -45,14 +49,31 @@ namespace OpenHFT.Tests.Service
             File.WriteAllText(Path.Combine(_testDirectory, "instruments.csv"), csvContent);
 
             var inMemoryConfig = new Dictionary<string, string> { { "dataFolder", _testDirectory },
-                { "ApiCredentials:BITMEX:ApiKey", apiKey },
-                { "ApiCredentials:BITMEX:ApiSecret", apiSecret }
+                { "BITMEX_TESTNET_API_KEY", apiKey },
+                { "BITMEX_TESTNET_API_SECRET", apiSecret }
             };
             IConfiguration configuration = new ConfigurationBuilder().AddInMemoryCollection(inMemoryConfig).Build();
 
             services.AddSingleton(configuration);
             services.AddSingleton<IInstrumentRepository, InstrumentRepository>();
 
+            services.AddSingleton<IOrderRouter, OrderRouter>();
+            services.AddSingleton(new SubscriptionConfig());
+            services.AddSingleton<MarketDataDistributor>();
+            services.AddSingleton<IOrderUpdateHandler, OrderUpdateDistributor>();
+            services.AddSingleton(provider =>
+               {
+                   var disruptor = new Disruptor<MarketDataEventWrapper>(() => new MarketDataEventWrapper(), 1024);
+                   disruptor.HandleEventsWith(provider.GetRequiredService<MarketDataDistributor>());
+                   return disruptor;
+               });
+
+            services.AddSingleton(provider =>
+            {
+                var disruptor = new Disruptor<OrderStatusReportWrapper>(() => new OrderStatusReportWrapper(), 1024);
+                disruptor.HandleEventsWith(provider.GetRequiredService<IOrderUpdateHandler>());
+                return disruptor;
+            });
             // 실제 BitmexAdapter 등록 (Testnet)
             services.AddSingleton<IFeedAdapter>(provider => new BitmexAdapter(
                 provider.GetRequiredService<ILogger<BitmexAdapter>>(),
@@ -61,6 +82,8 @@ namespace OpenHFT.Tests.Service
                 ExecutionMode.Testnet
             ));
 
+            services.AddSingleton<IFeedHandler, FeedHandler>();
+            services.AddSingleton<ISubscriptionManager, SubscriptionManager>();
             services.AddSingleton<IFeedAdapterRegistry, FeedAdapterRegistry>();
             services.AddSingleton<ITimeSyncManager, NullTimeSyncManager>(); // Mock or Null implementation
 

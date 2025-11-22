@@ -8,9 +8,10 @@ public interface IBookCacheService
     event Action? OnBookUpdated;
 
     /// <summary>
-    /// Gets all known book names across all connected OMS servers.
+    /// Gets book names associated with a specific OMS identifier.
+    /// If omsIdentifier is null or empty, returns all known book names.
     /// </summary>
-    IEnumerable<string> GetBookNames();
+    IEnumerable<string> GetBookNames(string? omsIdentifier = null);
 
     /// <summary>
     /// Gets all elements for a specific book name, aggregated from all OMS servers.
@@ -21,5 +22,4 @@ public interface IBookCacheService
     /// Clears all data for a specific OMS.
     /// </summary>
     void ClearCacheForOms(string omsIdentifier);
-
 }

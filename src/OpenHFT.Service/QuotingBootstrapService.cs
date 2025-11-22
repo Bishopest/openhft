@@ -69,6 +69,7 @@ public class QuotingBootstrapService : IHostedService
 
             var parameters = new QuotingParameters(
                 instrument.InstrumentId,
+                config.BookName,
                 config.FairValue.Model,
                 sourceInstrument.InstrumentId,
                 config.AskSpreadBp,

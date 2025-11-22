@@ -117,6 +117,7 @@ public class QuotingInstanceManagerTests_Integration
 
         var parameters = new QuotingParameters(
             bitmexInstrument.InstrumentId,
+            "test",
             FairValueModel.Midp,
             binanceInstrument.InstrumentId,
             10m,
@@ -151,7 +152,7 @@ public class QuotingInstanceManagerTests_Integration
         var binanceInstrument = _instrumentRepo.FindBySymbol("BTCUSDT", ProductType.PerpetualFuture, ExchangeEnum.BINANCE)!;
 
         var initialParams = new QuotingParameters(
-            bitmexInstrument.InstrumentId, FairValueModel.Midp, binanceInstrument.InstrumentId,
+            bitmexInstrument.InstrumentId, "test", FairValueModel.Midp, binanceInstrument.InstrumentId,
             10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
             Quantity.FromDecimal(300));
 
@@ -163,7 +164,7 @@ public class QuotingInstanceManagerTests_Integration
 
         // Spread, Skew, Size만 변경된 새로운 파라미터
         var updatedParams = new QuotingParameters(
-            bitmexInstrument.InstrumentId, FairValueModel.Midp, binanceInstrument.InstrumentId,
+            bitmexInstrument.InstrumentId, "test", FairValueModel.Midp, binanceInstrument.InstrumentId,
             20m, -20m, 1.0m, Quantity.FromDecimal(200), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
             Quantity.FromDecimal(300));
 
@@ -188,7 +189,7 @@ public class QuotingInstanceManagerTests_Integration
         var binanceInstrument = _instrumentRepo.FindBySymbol("BTCUSDT", ProductType.PerpetualFuture, ExchangeEnum.BINANCE)!;
 
         var initialParams = new QuotingParameters(
-            bitmexInstrument.InstrumentId, FairValueModel.Midp, binanceInstrument.InstrumentId,
+            bitmexInstrument.InstrumentId, "test", FairValueModel.Midp, binanceInstrument.InstrumentId,
             10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
             Quantity.FromDecimal(300));
 
@@ -197,7 +198,7 @@ public class QuotingInstanceManagerTests_Integration
 
         // 핵심 파라미터인 FvModel 변경
         var newParams = new QuotingParameters(
-            bitmexInstrument.InstrumentId, FairValueModel.BestMidp, binanceInstrument.InstrumentId,
+            bitmexInstrument.InstrumentId, "test", FairValueModel.BestMidp, binanceInstrument.InstrumentId,
             10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
             Quantity.FromDecimal(300));
 
@@ -221,7 +222,7 @@ public class QuotingInstanceManagerTests_Integration
         // Arrange
         var bitmexInstrument = _instrumentRepo.FindBySymbol("XBTUSD", ProductType.PerpetualFuture, ExchangeEnum.BITMEX)!;
         var parameters = new QuotingParameters(
-            bitmexInstrument.InstrumentId, FairValueModel.Midp, 2,
+            bitmexInstrument.InstrumentId, "test", FairValueModel.Midp, 2,
             10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
             Quantity.FromDecimal(300));
 
@@ -248,12 +249,12 @@ public class QuotingInstanceManagerTests_Integration
 
         // 2. BitMEX와 Binance에 대한 두 개의 다른 전략 파라미터를 정의합니다.
         var bitmexParams = new QuotingParameters(
-            bitmexInstrument.InstrumentId, FairValueModel.Midp, binanceInstrument.InstrumentId,
+            bitmexInstrument.InstrumentId, "test", FairValueModel.Midp, binanceInstrument.InstrumentId,
             10m, -10m, 0m, Quantity.FromDecimal(100), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
             Quantity.FromDecimal(300));
 
         var binanceParams = new QuotingParameters(
-            binanceInstrument.InstrumentId, FairValueModel.Midp, bitmexInstrument.InstrumentId,
+            binanceInstrument.InstrumentId, "test", FairValueModel.Midp, bitmexInstrument.InstrumentId,
             5m, -5m, 0m, Quantity.FromDecimal(1), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
             Quantity.FromDecimal(300));
 

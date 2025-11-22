@@ -43,7 +43,8 @@ public class PositionManagerTests
 
         var inMemorySettings = new Dictionary<string, string>
         {
-            { "dataFolder", _testDirectory }
+            { "dataFolder", _testDirectory },
+            { "FILL_DB_PATH", _testDirectory}
         };
 
         IConfiguration configuration = new ConfigurationBuilder()
@@ -111,12 +112,12 @@ public class PositionManagerTests
         var fillReport1 = new OrderStatusReport(
             order.ClientOrderId, "exo1", "exec1", instrument.InstrumentId, Side.Buy,
             OrderStatus.PartiallyFilled, Price.FromDecimal(50000m), Quantity.FromDecimal(10m), Quantity.FromDecimal(5m),
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), lastQuantity: Quantity.FromDecimal(5m));
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), lastQuantity: Quantity.FromDecimal(5m), lastPrice: Price.FromDecimal(50010m));
 
         var fillReport2 = new OrderStatusReport(
             order.ClientOrderId, "exo1", "exec2", instrument.InstrumentId, Side.Buy,
             OrderStatus.Filled, Price.FromDecimal(50010m), Quantity.FromDecimal(10m), Quantity.FromDecimal(0m),
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 100, lastQuantity: Quantity.FromDecimal(5m));
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 100, lastQuantity: Quantity.FromDecimal(5m), lastPrice: Price.FromDecimal(50000m));
 
         // OrderRouter를 통해 리포트 주입 -> Order.OnStatusReportReceived -> router.RaiseOrderFilled -> positionManager.OnOrderFilled
         _orderRouter.RouteReport(fillReport1);
