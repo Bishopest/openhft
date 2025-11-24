@@ -132,7 +132,8 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
         if (newParameters.InstrumentId != _parameters.InstrumentId ||
             newParameters.FvModel != _parameters.FvModel ||
             newParameters.FairValueSourceInstrumentId != _parameters.FairValueSourceInstrumentId ||
-            newParameters.Type != _parameters.Type)
+            newParameters.Type != _parameters.Type ||
+            newParameters.BookName != _parameters.BookName)
         {
             _logger.LogWarningWithCaller($"Attempted to update immutable parameters. A new QuotingEngine instance is required. Old: {_parameters}, New: {newParameters}");
             return;
