@@ -154,7 +154,7 @@ public partial class QuotingParametersController
         // We need to update the instrument selection as well
         SelectedInstrument = _availableInstruments.FirstOrDefault(i => i.InstrumentId == newParameters.InstrumentId);
         _selectedFvSourceInstrument = _availableInstruments.FirstOrDefault(i => i.InstrumentId == newParameters.FairValueSourceInstrumentId);
-        _selectedOmsIdentifier = targetOms?.OmsIdentifier;
+        SelectedOmsIdentifier = targetOms?.OmsIdentifier;
         // Notify Blazor that the state has changed and the UI needs to re-render
         await InvokeAsync(StateHasChanged);
     }
