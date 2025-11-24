@@ -173,7 +173,7 @@ public class BookManager : IBookManager, IHostedService
             {
                 // 3. 포지션이 증가하면 가중 평균 계산 (같은 방향 추가)
                 var currentValue = instrument.ValueInDenominationCurrency(currentElement.AvgPrice, currentElement.Size);
-                var newValue = instrument.ValueInDenominationCurrency(fill.Price, fill.Quantity);
+                var newValue = instrument.ValueInDenominationCurrency(fill.Price, Quantity.FromDecimal(effectiveFillQtyDecimal));
                 var multiplier = instrument is CryptoFuture cf ? cf.Multiplier : 1m;
                 newAvgPriceDecimal = (currentValue.Amount + newValue.Amount) / newQtyDecimal / multiplier;
             }

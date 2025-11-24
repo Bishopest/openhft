@@ -31,7 +31,7 @@ public class BookManagerTests_Linear
     {
         var testDir = Path.Combine(Path.GetTempPath(), "TempRepoForTests");
         Directory.CreateDirectory(testDir);
-        var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
+        var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,contract_multiplier,minimum_price_variation,lot_size,minimum_order_size
     1,binance,BTCUSDT,perpetualfuture,BTCUSDT,USDT,1,0.1,0.001,BTCUSDT
     4,bitmex,XBTUSDT,perpetualfuture,XBTUSDT,USDT,0.000001,0.1,100,XBTUSDT,100
     6,bitmex,BCHUSDT,perpetualfuture,BCHUSDT,USDT,0.00001,0.05,1000,BCHUSDT,1000";
@@ -98,8 +98,8 @@ public class BookManagerTests_Linear
 
         // _elements에 현재 테스트의 Instrument에 대한 초기 BookElement만 추가합니다.
         var elementsField = typeof(BookManager).GetField("_elements", BindingFlags.NonPublic | BindingFlags.Instance);
-        var elementsDict = elementsField.GetValue(_bookManager) as System.Collections.Concurrent.ConcurrentDictionary<int, BookElement>;
-        elementsDict[_instrument.InstrumentId] = new BookElement(TestBookName, _instrument.InstrumentId, Price.FromDecimal(0m), Quantity.FromDecimal(0m), CurrencyAmount.FromDecimal(0m, _instrument.DenominationCurrency), CurrencyAmount.FromDecimal(0m, Currency.USDT), 0);
+        var elementsDict = elementsField.GetValue(_bookManager) as System.Collections.Concurrent.ConcurrentDictionary<(string BookName, int InstrumentId), BookElement>;
+        elementsDict[(TestBookName, _instrument.InstrumentId)] = new BookElement(TestBookName, _instrument.InstrumentId, Price.FromDecimal(0m), Quantity.FromDecimal(0m), CurrencyAmount.FromDecimal(0m, _instrument.DenominationCurrency), CurrencyAmount.FromDecimal(0m, Currency.USDT), 0);
     }
 
     [TearDown]
@@ -176,6 +176,27 @@ public class BookManagerTests_Linear
         element.Size.ToDecimal().Should().Be(6m); // 10 - 4
         element.AvgPrice.ToDecimal().Should().Be(100m, "Avg price should not change on partial close.");
         element.RealizedPnL.Amount.Should().Be(40m * multiplier);
+    }
+
+    [Test]
+    public void OnOrderFilled_WithPartialSell_Twice_ShouldCalculateRealizedPnl()
+    {
+        // Arrange
+        var fill1 = new Fill(_instrument.InstrumentId, "test", 1, "exo1", "exec1", Side.Sell, Price.FromDecimal(549.15m), Quantity.FromDecimal(875000m), 0);
+        var fill2 = new Fill(_instrument.InstrumentId, "test", 2, "exo2", "exec2", Side.Sell, Price.FromDecimal(549.15m), Quantity.FromDecimal(135000m), 0);
+        var fill3 = new Fill(_instrument.InstrumentId, "test", 3, "exo3", "exec3", Side.Buy, Price.FromDecimal(549.5m), Quantity.FromDecimal(1010000m), 0);
+        // PnL (549.15 - 549.5) * 1010000 * 0.00001 = -3.5m
+
+        // Act
+        SimulateFill(fill1);
+        SimulateFill(fill2);
+        SimulateFill(fill3);
+
+        // Assert
+        var element = _bookManager.GetBookElement("test", _instrument.InstrumentId);
+        element.Size.ToDecimal().Should().Be(0m); // 10 - 4
+        element.AvgPrice.ToDecimal().Should().Be(0m, "Avg price should not change on partial close.");
+        element.RealizedPnL.Amount.Should().BeApproximately(-3.5m, 0.1m);
     }
 
     [Test]
