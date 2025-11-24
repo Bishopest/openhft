@@ -29,6 +29,9 @@ public class QuoterFactory : IQuoterFactory
             case QuoterType.Single:
                 if (bookName == null) throw new ArgumentNullException("bookName");
                 return new SingleOrderQuoter(_loggerFactory.CreateLogger<SingleOrderQuoter>(), side, instrument, _orderFactory, bookName);
+            case QuoterType.Grouped:
+                if (bookName == null) throw new ArgumentNullException("bookName");
+                return new GroupedSingleOrderQuoter(_loggerFactory.CreateLogger<GroupedSingleOrderQuoter>(), side, instrument, _orderFactory, bookName);
             default:
                 throw new ArgumentException($"Unsupported quoter type: {type}");
         }
