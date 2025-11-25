@@ -10,7 +10,7 @@ using OpenHFT.Processing.Consumers;
 
 namespace OpenHFT.Processing;
 
-public class MarketDataManager
+public class MarketDataManager : IMarketDataManager
 {
     private readonly ILogger<MarketDataManager> _logger;
     private readonly MarketDataDistributor _distributor;
@@ -216,5 +216,23 @@ public class MarketDataManager
         }
 
         throw new NotSupportedException($"No topic mapping found for consumer '{typeof(TConsumer).Name}' on exchange '{instrument.SourceExchange}'.");
+    }
+
+    public OrderBook? GetOrderBook(int instrumentId)
+    {
+        if (_consumers.TryGetValue(instrumentId, out var consumer))
+        {
+            return consumer.Book;
+        }
+        return null;
+    }
+
+    public BestOrderBook? GetBestOrderBook(int instrumentId)
+    {
+        if (_bestOrderBookConsumers.TryGetValue(instrumentId, out var consumer))
+        {
+            return consumer.BestBook;
+        }
+        return null;
     }
 }

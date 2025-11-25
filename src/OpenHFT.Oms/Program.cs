@@ -131,6 +131,8 @@ public class Program
                 services.AddSingleton<IFeedHandler, FeedHandler>();
                 services.AddSingleton<ISubscriptionManager, SubscriptionManager>();
                 services.AddSingleton<MarketDataManager>();
+                services.AddSingleton<IMarketDataManager>(provider =>
+                    provider.GetRequiredService<MarketDataManager>());
                 services.AddSingleton<ITimeSyncManager, NullTimeSyncManager>();
                 services.AddSingleton<IRestApiClientRegistry, RestApiClientRegistry>();
                 services.AddSingleton<IFairValueProviderFactory, FairValueProviderFactory>();

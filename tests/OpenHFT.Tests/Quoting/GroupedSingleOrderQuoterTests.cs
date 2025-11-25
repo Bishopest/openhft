@@ -12,6 +12,7 @@ using OpenHFT.Quoting;
 using System.Threading;
 using System.Threading.Tasks;
 using OpenHFT.Quoting.Models;
+using OpenHFT.Core.Utils;
 
 namespace OpenHFT.Tests.Quoting;
 
@@ -20,6 +21,7 @@ public class GroupedSingleOrderQuoterTests
 {
     private Mock<ILogger> _mockLogger;
     private Mock<IOrderFactory> _mockOrderFactory;
+    private Mock<IMarketDataManager> _mockMarketDataManager;
     private Mock<IOrder> _mockOrder;
     private Instrument _instrument;
 
@@ -32,6 +34,7 @@ public class GroupedSingleOrderQuoterTests
     {
         _mockLogger = new Mock<ILogger>();
         _mockOrderFactory = new Mock<IOrderFactory>();
+        _mockMarketDataManager = new Mock<IMarketDataManager>();
         _mockOrder = new Mock<IOrder>();
 
         // XBTUSD 스타일의 상품 생성
@@ -52,6 +55,7 @@ public class GroupedSingleOrderQuoterTests
         // Factory가 Mock Order를 반환하도록 설정
         _mockOrderFactory.Setup(f => f.Create(It.IsAny<int>(), It.IsAny<Side>(), It.IsAny<string>()))
                          .Returns(_mockOrder.Object);
+        _mockMarketDataManager.Setup(m => m.GetOrderBook(It.IsAny<int>())).Returns((OrderBook?)null);
     }
 
     [Test]
@@ -59,7 +63,7 @@ public class GroupedSingleOrderQuoterTests
     {
         // Arrange
         var quoter = new GroupedSingleOrderQuoter(
-            _mockLogger.Object, Side.Buy, _instrument, _mockOrderFactory.Object, "TestBook");
+            _mockLogger.Object, Side.Buy, _instrument, _mockOrderFactory.Object, "TestBook", _mockMarketDataManager.Object);
 
         // 초기 가격 설정: 60,000
         // 1bp = 60,000 * 0.0001 = 6.0
@@ -91,7 +95,7 @@ public class GroupedSingleOrderQuoterTests
     {
         // Arrange
         var quoter = new GroupedSingleOrderQuoter(
-            _mockLogger.Object, Side.Sell, _instrument, _mockOrderFactory.Object, "TestBook");
+            _mockLogger.Object, Side.Sell, _instrument, _mockOrderFactory.Object, "TestBook", _mockMarketDataManager.Object);
 
         // 초기 가격 설정: 60,000 (Group Size = 6.0)
         var inputPrice = 60001.0m; // Should ceiling to 60006.0 (next multiple of 6.0)
@@ -116,7 +120,7 @@ public class GroupedSingleOrderQuoterTests
     {
         // Arrange
         var quoter = new GroupedSingleOrderQuoter(
-            _mockLogger.Object, Side.Buy, _instrument, _mockOrderFactory.Object, "TestBook");
+            _mockLogger.Object, Side.Buy, _instrument, _mockOrderFactory.Object, "TestBook", _mockMarketDataManager.Object);
 
         // 1. 초기 주문 (60002.0 -> 60000.0 으로 그룹핑, Group Size=6.0)
         var initialQuote = new Quote(Price.FromDecimal(60002.0m), Quantity.FromDecimal(100));
@@ -149,7 +153,7 @@ public class GroupedSingleOrderQuoterTests
     {
         // Arrange
         var quoter = new GroupedSingleOrderQuoter(
-            _mockLogger.Object, Side.Buy, _instrument, _mockOrderFactory.Object, "TestBook");
+            _mockLogger.Object, Side.Buy, _instrument, _mockOrderFactory.Object, "TestBook", _mockMarketDataManager.Object);
 
         // 1. 초기 주문 (60004.0 -> 60000.0)
         // for making initial multiple
@@ -180,7 +184,7 @@ public class GroupedSingleOrderQuoterTests
     {
         // Arrange
         var quoter = new GroupedSingleOrderQuoter(
-            _mockLogger.Object, Side.Buy, _instrument, _mockOrderFactory.Object, "TestBook");
+            _mockLogger.Object, Side.Buy, _instrument, _mockOrderFactory.Object, "TestBook", _mockMarketDataManager.Object);
 
         // Act 1: First call calculates N based on 60000 (N=12, Group=6.0)
         // for making initial multiple
@@ -198,5 +202,62 @@ public class GroupedSingleOrderQuoterTests
         // Assert
         // Reuse Logic Check: 30004 should group to 30000 (multiple 6), not 30003 (multiple 3)
         quoter.LatestQuote!.Value.Price.ToDecimal().Should().Be(30000.0m);
+    }
+
+    [Test]
+    public async Task UpdateQuoteAsync_WhenPartiallyFilledAndFarFromMid_ShouldCancelOrder()
+    {
+        // Arrange
+        var quoter = new GroupedSingleOrderQuoter(
+            _mockLogger.Object, Side.Buy, _instrument, _mockOrderFactory.Object, "TestBook", _mockMarketDataManager.Object);
+
+        // 1. 오더북 데이터 준비 (Mid Price 설정을 위해)
+        // Mid Price = 10,000 으로 설정
+        // 3bp 범위: 10,000 * 0.0003 = 3. 
+        // Safe Range: 9,997 ~ 10,003
+        var orderBook = new OrderBook(_instrument, null);
+        var updates = new PriceLevelEntryArray();
+        updates[0] = new PriceLevelEntry(Side.Buy, 9999.5m, 10);
+        updates[1] = new PriceLevelEntry(Side.Sell, 10000.5m, 10);
+        orderBook.ApplyEvent(new MarketDataEvent(
+                sequence: 1,
+                timestamp: TimestampUtils.GetTimestampMicros(),
+                exchange: _instrument.SourceExchange,
+                kind: EventKind.Snapshot,
+                instrumentId: _instrument.InstrumentId,
+                updates: updates,
+                updateCount: 2
+        ));
+
+        // MarketDataManager가 위 오더북을 반환하도록 설정
+        _mockMarketDataManager.Setup(m => m.GetOrderBook(_instrument.InstrumentId)).Returns(orderBook);
+
+        // 2. 초기 주문 생성 (10,000 가격에 주문)
+        var initialPrice = 10000.0m;
+        // for making initial multiple (10000 * 0.0001 = 1.0. Tick 0.5. Multiple=2. GroupSize=1.0)
+        await quoter.UpdateQuoteAsync(new Quote(Price.FromDecimal(initialPrice), Quantity.FromDecimal(100)), false);
+        await quoter.UpdateQuoteAsync(new Quote(Price.FromDecimal(initialPrice), Quantity.FromDecimal(100)), false);
+
+        // Mock Order 상태 설정: 현재가 10000, 부분 체결 상태 (Qty 100, Leaves 50)
+        _mockOrder.SetupGet(o => o.Price).Returns(Price.FromDecimal(initialPrice));
+        _mockOrder.SetupGet(o => o.Quantity).Returns(Quantity.FromDecimal(100));
+        _mockOrder.SetupGet(o => o.LeavesQuantity).Returns(Quantity.FromDecimal(50)); // 부분 체결됨!
+
+        // 3. 시세 급락 상황 발생 -> 새로운 Quote가 9,000원으로 들어옴 (Mid 10,000에서 아주 멂)
+        // 9,000은 Safe Range (9,997 ~ 10,003) 밖임 -> Cancel 대상
+        var newPanicQuote = new Quote(Price.FromDecimal(9000.0m), Quantity.FromDecimal(100));
+
+        // Act
+        await quoter.UpdateQuoteAsync(newPanicQuote, false);
+
+        // Assert
+        // 조건: PartiallyFilled(True) && !IsNearMid(True because 9000 is far from 10000)
+        // 기대: CancelAsync 호출, ReplaceAsync 호출 안 함
+
+        _mockOrder.Verify(o => o.CancelAsync(It.IsAny<CancellationToken>()), Times.Once,
+            "부분 체결되었고 가격이 미드에서 멀어졌으므로 취소해야 합니다.");
+
+        _mockOrder.Verify(o => o.ReplaceAsync(It.IsAny<Price>(), It.IsAny<OrderType>(), It.IsAny<CancellationToken>()), Times.Never,
+            "취소해야 할 상황에서 정정 주문을 내면 안 됩니다.");
     }
 }

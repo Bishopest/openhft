@@ -12,11 +12,14 @@ public class QuoterFactory : IQuoterFactory
 {
     private readonly ILoggerFactory _loggerFactory;
     private readonly IOrderFactory _orderFactory;
+    private readonly IMarketDataManager _marketDataManager;
 
-    public QuoterFactory(ILoggerFactory loggerFactory, IOrderFactory orderFactory)
+
+    public QuoterFactory(ILoggerFactory loggerFactory, IOrderFactory orderFactory, IMarketDataManager marketDataManager)
     {
         _loggerFactory = loggerFactory;
         _orderFactory = orderFactory;
+        _marketDataManager = marketDataManager;
     }
 
     public IQuoter CreateQuoter(Instrument instrument, Side side, QuoterType type, string? bookName = null)
@@ -31,7 +34,7 @@ public class QuoterFactory : IQuoterFactory
                 return new SingleOrderQuoter(_loggerFactory.CreateLogger<SingleOrderQuoter>(), side, instrument, _orderFactory, bookName);
             case QuoterType.Grouped:
                 if (bookName == null) throw new ArgumentNullException("bookName");
-                return new GroupedSingleOrderQuoter(_loggerFactory.CreateLogger<GroupedSingleOrderQuoter>(), side, instrument, _orderFactory, bookName);
+                return new GroupedSingleOrderQuoter(_loggerFactory.CreateLogger<GroupedSingleOrderQuoter>(), side, instrument, _orderFactory, bookName, _marketDataManager);
             default:
                 throw new ArgumentException($"Unsupported quoter type: {type}");
         }

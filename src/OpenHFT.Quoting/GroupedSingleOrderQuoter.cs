@@ -16,6 +16,7 @@ public class GroupedSingleOrderQuoter : IQuoter
     private readonly Side _side;
     private readonly Instrument _instrument;
     private readonly IOrderFactory _orderFactory; // To create IOrder objects
+    private readonly IMarketDataManager _marketDataManager;
     private readonly string _bookName;
     /// <summary>
     /// The multiple of the instrument's tick size used for price grouping.
@@ -32,7 +33,7 @@ public class GroupedSingleOrderQuoter : IQuoter
     /// Null if the last action was a cancellation.
     /// </summary>
     public Quote? LatestQuote { get; private set; }
-
+    private OrderBook? _cachedOrderBook;
     public event Action? OrderFullyFilled;
     public event Action<Fill>? OrderFilled;
 
@@ -41,13 +42,31 @@ public class GroupedSingleOrderQuoter : IQuoter
             Side side,
             Instrument instrument,
             IOrderFactory orderFactory,
-            string bookName)
+            string bookName,
+            IMarketDataManager marketDataManager)
     {
         _logger = logger;
         _side = side;
         _instrument = instrument;
         _orderFactory = orderFactory;
         _bookName = bookName;
+        _marketDataManager = marketDataManager;
+    }
+
+    private OrderBook? GetOrderBookFast()
+    {
+        if (_cachedOrderBook != null)
+        {
+            return _cachedOrderBook;
+        }
+
+        var book = _marketDataManager.GetOrderBook(_instrument.InstrumentId);
+        if (book != null)
+        {
+            _cachedOrderBook = book; // 찾았으면 캐싱
+        }
+
+        return _cachedOrderBook;
     }
 
     public async Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, CancellationToken cancellationToken = default)
@@ -99,7 +118,25 @@ public class GroupedSingleOrderQuoter : IQuoter
             {
                 if (groupedQuote.Price != currentOrder.Price)
                 {
-                    await currentOrder.ReplaceAsync(groupedQuote.Price, OrderType.Limit, cancellationToken).ConfigureAwait(false);
+                    bool isPartiallyFilled = currentOrder.Quantity > currentOrder.LeavesQuantity;
+                    var book = GetOrderBookFast();
+                    bool isNearMid = false;
+                    if (book is not null)
+                    {
+                        var mid = book.GetMidPrice();
+                        var upperPrice = mid.ToDecimal() * (1m + 3m * 1e-4m);
+                        var lowerPrice = mid.ToDecimal() * (1m - 3m * 1e-4m);
+                        isNearMid = groupedQuote.Price.ToDecimal() >= lowerPrice && groupedQuote.Price.ToDecimal() <= upperPrice;
+                    }
+
+                    if (isPartiallyFilled && !isNearMid)
+                    {
+                        await currentOrder.CancelAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await currentOrder.ReplaceAsync(groupedQuote.Price, OrderType.Limit, cancellationToken).ConfigureAwait(false);
+                    }
                 }
             }
         }
