@@ -29,7 +29,7 @@ public abstract class CryptoFuture : Instrument
         Multiplier = multiplier;
     }
 
-    public override CurrencyAmount ValueInDenominationCurrency(Price p, Quantity q)
+    public override CurrencyAmount ValueInDenominationCurrency(Price p, Quantity orderQty)
     {
         if (p == Price.FromDecimal(0m))
         {
@@ -41,20 +41,21 @@ public abstract class CryptoFuture : Instrument
             var isBitmex = base.SourceExchange == ExchangeEnum.BITMEX;
             if (isBitmex)
             {
-                return base.BaseCurrency == Currency.BTC ? CurrencyAmount.FromDecimal(1 / p.ToDecimal() * q.ToDecimal() * Multiplier, Currency.BTC) :
-                                                           CurrencyAmount.FromDecimal(p.ToDecimal() * q.ToDecimal() * Multiplier, Currency.BTC);
+                return base.BaseCurrency == Currency.BTC ? CurrencyAmount.FromDecimal(1 / p.ToDecimal() * orderQty.ToDecimal() * Multiplier, Currency.BTC) :
+                                                           CurrencyAmount.FromDecimal(p.ToDecimal() * orderQty.ToDecimal() * Multiplier, Currency.BTC);
             }
             else
             {
-                return CurrencyAmount.FromDecimal(1 / p.ToDecimal() * q.ToDecimal() * Multiplier, DenominationCurrency);
+                return CurrencyAmount.FromDecimal(1 / p.ToDecimal() * orderQty.ToDecimal() * Multiplier, DenominationCurrency);
             }
         }
         else
         {
-            return CurrencyAmount.FromDecimal(p.ToDecimal() * q.ToDecimal() * Multiplier, DenominationCurrency);
+            return CurrencyAmount.FromDecimal(p.ToDecimal() * orderQty.ToDecimal() * Multiplier, DenominationCurrency);
         }
     }
 
+    // currency unit in value accounting
     public override Currency DenominationCurrency => GetDenominationCurrency();
 
     private Currency GetDenominationCurrency()
@@ -64,7 +65,7 @@ public abstract class CryptoFuture : Instrument
             var isBitmex = base.SourceExchange == ExchangeEnum.BITMEX;
             if (isBitmex) return Currency.BTC;
 
-            return base.BaseCurrency;
+            return Currency.USDT;
         }
 
         return base.QuoteCurrency;
