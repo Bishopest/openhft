@@ -76,10 +76,10 @@ public partial class Home : ComponentBase, IDisposable
         Logger.LogInformationWithCaller($"User selected instance for Instrument: {instance.InstrumentId} on OMS: {instance.OmsIdentifier}");
 
         // Unsubscribe from the old selection's market data
-        if (_selectedInstance != null && _subscribedInstrumentIds.Remove(_selectedInstance.InstrumentId))
-        {
-            await FeedManager.UnsubscribeFromInstrumentAsync(_selectedInstance.InstrumentId);
-        }
+        // if (_selectedInstance != null && _subscribedInstrumentIds.Remove(_selectedInstance.InstrumentId))
+        // {
+        //     await FeedManager.UnsubscribeFromInstrumentAsync(_selectedInstance.InstrumentId);
+        // }
 
         _selectedInstance = instance;
 
