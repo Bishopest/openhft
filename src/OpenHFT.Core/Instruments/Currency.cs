@@ -16,7 +16,15 @@ public readonly struct Currency : IEquatable<Currency>
         {
             throw new ArgumentException("Currency symbol cannot be null or whitespace.", nameof(symbol));
         }
-        Symbol = symbol.ToUpperInvariant();
+
+        if (symbol == "XBT")
+        {
+            Symbol = "BTC";
+        }
+        else
+        {
+            Symbol = symbol.ToUpperInvariant();
+        }
     }
 
     // Static factory method to create or get currency instances
