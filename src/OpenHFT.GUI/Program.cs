@@ -23,6 +23,7 @@ var jsonOptions = new JsonSerializerOptions
 builder.Services.AddSingleton(jsonOptions);
 builder.Services.AddSingleton<IOrderCacheService, OrderCacheService>();
 builder.Services.AddSingleton<IBookCacheService, BookCacheService>();
+builder.Services.AddSingleton<IHedgingCacheService, HedgingCacheService>();
 builder.Services.AddSingleton<IExchangeFeedManager, ExchangeFeedManager>();
 builder.Services.AddSingleton<IOrderBookManager, OrderBookManager>();
 builder.Services.AddSingleton<IOmsConnectorService, OmsConnectorService>();

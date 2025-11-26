@@ -1,0 +1,46 @@
+﻿@using OpenHFT.Core.Models
+@using OpenHFT.Core.Instruments
+@using OpenHFT.Hedging
+
+<MudPaper Class="pa-4" Style="height: 100%;">
+    <MudText Typo="Typo.h6" GutterBottom="true">
+        Hedger @(QuotingInstrument is null ? "" : $"for {QuotingInstrument.Symbol}")
+    </MudText>
+    @if (QuotingInstrument is null)
+    {
+        <MudText>Select an active instance first.</MudText>
+    }
+    else
+    {
+        <MudChip T='string' Color="@(IsHedgerActive ? Color.Success : Color.Default)" Size="Size.Small">
+            Status: @(IsHedgerActive ? "Active" : "Inactive")
+        </MudChip>
+        
+        <MudForm @ref="_form" Class="mt-4">
+            <MudStack Spacing="3">
+                <MudAutocomplete T="Instrument" Label="Hedge Instrument" @bind-Value="_selectedHedgeInstrument"
+                                 SearchFunc="SearchInstruments" ToStringFunc="ConvertInstrumentToString"
+                                 Variant="Variant.Outlined" Required="true" CoerceText="false"/>
+
+                <MudSelect T="HedgeOrderType" @bind-Value="_model.OrderType" Label="Hedge Order Type"
+                           Variant="Variant.Outlined" Required="true">
+                    @foreach (HedgeOrderType ot in Enum.GetValues(typeof(HedgeOrderType)))
+                    {
+                        <MudSelectItem Value="ot">@ot.ToString()</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudNumericField @bind-Value="_model.Size" Label="Hedge Size" Variant="Variant.Outlined" Required="true" Min="0" />
+
+                <MudGrid Class="mt-4">
+                    <MudItem xs="6">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleStartClick" FullWidth="true">Start</MudButton>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="HandleStopClick" FullWidth="true" Disabled="!IsHedgerActive">Stop</MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudStack>
+        </MudForm>
+    }
+</MudPaper>

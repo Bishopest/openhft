@@ -84,7 +84,7 @@ public class HedgerTests
 
     private Hedger CreateHedger(Instrument quote, Instrument hedge, int? refId = null)
     {
-        var param = new HedgingParameters(hedge.InstrumentId, HedgeOrderType.OppositeFirst, Quantity.FromDecimal(1000m));
+        var param = new HedgingParameters(quote.InstrumentId, hedge.InstrumentId, HedgeOrderType.OppositeFirst, Quantity.FromDecimal(1000m));
         return new Hedger(
             _mockLogger.Object, quote, hedge, param,
             _mockOrderFactory.Object, "HedgeBook",
@@ -254,7 +254,7 @@ public class HedgerTests
     public void Scenario_MaxOrderSize_Slicing()
     {
         // Max Order Size = 0.5 BTC
-        var param = new HedgingParameters(_linearInstrument.InstrumentId, HedgeOrderType.OppositeFirst, Quantity.FromDecimal(0.5m));
+        var param = new HedgingParameters(_linearInstrument.InstrumentId, _linearInstrument.InstrumentId, HedgeOrderType.OppositeFirst, Quantity.FromDecimal(0.5m));
         var hedger = new Hedger(
             _mockLogger.Object, _linearInstrument, _linearInstrument, param,
             _mockOrderFactory.Object, "HedgeBook", _mockMarketDataManager.Object

@@ -9,6 +9,7 @@ using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.GUI.Components.Shared;
 using OpenHFT.GUI.Services;
+using OpenHFT.Hedging;
 using OpenHFT.Oms.Api.WebSocket;
 using OpenHFT.Quoting;
 
@@ -18,6 +19,7 @@ public partial class Home : ComponentBase, IDisposable
 {
     // --- Dependencies ---
     [Inject] private IConfiguration Configuration { get; set; } = default!;
+    [Inject] private IHedgingCacheService HedgingCache { get; set; } = default!;
     [Inject] private IOmsConnectorService OmsConnector { get; set; } = default!;
     [Inject] private IInstrumentRepository InstrumentRepository { get; set; } = default!;
     [Inject] private IExchangeFeedManager FeedManager { get; set; } = default!;
@@ -29,10 +31,12 @@ public partial class Home : ComponentBase, IDisposable
 
     // --- Child Component References ---
     private QuotingParametersController? _quotingController;
+    private HedgingParametersController? _hedgingController;
     // --- Centralized State ---
     private List<InstanceStatusPayload> _activeInstances = new();
     private InstanceStatusPayload? _selectedInstance;
     private readonly HashSet<int> _subscribedInstrumentIds = new();
+    private HedgingStatusPayload? _hedgingStatus;
     private bool _isDisposed = false;
 
     // --- Lifecycle Methods ---
@@ -43,6 +47,17 @@ public partial class Home : ComponentBase, IDisposable
         var connectedOmsConfig = OmsConnector.GetConnectedServers();
         OmsConnector.OnConnectionStatusChanged += HandleStatusChange;
         OrderCache.OnInstancesUpdated += HandleInstancesUpdated;
+        HedgingCache.OnHedgingStatusUpdated += HandleHedgingStatusUpdate;
+    }
+
+    private async void HandleHedgingStatusUpdate()
+    {
+        // Re-fetch status when cache is updated
+        if (_selectedInstance != null)
+        {
+            _hedgingStatus = HedgingCache.GetHedgingStatus(_selectedInstance.OmsIdentifier, _selectedInstance.InstrumentId);
+        }
+        await InvokeAsync(StateHasChanged);
     }
 
     private async void HandleInstancesUpdated()
@@ -94,6 +109,12 @@ public partial class Home : ComponentBase, IDisposable
             var serverConfig = Configuration.GetSection("oms").Get<List<OmsServerConfig>>()?
                                             .FirstOrDefault(s => s.OmsIdentifier == instance.OmsIdentifier);
             await _quotingController.UpdateParametersAsync(instance.Parameters, serverConfig);
+        }
+
+        _hedgingStatus = HedgingCache.GetHedgingStatus(instance.OmsIdentifier, instance.InstrumentId);
+        if (_hedgingController != null)
+        {
+            await _hedgingController.UpdateParametersAsync(_hedgingStatus?.Parameters);
         }
 
         StateHasChanged();
@@ -152,6 +173,54 @@ public partial class Home : ComponentBase, IDisposable
         await OmsConnector.SendCommandAsync(targetServer, command);
         Snackbar.Add($"Retire command sent to {targetServer.OmsIdentifier}.", Severity.Success);
     }
+
+    private async Task HandleStartHedging(HedgingParameters parameters)
+    {
+        if (_selectedInstance is null) return;
+        var targetServer = Configuration.GetSection("oms").Get<List<OmsServerConfig>>()?
+                                        .FirstOrDefault(s => s.OmsIdentifier == _selectedInstance.OmsIdentifier);
+        if (targetServer is null)
+        {
+            Snackbar.Add($"Could not find server config for OMS: {_selectedInstance.OmsIdentifier}", Severity.Error);
+            return;
+        }
+
+        if (OmsConnector.GetStatus(targetServer) != ConnectionStatus.Connected)
+        {
+            Snackbar.Add($"Cannot start hedger, not connected to OMS: {_selectedInstance.OmsIdentifier}", Severity.Error);
+            return;
+        }
+
+        var command = new UpdateHedgingParametersCommand(parameters);
+        await OmsConnector.SendCommandAsync(targetServer, command);
+        Snackbar.Add("Start Hedging command sent.", Severity.Info);
+    }
+
+    private async Task HandleStopHedging()
+    {
+        if (_selectedInstance is null) return;
+        var targetServer = Configuration.GetSection("oms").Get<List<OmsServerConfig>>()?
+                                        .FirstOrDefault(s => s.OmsIdentifier == _selectedInstance.OmsIdentifier);
+        if (targetServer is null)
+        {
+            Snackbar.Add($"Could not find server config for OMS: {_selectedInstance.OmsIdentifier}", Severity.Error);
+            return;
+        }
+
+        // Check connection status for the specific server
+        if (OmsConnector.GetStatus(targetServer) != ConnectionStatus.Connected)
+        {
+            Snackbar.Add($"Cannot stop hedger, not connected to OMS: {_selectedInstance.OmsIdentifier}", Severity.Error);
+            return;
+        }
+
+        Logger.LogInformationWithCaller($"Stop hedger for Instrument ID: {_selectedInstance.InstrumentId} on OMS: {_selectedInstance.OmsIdentifier}");
+
+        var command = new StopHedgingCommand(_selectedInstance.InstrumentId);
+        await OmsConnector.SendCommandAsync(targetServer, command);
+        Snackbar.Add("Stop Hedging command sent.", Severity.Warning);
+    }
+
     // --- Cleanup ---
     public void Dispose()
     {

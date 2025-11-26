@@ -5,6 +5,7 @@ namespace OpenHFT.Hedging;
 
 public readonly struct HedgingParameters : IEquatable<HedgingParameters>
 {
+    public readonly int QuotingInstrumentId { get; }
     public readonly int InstrumentId { get; }
     public readonly HedgeOrderType OrderType { get; }
     public readonly Quantity Size { get; }
@@ -12,15 +13,18 @@ public readonly struct HedgingParameters : IEquatable<HedgingParameters>
     /// <summary>
     /// Initializes a new instance of the HedgingParameters struct with all required values.
     /// </summary>
+    /// <param name="quotingInstrumentId">The ID of the quoting instrument to be hedged</param>
     /// <param name="instrumentId">The ID of the instrument these parameters apply to.</param>
     /// <param name="orderType">Hedge order type</param>
     /// <param name="size">The quantity for each hedge order.</param>
     [JsonConstructor]
     public HedgingParameters(
+        int quotingInstrumentId,
         int instrumentId,
         HedgeOrderType orderType,
         Quantity size)
     {
+        QuotingInstrumentId = quotingInstrumentId;
         InstrumentId = instrumentId;
         OrderType = orderType;
         Size = size;
@@ -29,6 +33,7 @@ public readonly struct HedgingParameters : IEquatable<HedgingParameters>
     public override string ToString()
     {
         return $"{{ " +
+               $"\"QuotingInstrumentId\": {QuotingInstrumentId}, " +
                $"\"InstrumentId\": {InstrumentId}, " +
                $"\"Ordertype\": {OrderType}, " +
                $"\"Size\": {Size.ToDecimal()}, " +
@@ -37,7 +42,8 @@ public readonly struct HedgingParameters : IEquatable<HedgingParameters>
 
     public bool Equals(HedgingParameters other)
     {
-        return InstrumentId == other.InstrumentId &&
+        return QuotingInstrumentId == other.QuotingInstrumentId &&
+               InstrumentId == other.InstrumentId &&
                OrderType == other.OrderType &&
                Size == other.Size;
     }
@@ -49,6 +55,7 @@ public readonly struct HedgingParameters : IEquatable<HedgingParameters>
     public override int GetHashCode()
     {
         var hash = new HashCode();
+        hash.Add(QuotingInstrumentId);
         hash.Add(InstrumentId);
         hash.Add(OrderType);
         hash.Add(Size);

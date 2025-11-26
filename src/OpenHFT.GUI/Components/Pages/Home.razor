@@ -26,11 +26,18 @@
             </MudItem>
             <MudItem xs="12" md="3">
                 <MudStack Spacing="2" Style="height: 100%;">
-                    <div style="height: 50%;">
+                    <div style="height: 40%;">
                         <InstanceListView Instances="_activeInstances" SelectedInstance="_selectedInstance"
                             OnInstanceSelected="HandleInstanceSelection" />
                     </div>
-                    <div style="height: 50%;">
+                    <div style="height: 40%;">
+                        <HedgingParametersController @ref="_hedgingController"
+                                                     QuotingInstrument="@(_selectedInstance != null ? InstrumentRepository.GetById(_selectedInstance.InstrumentId) : null)"
+                                                     IsHedgerActive="@(_hedgingStatus?.IsActive ?? false)"
+                                                     OnStart="HandleStartHedging"
+                                                     OnStop="HandleStopHedging" />
+                    </div>
+                    <div style="height: 20%;">
                         <ActiveOrdersView OmsIdentifier="@_selectedInstance?.OmsIdentifier"
                             InstrumentId="@_selectedInstance?.InstrumentId" />
                     </div>

@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using OpenHFT.Core.Books;
 using OpenHFT.Core.Models;
+using OpenHFT.Hedging;
 using OpenHFT.Quoting;
 using OpenHFT.Quoting.Models;
 
@@ -20,7 +21,16 @@ public record UpdateParametersCommand(
     [property: JsonPropertyName("payload")] QuotingParameters Parameters
 ) : WebSocketMessage("UPDATE_PARAMETERS");
 
+public record UpdateHedgingParametersCommand(
+    [property: JsonPropertyName("payload")] HedgingParameters Payload
+) : WebSocketMessage("UPDATE_HEDGING_PARAMETERS");
+
+public record StopHedgingCommand(
+    [property: JsonPropertyName("payload")] int QuotingInstrumentId // The ID of the main strategy instance
+) : WebSocketMessage("STOP_HEDGING");
+
 public record GetInstanceStatusesCommand() : WebSocketMessage("GET_INSTANCE_STATUSES");
+public record GetHedgingStatusesCommand() : WebSocketMessage("GET_HEDGING_STATUSES");
 public record GetActiveOrdersCommand() : WebSocketMessage("GET_ACTIVE_ORDERS");
 public record GetFillsCommand() : WebSocketMessage("GET_FILLS");
 public record GetBookUpdateCommand() : WebSocketMessage("GET_BOOK_UPDATE");
@@ -73,6 +83,27 @@ public class InstanceStatusPayload
 
     [JsonPropertyName("parameters")]
     public QuotingParameters Parameters { get; set; }
+}
+
+public record HedgingStatusEvent(
+    [property: JsonPropertyName("payload")] HedgingStatusPayload Payload
+) : WebSocketMessage("HEDGING_STATUS");
+
+
+public record HedgingStatusPayload
+{
+    [JsonPropertyName("omsIdentifier")]
+    public string OmsIdentifier { get; set; } = string.Empty;
+
+    // The ID of the main quoting instance this hedger is attached to.
+    [JsonPropertyName("quotingInstrumentId")]
+    public int QuotingInstrumentId { get; set; }
+
+    [JsonPropertyName("isActive")]
+    public bool IsActive { get; set; }
+
+    [JsonPropertyName("parameters")]
+    public HedgingParameters Parameters { get; set; }
 }
 
 public record QuotePairUpdateEvent(
