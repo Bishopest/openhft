@@ -21,12 +21,16 @@ public class ExchangeFeedManager : IExchangeFeedManager, IAsyncDisposable
     private readonly List<FeedAdapterConfig> _feedAdapterConfigs = new();
     public event EventHandler<MarketDataEvent>? OnMarketDataReceived;
 
-    public ExchangeFeedManager(ILogger<ExchangeFeedManager> logger, IInstrumentRepository instrumentRepository, IConfiguration configuration, IServiceProvider serviceProvider)
+    public ExchangeFeedManager(
+        ILogger<ExchangeFeedManager> logger,
+        IInstrumentRepository instrumentRepository,
+        IServiceProvider serviceProvider,
+        List<FeedAdapterConfig> feedAdapterConfigs)
     {
         _logger = logger;
         _instrumentRepository = instrumentRepository;
         _serviceProvider = serviceProvider;
-        _feedAdapterConfigs = configuration.GetSection("feed").Get<List<FeedAdapterConfig>>() ?? new List<FeedAdapterConfig>();
+        _feedAdapterConfigs = feedAdapterConfigs;
     }
 
     public async Task SubscribeToInstrumentAsync(int instrumentId)

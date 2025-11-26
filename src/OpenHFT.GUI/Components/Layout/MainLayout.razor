@@ -3,7 +3,7 @@
 @using OpenHFT.Core.Configuration
 @using OpenHFT.GUI.Services
 
-<MudThemeProvider />
+<MudThemeProvider Theme="_currentTheme" />
 <MudDialogProvider />
 <MudSnackbarProvider />
 <MudPopoverProvider />
@@ -13,6 +13,10 @@
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
             OnClick="@((e) => DrawerToggle())" />
         <MudText Typo="Typo.h5">OpenHFT</MudText>
+        @if (_isTestnet)
+        {
+            <MudChip T='string' Color="Color.Error" Variant="Variant.Filled" Class="ml-4">TESTNET</MudChip>
+        }
         <MudSpacer />
     </MudAppBar>
 
@@ -30,7 +34,31 @@
 </MudLayout>
 
 @code {
+    [Inject]
+    private IConfiguration Configuration { get; set; } = default!;
+    private bool _isTestnet;
+    private MudTheme _currentTheme = new MudTheme();
     bool _drawerOpen = true;
+
+    protected override void OnInitialized()
+        {
+            // --- DETECT ENVIRONMENT AND SET THEME ---
+            string launchProfileName = Configuration.GetValue<string>("LAUNCH_PROFILE_NAME");
+            if (string.IsNullOrEmpty(launchProfileName))
+            {
+                throw new ArgumentNullException("launch profile must be addressed first(live or testnet)");
+            }
+            _isTestnet = string.Equals(launchProfileName, "testnet", StringComparison.OrdinalIgnoreCase); 
+            if (_isTestnet)
+            {
+                _currentTheme = new MudTheme();
+
+                // --- THIS IS THE KEY FIX FOR v7 ---
+                // Access 'PaletteLight' for the light theme, not 'Palette'.
+                _currentTheme.PaletteLight.Primary = Colors.Amber.Default;
+                _currentTheme.PaletteLight.AppbarBackground = Colors.Amber.Default;
+            }
+        }
 
     void DrawerToggle()
     {

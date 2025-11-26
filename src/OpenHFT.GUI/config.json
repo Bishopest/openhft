@@ -1,16 +1,36 @@
 {
-  "feed": [
-    {
-      "exchange": "binance",
-      "productType": "perpetualfuture",
-      "executionMode": "live"
-    },
-    {
-      "exchange": "bitmex",
-      "productType": "perpetualfuture",
-      "executionMode": "live"
+  "live": {
+    "feed": {
+      "adapters": [
+        {
+          "exchange": "binance",
+          "productType": "perpetualFuture",
+          "executionMode": "live"
+        },
+        {
+          "exchange": "bitmex",
+          "productType": "perpetualFuture",
+          "executionMode": "live"
+        }
+      ]
     }
-  ],
+  },
+  "testnet": {
+    "feed": {
+      "adapters": [
+        {
+          "exchange": "binance",
+          "productType": "perpetualFuture",
+          "executionMode": "testnet"
+        },
+        {
+          "exchange": "bitmex",
+          "productType": "perpetualFuture",
+          "executionMode": "testnet"
+        }
+      ]
+    }
+  },
   "oms": [
     {
       "omsIdentifier": "LOCAL",

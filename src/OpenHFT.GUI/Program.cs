@@ -6,6 +6,8 @@ using OpenHFT.Core.Instruments;
 using OpenHFT.Feed.Adapters;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using OpenHFT.Core.Configuration;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,7 +32,17 @@ builder.Services.AddSingleton<IOmsConnectorService, OmsConnectorService>();
 builder.Services.AddSingleton<IInstrumentRepository, InstrumentRepository>();
 builder.Services.AddSingleton<IQuoteManager, QuoteManager>();
 builder.Configuration.AddJsonFile("config.json", optional: false, reloadOnChange: false);
-
+string launchProfileName = builder.Configuration.GetValue<string>("LAUNCH_PROFILE_NAME");
+if (string.IsNullOrEmpty(launchProfileName))
+{
+    throw new ArgumentNullException("launch profile must be addressed first(live or testnet)");
+}
+builder.Services.Configure<List<FeedAdapterConfig>>(
+    builder.Configuration.GetSection($"{launchProfileName}:feed:adapters")
+);
+builder.Services.AddSingleton(provider =>
+    provider.GetRequiredService<IOptions<List<FeedAdapterConfig>>>().Value
+);
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
