@@ -62,6 +62,7 @@ public partial class Footer : ComponentBase, IDisposable
             await OmsConnector.SendCommandAsync(args.Server, new GetActiveOrdersCommand());
             await OmsConnector.SendCommandAsync(args.Server, new GetFillsCommand());
             await OmsConnector.SendCommandAsync(args.Server, new GetBookUpdateCommand());
+            await OmsConnector.SendCommandAsync(args.Server, new GetHedgingStatusesCommand());
         }
 
         await InvokeAsync(StateHasChanged);
