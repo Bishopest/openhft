@@ -19,6 +19,7 @@ using System.Text.Json.Serialization;
 using OpenHFT.Core.Instruments;
 using Microsoft.Extensions.Configuration;
 using OpenHFT.Core.Interfaces;
+using OpenHFT.Hedging;
 
 namespace OpenHFT.Tests.Oms.Api;
 
@@ -76,6 +77,7 @@ public class WebSocketHostTests
         services.AddSingleton(_mockManager.Object);
         services.AddSingleton(new Mock<IOrderRouter>().Object);
         services.AddSingleton(new Mock<IBookManager>().Object);
+        services.AddSingleton(new Mock<IHedgerManager>().Object);
         services.AddHostedService<WebSocketNotificationService>();
 
         // WebSocketHost 등록 (IHostedService로)

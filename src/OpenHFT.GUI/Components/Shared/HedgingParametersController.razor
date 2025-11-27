@@ -20,8 +20,10 @@
             <MudStack Spacing="3">
                 <MudAutocomplete T="Instrument" Label="Hedge Instrument" @bind-Value="_selectedHedgeInstrument"
                                  SearchFunc="SearchInstruments" ToStringFunc="ConvertInstrumentToString"
-                                 Variant="Variant.Outlined" Required="true" CoerceText="false"/>
-
+                                 Variant="Variant.Outlined" Required="true" CoerceText="false">
+                    <ItemTemplate Context="instrument">@instrument.Symbol (@instrument.SourceExchange)
+                        (@instrument.ProductType)</ItemTemplate>
+                </MudAutocomplete>
                 <MudSelect T="HedgeOrderType" @bind-Value="_model.OrderType" Label="Hedge Order Type"
                            Variant="Variant.Outlined" Required="true">
                     @foreach (HedgeOrderType ot in Enum.GetValues(typeof(HedgeOrderType)))

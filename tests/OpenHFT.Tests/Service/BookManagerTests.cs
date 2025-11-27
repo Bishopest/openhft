@@ -193,10 +193,15 @@ public class BookManagerTests_Linear
         SimulateFill(fill3);
 
         // Assert
+        var multiplier = 1m;
+        if (_instrument is CryptoFuture cf)
+        {
+            multiplier = cf.Multiplier;
+        }
         var element = _bookManager.GetBookElement("test", _instrument.InstrumentId);
         element.Size.ToDecimal().Should().Be(0m); // 10 - 4
         element.AvgPrice.ToDecimal().Should().Be(0m, "Avg price should not change on partial close.");
-        element.RealizedPnL.Amount.Should().BeApproximately(-3.5m, 0.1m);
+        element.RealizedPnL.Amount.Should().BeApproximately(-0.35m * 1010000m * multiplier, 0.1m);
     }
 
     [Test]

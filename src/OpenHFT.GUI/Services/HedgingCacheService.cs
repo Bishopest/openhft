@@ -37,7 +37,7 @@ public class HedgingCacheService : IHedgingCacheService, IDisposable
                 {
                     var payload = statusEvent.Payload;
                     var omsStatuses = _hedgingStatuses.GetOrAdd(payload.OmsIdentifier, new ConcurrentDictionary<int, HedgingStatusPayload>());
-                    omsStatuses[payload.QuotingInstrumentId] = payload;
+                    omsStatuses[payload.Parameters.QuotingInstrumentId] = payload;
                     OnHedgingStatusUpdated?.Invoke();
                 }
                 break;

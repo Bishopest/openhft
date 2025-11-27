@@ -13,13 +13,13 @@ namespace OpenHFT.Service;
 public class MarketDataInitializerService : IHostedService
 {
     private readonly ILogger<MarketDataInitializerService> _logger;
-    private readonly MarketDataManager _marketDataManager;
+    private readonly IMarketDataManager _marketDataManager;
     private readonly IInstrumentRepository _instrumentRepository;
     private readonly SubscriptionConfig _config;
 
     public MarketDataInitializerService(
         ILogger<MarketDataInitializerService> logger,
-        MarketDataManager marketDataManager,
+        IMarketDataManager marketDataManager,
         IInstrumentRepository instrumentRepository,
         SubscriptionConfig config)
     {

@@ -28,6 +28,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using OpenHFT.Core.DataBase;
 using System.Runtime.InteropServices;
+using OpenHFT.Hedging;
 
 public class Program
 {
@@ -139,6 +140,7 @@ public class Program
                 services.AddSingleton<IQuoterFactory, QuoterFactory>();
                 services.AddSingleton<IQuotingInstanceFactory, QuotingInstanceFactory>();
                 services.AddSingleton<IQuotingInstanceManager, QuotingInstanceManager>();
+                services.AddSingleton<IHedgerManager, HedgerManager>();
                 services.AddSingleton<IOrderGatewayRegistry, OrderGatewayRegistry>();
                 services.AddSingleton<IOrderFactory, OrderFactory>();
                 services.AddSingleton<QuoteDebugger>();
@@ -155,7 +157,10 @@ public class Program
                 services.AddSingleton<IWebSocketCommandHandler, GetActiveOrdersCommandHandler>();
                 services.AddSingleton<IWebSocketCommandHandler, GetFillsCommandHandler>();
                 services.AddSingleton<IWebSocketCommandHandler, GetBookUpdateCommandHandler>();
+                services.AddSingleton<IWebSocketCommandHandler, GetHedgingStatusesCommandHandler>();
                 services.AddSingleton<IWebSocketCommandRouter, WebSocketCommandRouter>();
+                services.AddSingleton<IWebSocketCommandHandler, UpdateHedgingParametersCommandHandler>();
+                services.AddSingleton<IWebSocketCommandHandler, StopHedgingCommandHandler>();
                 services.AddSingleton<IFillRepository, SqliteFillRepository>();
                 services.AddSingleton<IBookRepository, SqliteBookRepository>();
 

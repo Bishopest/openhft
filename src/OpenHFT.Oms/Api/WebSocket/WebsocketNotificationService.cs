@@ -6,6 +6,7 @@ using OpenHFT.Core.Books;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
+using OpenHFT.Hedging;
 using OpenHFT.Quoting;
 using OpenHFT.Quoting.Interfaces;
 using OpenHFT.Quoting.Models;
@@ -21,6 +22,7 @@ public class WebSocketNotificationService : IHostedService
     private readonly ILogger<WebSocketNotificationService> _logger;
     private readonly IWebSocketChannel _channel;
     private readonly IQuotingInstanceManager _quotingManager;
+    private readonly IHedgerManager _hedgerManager;
     private readonly IBookManager _bookManager;
     private readonly IOrderRouter _orderRouter;
     // Add other event sources here, e.g., IPositionManager, IRiskManager
@@ -30,6 +32,7 @@ public class WebSocketNotificationService : IHostedService
         ILogger<WebSocketNotificationService> logger,
         IWebSocketChannel channel,
         IQuotingInstanceManager quotingManager,
+        IHedgerManager hedgerManager,
         IBookManager bookManager,
         IOrderRouter orderRouter,
         IConfiguration config
@@ -38,6 +41,7 @@ public class WebSocketNotificationService : IHostedService
         _logger = logger;
         _channel = channel;
         _quotingManager = quotingManager;
+        _hedgerManager = hedgerManager;
         _bookManager = bookManager;
         _orderRouter = orderRouter;
         _omsIdentifier = config["omsIdentifier"] ?? throw new ArgumentNullException("omsIdentifier");
@@ -50,6 +54,7 @@ public class WebSocketNotificationService : IHostedService
         // Subscribe to all relevant domain events
         _quotingManager.InstanceQuotePairCalculated += OnQuotePairCalculated;
         _quotingManager.InstanceParametersUpdated += OnInstanceParametersUpdated;
+        _hedgerManager.HedgingParametersUpdated += OnHedgingParametersUpdated;
         _bookManager.BookElementUpdated += OnBookElementUpdated;
         _orderRouter.OrderStatusChanged += OnOrderStatusChanged;
         _orderRouter.OrderFilled += OnOrderFilled;
@@ -65,6 +70,7 @@ public class WebSocketNotificationService : IHostedService
         // Unsubscribe to prevent memory leaks
         _quotingManager.InstanceQuotePairCalculated -= OnQuotePairCalculated;
         _quotingManager.InstanceParametersUpdated -= OnInstanceParametersUpdated;
+        _hedgerManager.HedgingParametersUpdated -= OnHedgingParametersUpdated;
         _bookManager.BookElementUpdated -= OnBookElementUpdated;
         _orderRouter.OrderStatusChanged -= OnOrderStatusChanged;
         _orderRouter.OrderFilled -= OnOrderFilled;
@@ -99,6 +105,23 @@ public class WebSocketNotificationService : IHostedService
             Parameters = newParameters
         };
         var statusEvent = new InstanceStatusEvent(payload);
+        _ = _channel.SendAsync(statusEvent);
+    }
+
+    private void OnHedgingParametersUpdated(object? sender, HedgingParameters newParameters)
+    {
+        _logger.LogInformationWithCaller($"Broadcasting instance hedging parameter update for Quote InstrumentID {newParameters.QuotingInstrumentId} Hedge InstrumentId {newParameters.InstrumentId}");
+
+        var hedger = _hedgerManager.GetHedger(newParameters.QuotingInstrumentId);
+        if (hedger == null) return;
+
+        var payload = new HedgingStatusPayload
+        {
+            OmsIdentifier = _omsIdentifier,
+            IsActive = hedger.IsActive,
+            Parameters = newParameters
+        };
+        var statusEvent = new HedgingStatusEvent(payload);
         _ = _channel.SendAsync(statusEvent);
     }
 

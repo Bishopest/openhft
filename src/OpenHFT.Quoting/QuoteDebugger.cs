@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
+using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Processing;
@@ -16,7 +17,7 @@ namespace OpenHFT.Quoting;
 public class QuoteDebugger
 {
     private readonly ILogger<QuoteDebugger> _logger;
-    private readonly MarketDataManager _marketDataManager;
+    private readonly IMarketDataManager _marketDataManager;
     private readonly IQuotingInstanceManager _quotingInstanceManager;
 
     private Instrument? _instrumentToMonitor;
@@ -24,7 +25,7 @@ public class QuoteDebugger
 
     public QuoteDebugger(
         ILogger<QuoteDebugger> logger,
-        MarketDataManager marketDataManager,
+        IMarketDataManager marketDataManager,
         IQuotingInstanceManager quotingInstanceManager
     )
     {

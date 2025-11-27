@@ -95,10 +95,6 @@ public record HedgingStatusPayload
     [JsonPropertyName("omsIdentifier")]
     public string OmsIdentifier { get; set; } = string.Empty;
 
-    // The ID of the main quoting instance this hedger is attached to.
-    [JsonPropertyName("quotingInstrumentId")]
-    public int QuotingInstrumentId { get; set; }
-
     [JsonPropertyName("isActive")]
     public bool IsActive { get; set; }
 

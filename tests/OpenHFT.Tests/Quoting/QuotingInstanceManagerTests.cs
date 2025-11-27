@@ -64,7 +64,7 @@ public class QuotingInstanceManagerTests_Integration
         services.AddSingleton<IOrderUpdateHandler, OrderUpdateDistributor>();
         services.AddSingleton<IOrderGateway, NullOrderGateway>();
         services.AddSingleton<IOrderGatewayRegistry, OrderGatewayRegistry>();
-        services.AddSingleton<MarketDataManager>();
+        services.AddSingleton<IMarketDataManager, MarketDataManager>();
         _mockFeedHandler = new Mock<IFeedHandler>();
         services.AddSingleton(_mockFeedHandler.Object);
         services.AddSingleton(provider =>

@@ -36,7 +36,7 @@ public class QuotingEngineTests
     private LogQuoter _bidQuoter;
     private LogQuoter _askQuoter;
     private IInstrumentRepository _instrumentRepo;
-    private MarketDataManager _marketDataManager;
+    private IMarketDataManager _marketDataManager;
     private MockAdapter _mockBinanceAdapter; // For FV source data
     private IOrderRouter _orderRouter;
     private IFeedHandler _feedHandler;
@@ -79,7 +79,7 @@ public class QuotingEngineTests
         services.AddSingleton<IFeedAdapterRegistry, FeedAdapterRegistry>();
         services.AddSingleton<IFeedHandler, FeedHandler>();
         services.AddSingleton<MarketDataDistributor>();
-        services.AddSingleton<MarketDataManager>();
+        services.AddSingleton<IMarketDataManager, MarketDataManager>();
         services.AddSingleton<IOrderRouter, OrderRouter>();
         services.AddSingleton<IOrderUpdateHandler, OrderUpdateDistributor>();
         services.AddSingleton<IOrderGateway, NullOrderGateway>();
@@ -104,7 +104,7 @@ public class QuotingEngineTests
 
         // --- 5. ServiceProvider 빌드 및 객체 생성 ---
         _serviceProvider = services.BuildServiceProvider();
-        _marketDataManager = _serviceProvider.GetRequiredService<MarketDataManager>();
+        _marketDataManager = _serviceProvider.GetRequiredService<IMarketDataManager>();
         _feedHandler = _serviceProvider.GetRequiredService<IFeedHandler>();
         _orderRouter = _serviceProvider.GetRequiredService<IOrderRouter>();
 

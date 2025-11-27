@@ -1,6 +1,7 @@
 using System;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
+using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Processing;
@@ -12,7 +13,7 @@ namespace OpenHFT.Quoting;
 public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
 {
     private readonly ILogger _logger;
-    private readonly MarketDataManager _marketDataManager;
+    private readonly IMarketDataManager _marketDataManager;
     private readonly MarketMaker _marketMaker;
     private readonly object _lock = new();
     private IFairValueProvider? _fairValueProvider;
@@ -42,7 +43,7 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
         MarketMaker marketMaker,
         IFairValueProvider fairValueProvider,
         QuotingParameters initialParameters,
-        MarketDataManager marketDataManager)
+        IMarketDataManager marketDataManager)
     {
         _logger = logger;
         QuotingInstrument = instrument;

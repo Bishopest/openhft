@@ -12,14 +12,14 @@ namespace OpenHFT.Quoting;
 public class QuotingInstanceFactory : IQuotingInstanceFactory
 {
     private readonly ILoggerFactory _loggerFactory;
-    private readonly MarketDataManager _marketDataManager;
+    private readonly IMarketDataManager _marketDataManager;
     private readonly IFairValueProviderFactory _fairValueProviderFactory;
     private readonly IQuoterFactory _quoterFactory;
     private readonly IInstrumentRepository _instrumentRepository;
 
     public QuotingInstanceFactory(
         ILoggerFactory loggerFactory,
-        MarketDataManager marketDataManager,
+        IMarketDataManager marketDataManager,
         IFairValueProviderFactory fairValueProviderFactory,
         IQuoterFactory quoterFactory,
         IInstrumentRepository instrumentRepository)

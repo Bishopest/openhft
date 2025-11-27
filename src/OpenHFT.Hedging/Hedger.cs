@@ -30,8 +30,11 @@ public class Hedger
     // remaining value in denomination currency
     // if (+) then (Buy) ,otherwise (Sell)
     private Quantity _netPendingHedgeQuantity = Quantity.FromDecimal(0);
-    private bool IsActive = false;
+    private bool _isActive = false;
     private static readonly HashSet<string> SupportedCurrencies = new() { "BTC", "USDT" };
+
+    public bool IsActive => _isActive;
+    public HedgingParameters HedgeParameters => _hedgeParameters;
 
     public Hedger(
         ILogger<Hedger> logger,
@@ -78,35 +81,40 @@ public class Hedger
             return;
         }
 
-        IsActive = true;
+        _isActive = true;
         _logger.LogInformationWithCaller($"Starting Hedger for Q:{_quoteInstrument.Symbol} H:{_hedgeInstrument.Symbol}.");
         var subscriptionKey = $"Hedger_{_quoteInstrument.Symbol}_{_hedgeInstrument.Symbol}_{_bookName}";
         _marketDataManager.SubscribeOrderBook(_hedgeInstrument.InstrumentId, subscriptionKey, (sender, book) => UpdateHedgeOrderBook(book));
 
         if (_referenceInstrumentId.HasValue)
         {
-            var refKey = $"HedgerRef_{_referenceInstrumentId}_{_bookName}";
+            var refKey = $"HedgerRef_{_referenceInstrumentId}_{_quoteInstrument.Symbol}_{_hedgeInstrument.Symbol}_{_bookName}";
             _marketDataManager.SubscribeOrderBook(_referenceInstrumentId.Value, refKey, (sender, book) => UpdateReferenceOrderBook(book));
         }
     }
 
     public void Deactivate()
     {
-        if (!IsActive)
+        if (!_isActive)
         {
             _logger.LogWarningWithCaller($"Can not deactivate non-active hedger on quoting instrument {_quoteInstrument.Symbol}, hedging instrument {_hedgeInstrument.Symbol} on book {_bookName}");
             return;
         }
-        IsActive = false;
+        _isActive = false;
 
-        _logger.LogInformationWithCaller($"Starting Hedger for Q:{_quoteInstrument.Symbol} H:{_hedgeInstrument.Symbol}.");
+        _logger.LogInformationWithCaller($"Stop Hedger for Q:{_quoteInstrument.Symbol} H:{_hedgeInstrument.Symbol}.");
         var subscriptionKey = $"Hedger_{_quoteInstrument.Symbol}_{_hedgeInstrument.Symbol}_{_bookName}";
         _marketDataManager.UnsubscribeOrderBook(_hedgeInstrument.InstrumentId, subscriptionKey);
 
         if (_referenceInstrumentId.HasValue)
         {
-            var refKey = $"HedgerRef_{_referenceInstrumentId}_{_bookName}";
+            var refKey = $"HedgerRef_{_referenceInstrumentId}_{_quoteInstrument.Symbol}_{_hedgeInstrument.Symbol}_{_bookName}";
             _marketDataManager.UnsubscribeOrderBook(_referenceInstrumentId.Value, refKey);
+        }
+
+        if (_hedgeOrder is not null)
+        {
+            _ = _hedgeOrder.CancelAsync(CancellationToken.None);
         }
     }
 
@@ -419,13 +427,9 @@ public class Hedger
         var minOrderSizeTicks = instrument.MinOrderSize.ToTicks();
         if (minOrderSizeTicks <= 0) return Quantity.FromDecimal(0m); // 방어 코드
 
-        // 2. Ticks로 변환하여 정수 연산 준비
-        long rawTicks = Quantity.FromDecimal(rawQuantityDecimal).ToTicks();
-
-        long alignedTicks = rawTicks / minOrderSizeTicks * minOrderSizeTicks;
-
-        return Quantity.FromTicks(alignedTicks);
+        return Quantity.FromDecimal(rawQuantityDecimal);
     }
+
     private void ClearActiveOrder(OrderStatusReport finalReport)
     {
         lock (_stateLock)
