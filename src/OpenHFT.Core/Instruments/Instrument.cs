@@ -82,4 +82,9 @@ public abstract class Instrument
     {
         return CurrencyAmount.FromDecimal(p.ToDecimal() * q.ToDecimal(), DenominationCurrency);
     }
+
+    public virtual Price PriceFromValue(CurrencyAmount value, Quantity orderQty)
+    {
+        return Price.FromDecimal(value.Amount / orderQty.ToDecimal());
+    }
 }

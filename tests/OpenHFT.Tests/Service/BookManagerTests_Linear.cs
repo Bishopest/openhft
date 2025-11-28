@@ -54,6 +54,7 @@ public class BookManagerTests_Linear
 
         var mockOrderRouter = new Mock<IOrderRouter>();
         var mockBookRepository = new Mock<IBookRepository>();
+        var mockFxRateService = new Mock<IFxRateService>();
 
         // IInstrumentRepository는 Mocking하여 테스트 격리성을 높입니다.
         var mockRepo = new Mock<IInstrumentRepository>();
@@ -61,6 +62,7 @@ public class BookManagerTests_Linear
 
         services.AddSingleton(mockOrderRouter.Object);
         services.AddSingleton(mockRepo.Object);
+        services.AddSingleton(mockFxRateService.Object);
 
         _serviceProvider = services.BuildServiceProvider();
         // ------------------------------------
@@ -93,7 +95,8 @@ public class BookManagerTests_Linear
             mockRepo.Object,
             mockBookRepository.Object,
             configuration,
-            mockOptions.Object
+            mockOptions.Object,
+            mockFxRateService.Object
         );
 
         // _elements에 현재 테스트의 Instrument에 대한 초기 BookElement만 추가합니다.
@@ -134,7 +137,7 @@ public class BookManagerTests_Linear
         element.Size.ToDecimal().Should().Be(10m);
         element.AvgPrice.ToDecimal().Should().Be(100m);
         element.RealizedPnL.Amount.Should().Be(0m * multiplier);
-        element.VolumeInUsdt.Amount.Should().Be(1000m * multiplier); // 100 * 10
+        element.Volume.Amount.Should().Be(1000m * multiplier); // 100 * 10
     }
 
     [Test]

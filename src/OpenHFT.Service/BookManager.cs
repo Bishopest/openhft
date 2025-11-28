@@ -20,14 +20,13 @@ public class BookManager : IBookManager, IHostedService
     private readonly IOrderRouter _orderRouter;
     private readonly IInstrumentRepository _instrumentRepo;
     private readonly IBookRepository _bookRepository;
+    private readonly IFxRateService _fxRateService;
 
     // Key: InstrumentId
     private readonly ConcurrentDictionary<(string BookName, int InstrumentId), BookElement> _elements = new();
     private readonly ConcurrentDictionary<string, BookInfo> _bookInfos = new();
     private readonly object _lock = new();
     private readonly string _omsIdentifier;
-    private static readonly HashSet<string> SupportedCurrencies = new() { "BTC", "USDT" };
-    private OrderBook? _cachedReferenceOrderBook;
 
     public event EventHandler<BookElement>? BookElementUpdated;
 
@@ -36,7 +35,8 @@ public class BookManager : IBookManager, IHostedService
                        IInstrumentRepository instrumentRepo,
                        IBookRepository bookRepository,
                        IConfiguration config,
-                       IOptions<List<BookConfig>> bookConfigs)
+                       IOptions<List<BookConfig>> bookConfigs,
+                       IFxRateService fxRateService)
     {
         _logger = logger;
         _orderRouter = orderRouter;
@@ -44,6 +44,7 @@ public class BookManager : IBookManager, IHostedService
         _bookRepository = bookRepository;
         _bookConfigs = bookConfigs.Value;
         _omsIdentifier = config["omsIdentifier"] ?? throw new ArgumentNullException("omsIdentifier");
+        _fxRateService = fxRateService;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -94,7 +95,7 @@ public class BookManager : IBookManager, IHostedService
                     fill.InstrumentId,
                     Price.FromDecimal(0m),
                     Quantity.FromDecimal(0m),
-                    CurrencyAmount.FromDecimal(0m, instrument.DenominationCurrency),
+                    CurrencyAmount.FromDecimal(0m, Currency.USDT),
                     CurrencyAmount.FromDecimal(0m, Currency.USDT), // Volume is usually in USDT or base currency
                     0 // LastUpdateTime
                 );
@@ -135,7 +136,7 @@ public class BookManager : IBookManager, IHostedService
 
         decimal newQtyDecimal;
         decimal newAvgPriceDecimal;
-        CurrencyAmount realizedPnlDelta = CurrencyAmount.FromDecimal(0m, instrument.DenominationCurrency);
+        CurrencyAmount realizedPnlDelta = CurrencyAmount.FromDecimal(0m, Currency.USDT);
 
         newQtyDecimal = currentQtyDecimal + effectiveFillQtyDecimal;
 
@@ -158,6 +159,19 @@ public class BookManager : IBookManager, IHostedService
                 realizedPnlDelta *= Math.Sign(newQtyDecimal);
             }
         }
+        // convert into usdt
+        if (instrument.DenominationCurrency != Currency.USDT)
+        {
+            var isInverse = true;
+            if (instrument.SourceExchange == ExchangeEnum.BITMEX && instrument.BaseCurrency != Currency.BTC)
+            {
+                isInverse = false;
+            }
+
+            if (isInverse) realizedPnlDelta *= -1m;
+            var realizedPnlDeltaInUsdt = _fxRateService.Convert(realizedPnlDelta, Currency.USDT);
+            realizedPnlDelta = realizedPnlDeltaInUsdt ?? new CurrencyAmount(0m, Currency.USDT);
+        }
 
         // avg price calculation
         if (isNewQtyFlat)
@@ -176,8 +190,7 @@ public class BookManager : IBookManager, IHostedService
                 // 3. 포지션이 증가하면 가중 평균 계산 (같은 방향 추가)
                 var currentValue = instrument.ValueInDenominationCurrency(currentElement.AvgPrice, currentElement.Size);
                 var newValue = instrument.ValueInDenominationCurrency(fill.Price, Quantity.FromDecimal(effectiveFillQtyDecimal));
-                var multiplier = instrument is CryptoFuture cf ? cf.Multiplier : 1m;
-                newAvgPriceDecimal = (currentValue.Amount + newValue.Amount) / newQtyDecimal / multiplier;
+                newAvgPriceDecimal = instrument.PriceFromValue(currentValue + newValue, Quantity.FromDecimal(newQtyDecimal)).ToDecimal();
             }
             else
             {
@@ -187,7 +200,19 @@ public class BookManager : IBookManager, IHostedService
         }
 
         var volume = instrument.ValueInDenominationCurrency(fill.Price, fill.Quantity);
-        volume = CurrencyAmount.FromDecimal(volume.Amount, Currency.USDT);
+        if (volume.Currency != Currency.USDT)
+        {
+            var volumeInUsdt = _fxRateService.Convert(volume, Currency.USDT);
+            if (volumeInUsdt is null)
+            {
+                _logger.LogWarningWithCaller($"Can not convert volume in {volume.Currency} into USDT. Zero volume added");
+                volume = new CurrencyAmount(0m, Currency.USDT);
+            }
+            else
+            {
+                volume = volumeInUsdt.Value;
+            }
+        }
         var newBookelement = new BookElement(currentElement.BookName,
                                             currentElement.InstrumentId,
                                             Price.FromDecimal(newAvgPriceDecimal),
