@@ -26,6 +26,8 @@ public class BookManager : IBookManager, IHostedService
     private readonly ConcurrentDictionary<string, BookInfo> _bookInfos = new();
     private readonly object _lock = new();
     private readonly string _omsIdentifier;
+    private static readonly HashSet<string> SupportedCurrencies = new() { "BTC", "USDT" };
+    private OrderBook? _cachedReferenceOrderBook;
 
     public event EventHandler<BookElement>? BookElementUpdated;
 
@@ -191,7 +193,7 @@ public class BookManager : IBookManager, IHostedService
                                             Price.FromDecimal(newAvgPriceDecimal),
                                             Quantity.FromDecimal(newQtyDecimal),
                                             currentElement.RealizedPnL + realizedPnlDelta,
-                                            currentElement.VolumeInUsdt + volume,
+                                            currentElement.Volume + volume,
                                             fill.Timestamp
                                             );
         return newBookelement;

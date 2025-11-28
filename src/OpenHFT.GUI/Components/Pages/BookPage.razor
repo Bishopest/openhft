@@ -32,7 +32,7 @@
                     <span class="@(pnl >= 0 ? "mud-theme-success-text" : "mud-theme-error-text")">@pnl.ToString("N2")</span>
                 </MudTd>
                 <MudTd DataLabel="Total Volume (USDT)">
-                    @BookCache.GetElementsByBookName(context).Sum(e => e.VolumeInUsdt.Amount).ToString("N0")
+                    @BookCache.GetElementsByBookName(context).Sum(e => e.Volume.Amount).ToString("N0")
                 </MudTd>
             </RowTemplate>
             
@@ -66,7 +66,7 @@
                                                 <td>@element.AvgPrice.ToDecimal()</td>
                                                 <td>@element.RealizedPnL.Amount.ToString("N2")</td>
                                                 <td></td>
-                                                <td>@element.VolumeInUsdt.Amount.ToString("N0")</td>
+                                                <td>@element.Volume.Amount.ToString("N0")</td>
                                             </tr>
                                         }
                                     </tbody>

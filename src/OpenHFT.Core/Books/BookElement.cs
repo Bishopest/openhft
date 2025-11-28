@@ -11,7 +11,7 @@ public readonly struct BookElement : IEquatable<BookElement>
     public Price AvgPrice { get; }
     public Quantity Size { get; }
     public CurrencyAmount RealizedPnL { get; }
-    public CurrencyAmount VolumeInUsdt { get; }
+    public CurrencyAmount Volume { get; }
     public long LastUpdateTime { get; }
 
     [JsonConstructor]
@@ -28,7 +28,7 @@ public readonly struct BookElement : IEquatable<BookElement>
         AvgPrice = avgPrice;
         Size = size;
         RealizedPnL = realizedPnL;
-        VolumeInUsdt = volumeInUsdt;
+        Volume = volumeInUsdt;
         LastUpdateTime = lastUpdateTime;
     }
 
@@ -42,7 +42,7 @@ public readonly struct BookElement : IEquatable<BookElement>
                AvgPrice.Equals(other.AvgPrice) &&
                Size.Equals(other.Size) &&
                RealizedPnL.Equals(other.RealizedPnL) &&
-               VolumeInUsdt.Equals(other.VolumeInUsdt);
+               Volume.Equals(other.Volume);
     }
 
     public override int GetHashCode()
@@ -53,7 +53,7 @@ public readonly struct BookElement : IEquatable<BookElement>
         hash.Add(AvgPrice);
         hash.Add(Size);
         hash.Add(RealizedPnL);
-        hash.Add(VolumeInUsdt);
+        hash.Add(Volume);
         return hash.ToHashCode();
     }
 

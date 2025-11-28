@@ -33,8 +33,8 @@ public class BookElementDbo
             Size = element.Size.ToDecimal(),
             RealizedPnLAmount = element.RealizedPnL.Amount,
             RealizedPnLCurrency = element.RealizedPnL.Currency.Symbol,
-            VolumeInUsdtAmount = element.VolumeInUsdt.Amount,
-            VolumeInUsdtCurrency = element.VolumeInUsdt.Currency.Symbol,
+            VolumeInUsdtAmount = element.Volume.Amount,
+            VolumeInUsdtCurrency = element.Volume.Currency.Symbol,
             LastUpdateTime = element.LastUpdateTime
         };
     }
