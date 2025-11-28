@@ -163,6 +163,7 @@ public class Program
                 services.AddSingleton<IWebSocketCommandHandler, StopHedgingCommandHandler>();
                 services.AddSingleton<IFillRepository, SqliteFillRepository>();
                 services.AddSingleton<IBookRepository, SqliteBookRepository>();
+                services.AddSingleton<IFxRateService, FxRateManager>();
 
                 // --- 3-1. Adapter 및 RestApiClient 등록 ---
                 var subscriptionTupLists = new List<(string Exchange, string ProductType)>();

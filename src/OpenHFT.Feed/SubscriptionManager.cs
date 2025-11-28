@@ -38,7 +38,7 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
     {
         _logger.LogInformationWithCaller("Initializing subscriptions from config.json...");
 
-        var instrumentsByAdapter = new Dictionary<(ExchangeEnum, ProductType), List<Instrument>>();
+        var instrumentsByAdapter = new Dictionary<(ExchangeEnum, ProductType), HashSet<Instrument>>();
 
         // The _config object itself is the dictionary of exchanges
         foreach (var group in _config.Subscriptions)
@@ -57,7 +57,7 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
 
                 if (!instrumentsByAdapter.ContainsKey(adapterKey))
                 {
-                    instrumentsByAdapter[adapterKey] = new List<Instrument>();
+                    instrumentsByAdapter[adapterKey] = new HashSet<Instrument>();
                 }
 
                 foreach (var symbolName in group.Symbols)
@@ -78,6 +78,16 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
                 _logger.LogError(ex, "Failed to process subscription group: {@Group}", group);
             }
         }
+
+        var refKey = (FxRateManager.ReferenceExchange, FxRateManager.ReferenceProductType);
+
+        // 해당 어댑터 키가 없으면 새로 생성 (Config에 없더라도 참조 종목만 구독할 수도 있으므로)
+        if (!instrumentsByAdapter.ContainsKey(refKey))
+        {
+            instrumentsByAdapter[refKey] = new HashSet<Instrument>();
+        }
+
+        AddReferenceInstrumentsToSet(instrumentsByAdapter[refKey]);
 
         var subscribeTasks = new List<Task>();
         foreach (var entry in instrumentsByAdapter)
@@ -103,6 +113,39 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
         _logger.LogInformationWithCaller("All subscription requests have been submitted.");
     }
 
+    private void AddReferenceInstrumentsToSet(HashSet<Instrument> set)
+    {
+        var exchange = FxRateManager.ReferenceExchange;
+        var pType = FxRateManager.ReferenceProductType;
+        var currencies = FxRateManager.ReferenceCurrencies;
+
+        for (int i = 0; i < currencies.Count; i++)
+        {
+            for (int j = 0; j < currencies.Count; j++)
+            {
+                if (i == j) continue;
+
+                var baseCurr = currencies[i];
+                var quoteCurr = currencies[j];
+
+                var instrument = _instrumentRepository.GetAll().Where(inst =>
+                    inst.BaseCurrency == baseCurr &&
+                    inst.QuoteCurrency == quoteCurr &&
+                    inst.SourceExchange == exchange &&
+                    inst.ProductType == pType
+                ).FirstOrDefault();
+
+                if (instrument != null)
+                {
+                    if (set.Add(instrument))
+                    {
+                        _logger.LogDebug($"[Auto-ReSubscribe] Including FX Reference Instrument: {instrument.Symbol}");
+                    }
+                }
+            }
+        }
+    }
+
     private void OnAdapterConnectionStateChanged(object? sender, ConnectionStateChangedEventArgs e)
     {
         if (e.IsConnected && sender is IFeedAdapter adapter)
@@ -125,7 +168,7 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
     {
         _logger.LogInformationWithCaller($"Re-subscribing instruments for connected adapter: {adapter.SourceExchange}/{adapter.ProdType}");
 
-        var instrumentsToSubscribe = new List<Instrument>();
+        var instrumentsToSubscribe = new HashSet<Instrument>();
 
         foreach (var group in _config.Subscriptions)
         {
@@ -152,11 +195,17 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
             }
         }
 
+        if (adapter.SourceExchange == FxRateManager.ReferenceExchange &&
+            adapter.ProdType == FxRateManager.ReferenceProductType)
+        {
+            AddReferenceInstrumentsToSet(instrumentsToSubscribe);
+        }
+
         if (instrumentsToSubscribe.Any())
         {
             var topicsToSubscribe = GetDefaultTopicsForExchange(adapter.SourceExchange);
             _logger.LogInformationWithCaller($"Requesting re-subscription of {instrumentsToSubscribe.Count} instruments to {topicsToSubscribe.Count()} topics on adapter {adapter.SourceExchange}/{adapter.ProdType}");
-            await adapter.SubscribeAsync(instrumentsToSubscribe, topicsToSubscribe, cancellationToken);
+            await adapter.SubscribeAsync(instrumentsToSubscribe.ToList(), topicsToSubscribe, cancellationToken);
         }
     }
 

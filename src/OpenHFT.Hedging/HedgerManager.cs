@@ -23,10 +23,7 @@ public class HedgerManager : IHedgerManager
     private readonly IFeedHandler _feedHandler;
     // Key: QuotingInstrumentId (Source)
     private readonly ConcurrentDictionary<int, Hedger> _hedgers = new();
-
-    // 통화 변환용 참조 ID (Config로 주입받는 것이 좋음, 여기서는 하드코딩 예시)
-    private int DefaultReferenceInstrumentId; // BTCUSDT
-
+    private readonly IFxRateService _fxRateManager;
     public event EventHandler<HedgingParameters>? HedgingParametersUpdated;
 
     public HedgerManager(
@@ -37,7 +34,8 @@ public class HedgerManager : IHedgerManager
         IOrderRouter orderRouter,
         IOrderFactory orderFactory,
         IMarketDataManager marketDataManager,
-        IFeedHandler feedHandler
+        IFeedHandler feedHandler,
+        IFxRateService fxRateManager
         )
     {
         _logger = logger;
@@ -48,20 +46,10 @@ public class HedgerManager : IHedgerManager
         _marketDataManager = marketDataManager;
         _loggerFactory = loggerFactory;
         _feedHandler = feedHandler;
+        _fxRateManager = fxRateManager;
 
         _orderRouter.OrderFilled += OnGlobalOrderFilled;
         _feedHandler.AdapterConnectionStateChanged += OnAdapterConnectionStateChanged;
-        SetDefaultReferenceId();
-    }
-
-    private void SetDefaultReferenceId()
-    {
-        var refInst = _instrumentRepository.FindBySymbol("BTCUSDT", ProductType.PerpetualFuture, ExchangeEnum.BINANCE);
-        if (refInst is null)
-        {
-            throw new NullReferenceException("Can not set reference instrument(BTCUSDT)");
-        }
-        DefaultReferenceInstrumentId = refInst.InstrumentId;
     }
 
     public bool UpdateHedgingParameters(HedgingParameters parameters)
@@ -104,7 +92,7 @@ public class HedgerManager : IHedgerManager
             _orderFactory,
             quotingInstance.CurrentParameters.BookName,
             _marketDataManager,
-            DefaultReferenceInstrumentId
+            _fxRateManager
         );
 
         _hedgers[parameters.QuotingInstrumentId] = newHedger;

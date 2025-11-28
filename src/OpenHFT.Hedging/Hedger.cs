@@ -18,7 +18,7 @@ public class Hedger
     private readonly IOrderFactory _orderFactory; // To create IOrder objects
     private readonly string _bookName;
     private readonly IMarketDataManager _marketDataManager;
-    private readonly int? _referenceInstrumentId;
+    private readonly IFxRateService _fxRateManager;
     private OrderBook? _cachedOrderBook;
     private OrderBook? _cachedReferenceOrderBook;
     private IOrder? _hedgeOrder = null!;
@@ -44,7 +44,7 @@ public class Hedger
         IOrderFactory orderFactory,
         string bookName,
         IMarketDataManager marketDataManager,
-        int? referenceInstrumentId = null
+        IFxRateService fxRateManager
     )
     {
         _logger = logger;
@@ -54,7 +54,7 @@ public class Hedger
         _orderFactory = orderFactory;
         _bookName = bookName;
         _marketDataManager = marketDataManager;
-        _referenceInstrumentId = referenceInstrumentId;
+        _fxRateManager = fxRateManager;
     }
 
     public void Activate()
@@ -64,15 +64,6 @@ public class Hedger
         {
             _logger.LogWarningWithCaller($"Unsupported denom currency quote({_quoteInstrument.DenominationCurrency}) or hedge({_hedgeInstrument.DenominationCurrency}) detected. Only BTC and USDT are supported.");
             return;
-        }
-
-        if (_quoteInstrument.DenominationCurrency != _hedgeInstrument.DenominationCurrency)
-        {
-            if (_referenceInstrumentId == null)
-            {
-                _logger.LogWarningWithCaller($"Currency mismatch ({_quoteInstrument.DenominationCurrency} vs {_hedgeInstrument.DenominationCurrency}) but no ReferenceInstrumentId provided.");
-                return;
-            }
         }
 
         if (_quoteInstrument.BaseCurrency != _hedgeInstrument.BaseCurrency)
@@ -85,12 +76,6 @@ public class Hedger
         _logger.LogInformationWithCaller($"Starting Hedger for Q:{_quoteInstrument.Symbol} H:{_hedgeInstrument.Symbol}.");
         var subscriptionKey = $"Hedger_{_quoteInstrument.Symbol}_{_hedgeInstrument.Symbol}_{_bookName}";
         _marketDataManager.SubscribeOrderBook(_hedgeInstrument.InstrumentId, subscriptionKey, (sender, book) => UpdateHedgeOrderBook(book));
-
-        if (_referenceInstrumentId.HasValue)
-        {
-            var refKey = $"HedgerRef_{_referenceInstrumentId}_{_quoteInstrument.Symbol}_{_hedgeInstrument.Symbol}_{_bookName}";
-            _marketDataManager.SubscribeOrderBook(_referenceInstrumentId.Value, refKey, (sender, book) => UpdateReferenceOrderBook(book));
-        }
     }
 
     public void Deactivate()
@@ -105,12 +90,6 @@ public class Hedger
         _logger.LogInformationWithCaller($"Stop Hedger for Q:{_quoteInstrument.Symbol} H:{_hedgeInstrument.Symbol}.");
         var subscriptionKey = $"Hedger_{_quoteInstrument.Symbol}_{_hedgeInstrument.Symbol}_{_bookName}";
         _marketDataManager.UnsubscribeOrderBook(_hedgeInstrument.InstrumentId, subscriptionKey);
-
-        if (_referenceInstrumentId.HasValue)
-        {
-            var refKey = $"HedgerRef_{_referenceInstrumentId}_{_quoteInstrument.Symbol}_{_hedgeInstrument.Symbol}_{_bookName}";
-            _marketDataManager.UnsubscribeOrderBook(_referenceInstrumentId.Value, refKey);
-        }
 
         if (_hedgeOrder is not null)
         {
@@ -132,14 +111,6 @@ public class Hedger
         _ = ExecuteQuoteUpdateAsync(target);
     }
 
-    private void UpdateReferenceOrderBook(OrderBook ob)
-    {
-        if (_referenceInstrumentId.HasValue && ob.InstrumentId == _referenceInstrumentId.Value)
-        {
-            _cachedReferenceOrderBook = ob;
-        }
-    }
-
     public void UpdateQuotingFill(Fill fill)
     {
         if (fill.InstrumentId != _quoteInstrument.InstrumentId)
@@ -154,7 +125,7 @@ public class Hedger
 
             lock (_pendingValueLock)
             {
-                var targetCurrencyValue = ConvertCurrency(hedgeValueAmount, _hedgeInstrument.DenominationCurrency);
+                var targetCurrencyValue = _fxRateManager.Convert(hedgeValueAmount, _hedgeInstrument.DenominationCurrency);
                 if (targetCurrencyValue == null)
                 {
                     _logger.LogWarningWithCaller("Failed to convert currency. Skipping hedge accumulation.");
@@ -372,46 +343,6 @@ public class Hedger
         await newOrder.SubmitAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
-    private CurrencyAmount? ConvertCurrency(CurrencyAmount source, Currency targetCurrency)
-    {
-        if (source.Currency == targetCurrency) return source;
-
-        // 변환 로직 (Reference Instrument: BTC/USDT 가정)
-        // Case 1: BTC -> USDT (Price 곱하기)
-        // Case 2: USDT -> BTC (Price 나누기)
-
-        if (_cachedReferenceOrderBook == null) return null;
-        var refPrice = _cachedReferenceOrderBook.GetMidPrice().ToDecimal();
-        if (refPrice <= 0) return null;
-
-        // 가정: Reference Instrument Base=BTC, Quote=USDT
-        // BaseCurrency와 QuoteCurrency 정보는 InstrumentRepository에서 가져와야 더 정확하지만,
-        // 여기서는 지원 통화(BTC, USDT)가 고정적이므로 심볼로 판단합니다.
-
-        string srcSym = source.Currency.Symbol.ToUpper();
-        string tgtSym = targetCurrency.Symbol.ToUpper();
-
-        decimal convertedAmount;
-
-        if (srcSym == "BTC" && tgtSym == "USDT")
-        {
-            // 1 BTC * 50000 = 50000 USDT
-            convertedAmount = source.Amount * refPrice;
-        }
-        else if (srcSym == "USDT" && tgtSym == "BTC")
-        {
-            // 50000 USDT / 50000 = 1 BTC
-            convertedAmount = source.Amount / refPrice;
-        }
-        else
-        {
-            _logger.LogWarningWithCaller($"Conversion path not supported: {srcSym} -> {tgtSym}");
-            return null;
-        }
-
-        return new CurrencyAmount(convertedAmount, targetCurrency);
-    }
-
     private Quantity CalculateQuantityFromValue(Instrument instrument, Price price, decimal valueToHedge)
     {
         if (valueToHedge == 0m)
@@ -425,7 +356,7 @@ public class Hedger
         decimal rawQuantityDecimal = valueToHedge / unitValue.Amount;
 
         var minOrderSizeTicks = instrument.MinOrderSize.ToTicks();
-        if (minOrderSizeTicks <= 0) return Quantity.FromDecimal(0m); // 방어 코드
+        if (minOrderSizeTicks <= 0) return Quantity.FromDecimal(0m);
 
         return Quantity.FromDecimal(rawQuantityDecimal);
     }

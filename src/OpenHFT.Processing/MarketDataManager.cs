@@ -5,6 +5,7 @@ using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
+using OpenHFT.Feed;
 using OpenHFT.Feed.Models;
 using OpenHFT.Processing.Consumers;
 
@@ -53,6 +54,14 @@ public class MarketDataManager : IMarketDataManager
 
                 Install(instrument);
             }
+        }
+
+        var referenceSet = new HashSet<Instrument>();
+        AddReferenceInstrumentsToSet(referenceSet);
+        foreach (var refInst in referenceSet)
+        {
+            _logger.LogInformationWithCaller($"Subscribing to fx rate reference instrument: {refInst.Symbol} on {refInst.SourceExchange}({refInst.ProductType})");
+            Install(refInst);
         }
     }
 
@@ -234,5 +243,38 @@ public class MarketDataManager : IMarketDataManager
             return consumer.BestBook;
         }
         return null;
+    }
+
+    private void AddReferenceInstrumentsToSet(HashSet<Instrument> set)
+    {
+        var exchange = FxRateManager.ReferenceExchange;
+        var pType = FxRateManager.ReferenceProductType;
+        var currencies = FxRateManager.ReferenceCurrencies;
+
+        for (int i = 0; i < currencies.Count; i++)
+        {
+            for (int j = 0; j < currencies.Count; j++)
+            {
+                if (i == j) continue;
+
+                var baseCurr = currencies[i];
+                var quoteCurr = currencies[j];
+
+                var instrument = _repository.GetAll().Where(inst =>
+                    inst.BaseCurrency == baseCurr &&
+                    inst.QuoteCurrency == quoteCurr &&
+                    inst.SourceExchange == exchange &&
+                    inst.ProductType == pType
+                ).FirstOrDefault();
+
+                if (instrument != null)
+                {
+                    if (set.Add(instrument))
+                    {
+                        _logger.LogDebug($"[Auto-ReSubscribe] Including FX Reference Instrument: {instrument.Symbol}");
+                    }
+                }
+            }
+        }
     }
 }
