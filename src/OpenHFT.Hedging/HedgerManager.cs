@@ -18,7 +18,6 @@ public class HedgerManager : IHedgerManager
     private readonly IQuotingInstanceManager _quotingInstanceManager;
     private readonly IOrderFactory _orderFactory;
     private readonly IMarketDataManager _marketDataManager;
-    private readonly IOrderRouter _orderRouter;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IFeedHandler _feedHandler;
     // Key: QuotingInstrumentId (Source)
@@ -31,7 +30,6 @@ public class HedgerManager : IHedgerManager
         ILoggerFactory loggerFactory,
         IInstrumentRepository instrumentRepository,
         IQuotingInstanceManager quotingInstanceManager,
-        IOrderRouter orderRouter,
         IOrderFactory orderFactory,
         IMarketDataManager marketDataManager,
         IFeedHandler feedHandler,
@@ -41,14 +39,13 @@ public class HedgerManager : IHedgerManager
         _logger = logger;
         _instrumentRepository = instrumentRepository;
         _quotingInstanceManager = quotingInstanceManager;
-        _orderRouter = orderRouter;
         _orderFactory = orderFactory;
         _marketDataManager = marketDataManager;
         _loggerFactory = loggerFactory;
         _feedHandler = feedHandler;
         _fxRateManager = fxRateManager;
 
-        _orderRouter.OrderFilled += OnGlobalOrderFilled;
+        _quotingInstanceManager.GlobalOrderFilled += OnGlobalOrderFilled;
         _feedHandler.AdapterConnectionStateChanged += OnAdapterConnectionStateChanged;
     }
 
@@ -194,7 +191,7 @@ public class HedgerManager : IHedgerManager
 
     public void Dispose()
     {
-        _orderRouter.OrderFilled -= OnGlobalOrderFilled;
+        _quotingInstanceManager.GlobalOrderFilled -= OnGlobalOrderFilled;
         _feedHandler.AdapterConnectionStateChanged -= OnAdapterConnectionStateChanged;
         foreach (var hedger in _hedgers.Values)
         {

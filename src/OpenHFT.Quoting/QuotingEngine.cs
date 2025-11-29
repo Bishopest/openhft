@@ -34,6 +34,7 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
     private long _unappliedSellFillsInTicks = 0;
     public event EventHandler<QuotePair>? QuotePairCalculated;
     public event EventHandler<QuotingParameters>? ParametersUpdated;
+    public event EventHandler<Fill>? EngineOrderFilled;
 
     public bool IsQuotingActive => IsActive && !_isPausedByFill;
 
@@ -188,6 +189,8 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
             // This fill is not for us.
             return;
         }
+
+        EngineOrderFilled?.Invoke(this, fill);
 
         var fillQuantityInTicks = fill.Quantity.ToTicks();
 

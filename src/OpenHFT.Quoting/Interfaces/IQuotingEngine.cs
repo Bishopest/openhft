@@ -16,6 +16,7 @@ public interface IQuotingEngine
     QuotingParameters CurrentParameters { get; }
     event EventHandler<QuotingParameters>? ParametersUpdated;
     event EventHandler<QuotePair> QuotePairCalculated;
+    event EventHandler<Fill> EngineOrderFilled;
     void Start();
     void Stop();
     void Activate();

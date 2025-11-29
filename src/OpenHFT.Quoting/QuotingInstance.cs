@@ -1,4 +1,5 @@
 using System;
+using OpenHFT.Core.Models;
 using OpenHFT.Processing;
 using OpenHFT.Quoting.Interfaces;
 
@@ -12,11 +13,12 @@ public class QuotingInstance
     public int InstrumentId => _engine.QuotingInstrument.InstrumentId;
     public bool IsActive => Engine.IsActive;
     public QuotingParameters CurrentParameters => Engine.CurrentParameters;
-
+    public event EventHandler<Fill>? InstanceOrderFilled;
 
     public QuotingInstance(IQuotingEngine engine)
     {
         _engine = engine;
+        _engine.EngineOrderFilled += OnEngineOrderFilled;
     }
 
     public void Start()
@@ -31,4 +33,9 @@ public class QuotingInstance
 
     public void Activate() => _engine.Activate();
     public void Deactivate() => _engine.Deactivate();
+
+    private void OnEngineOrderFilled(object? sender, Fill fill)
+    {
+        InstanceOrderFilled?.Invoke(this, fill);
+    }
 }

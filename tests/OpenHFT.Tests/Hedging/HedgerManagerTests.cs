@@ -12,6 +12,7 @@ using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Orders;
+using OpenHFT.Feed;
 using OpenHFT.Feed.Interfaces;
 using OpenHFT.Gateway;
 using OpenHFT.Hedging;
@@ -91,6 +92,7 @@ public class HedgerManagerTests
         // --- 5. 테스트 대상인 QuotingInstanceManager 등록 ---
         services.AddSingleton<IHedgerManager, HedgerManager>();
         services.AddSingleton<IQuotingInstanceManager, QuotingInstanceManager>();
+        services.AddSingleton<IFxRateService, FxRateManager>();
 
         _serviceProvider = services.BuildServiceProvider();
 

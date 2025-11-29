@@ -24,6 +24,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
 
     public event EventHandler<QuotePair>? InstanceQuotePairCalculated;
     public event EventHandler<QuotingParameters>? InstanceParametersUpdated;
+    public event EventHandler<Fill>? GlobalOrderFilled;
 
     public QuotingInstanceManager(
         ILogger<QuotingInstanceManager> logger,
@@ -91,6 +92,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
             {
                 instance.Engine.QuotePairCalculated += OnEngineQuotePairCalculated;
                 instance.Engine.ParametersUpdated += InstanceParametersUpdated;
+                instance.InstanceOrderFilled += OnInstanceOrderFilled;
                 instance.Start();
                 InstanceParametersUpdated?.Invoke(this, instance.CurrentParameters);
                 _logger.LogInformationWithCaller($"Successfully deployed quoting instance for instrument {instrument.Symbol}.");
@@ -180,6 +182,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
         {
             instance.Engine.QuotePairCalculated -= OnEngineQuotePairCalculated;
             instance.Engine.ParametersUpdated -= InstanceParametersUpdated;
+            instance.InstanceOrderFilled -= OnInstanceOrderFilled;
             instance.Stop();
             return instance;
         }
@@ -192,6 +195,15 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
     private void OnEngineQuotePairCalculated(object? sender, QuotePair e)
     {
         InstanceQuotePairCalculated?.Invoke(sender, e);
+    }
+
+    /// <summary>
+    /// Relays the fill event from quoting instances
+    /// </summary>
+    /// <param name="fill"></param>
+    private void OnInstanceOrderFilled(object? sender, Fill fill)
+    {
+        GlobalOrderFilled?.Invoke(this, fill);
     }
 
     public void Dispose()
