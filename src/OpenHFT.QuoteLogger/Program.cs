@@ -99,7 +99,7 @@ public class Program
                 services.AddSingleton<IFeedAdapterRegistry, FeedAdapterRegistry>();
                 services.AddSingleton<IFeedHandler, FeedHandler>();
                 services.AddSingleton<ISubscriptionManager, SubscriptionManager>();
-                services.AddSingleton<MarketDataManager>();
+                services.AddSingleton<IMarketDataManager, MarketDataManager>();
                 services.AddSingleton<ITimeSyncManager, NullTimeSyncManager>();
                 services.AddSingleton<IRestApiClientRegistry, RestApiClientRegistry>();
                 services.AddSingleton<IFairValueProviderFactory, FairValueProviderFactory>();

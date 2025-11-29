@@ -2,26 +2,27 @@
   "subscriptions": [
     {
       "exchange": "bitmex",
-      "executionMode": {
+      "execution": {
         "api": "testnet",
         "feed": "live"
       },
       "productType": "perpetualfuture",
-      "symbols": [ "LTCUSDT"]
+      "symbols": ["LTCUSDT"]
     },
     {
       "exchange": "binance",
-      "executionMode": {
+      "execution": {
         "api": "testnet",
         "feed": "live"
       },
       "productType": "perpetualfuture",
-      "symbols": [ "LTCUSDT"]
+      "symbols": ["LTCUSDT"]
     }
   ],
-  "quoting" : {
+  "quoting": {
     "exchange": "bitmex",
     "productType": "perpetualfuture",
+    "bookName": "DMM:LTC",
     "symbol": "LTCUSDT",
     "quoterType": "log",
     "fairValue": {
@@ -36,7 +37,10 @@
     "bidSpreadBp": -33.0,
     "skewBp": 3.0,
     "size": 1000,
-    "depth": 1
+    "depth": 1,
+    "postOnly": true,
+    "maxCumAskFills": 3000,
+    "maxCumBidFills": 3000
   },
   "dataFolder": "/Users/jskim/workspace/openhft/data"
 }

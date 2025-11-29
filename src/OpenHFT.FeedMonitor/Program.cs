@@ -100,38 +100,41 @@ public class Program
                 services.AddSingleton<ITimeSyncManager, TimeSyncManager>();
                 services.AddSingleton<IRestApiClientRegistry, RestApiClientRegistry>();
 
+                var subscriptionTupLists = new List<(string Exchange, string ProductType)>();
                 var subscriptionGroups = hostContext.Configuration.GetSection("subscriptions").Get<List<SubscriptionGroup>>() ?? new();
                 foreach (var group in subscriptionGroups.DistinctBy(g => new { g.Exchange, g.ProductType }))
                 {
                     if (Enum.TryParse<ExchangeEnum>(group.Exchange, true, out var exchange) &&
                         Enum.TryParse<ProductType>(group.ProductType, true, out var productType))
                     {
-
                         var executionConfig = group.Execution;
+
                         switch (exchange)
                         {
                             case ExchangeEnum.BINANCE:
-                                services.AddSingleton<BaseRestApiClient>(provider => new BinanceRestApiClient(
+                                services.AddSingleton<BaseRestApiClient, BinanceRestApiClient>(provider => new BinanceRestApiClient(
                                     provider.GetRequiredService<ILogger<BinanceRestApiClient>>(),
                                     provider.GetRequiredService<IInstrumentRepository>(),
                                     provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BinanceRestApiClient)),
-                                    productType, executionConfig.Api
-                                    ));
+                                    productType,
+                                    executionConfig.Api));
                                 services.AddSingleton<IFeedAdapter>(provider => new BinanceAdapter(
                                     provider.GetRequiredService<ILogger<BinanceAdapter>>(), productType,
-                                    provider.GetRequiredService<IInstrumentRepository>(), executionConfig.Feed
+                                    provider.GetRequiredService<IInstrumentRepository>(),
+                                    executionConfig.Feed
                                 ));
                                 break;
                             case ExchangeEnum.BITMEX:
-                                services.AddSingleton<BaseRestApiClient>(provider => new BitmexRestApiClient(
+                                services.AddSingleton<BitmexRestApiClient>(provider => new BitmexRestApiClient(
                                     provider.GetRequiredService<ILogger<BitmexRestApiClient>>(),
                                     provider.GetRequiredService<IInstrumentRepository>(),
                                     provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BitmexRestApiClient)),
                                     productType,
-                                    executionConfig.Api));
+                                    executionConfig.Api, null, null));
                                 services.AddSingleton<IFeedAdapter>(provider => new BitmexAdapter(
                                     provider.GetRequiredService<ILogger<BitmexAdapter>>(), productType,
-                                    provider.GetRequiredService<IInstrumentRepository>(), executionConfig.Feed
+                                    provider.GetRequiredService<IInstrumentRepository>(),
+                                    executionConfig.Feed
                                 ));
                                 break;
                         }
