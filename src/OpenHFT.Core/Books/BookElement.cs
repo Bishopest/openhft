@@ -20,7 +20,7 @@ public readonly struct BookElement : IEquatable<BookElement>
                            Price avgPrice,
                            Quantity size,
                            CurrencyAmount realizedPnL,
-                           CurrencyAmount volumeInUsdt,
+                           CurrencyAmount volume,
                            long lastUpdateTime)
     {
         BookName = bookName;
@@ -28,7 +28,7 @@ public readonly struct BookElement : IEquatable<BookElement>
         AvgPrice = avgPrice;
         Size = size;
         RealizedPnL = realizedPnL;
-        Volume = volumeInUsdt;
+        Volume = volume;
         LastUpdateTime = lastUpdateTime;
     }
 

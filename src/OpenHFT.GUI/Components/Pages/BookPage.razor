@@ -61,9 +61,9 @@
                                         {
                                             <tr>
                                                 <td>@GetSymbolFromId(element.InstrumentId)</td>
-                                                <td>@element.Size.ToDecimal()</td>
+                                                <td>@element.Size.ToDecimal().ToString("N0")</td>
                                                 <td></td>
-                                                <td>@element.AvgPrice.ToDecimal()</td>
+                                                <td>@element.AvgPrice.ToDecimal().ToString("N2")</td>
                                                 <td>@element.RealizedPnL.Amount.ToString("N2")</td>
                                                 <td></td>
                                                 <td>@element.Volume.Amount.ToString("N0")</td>
