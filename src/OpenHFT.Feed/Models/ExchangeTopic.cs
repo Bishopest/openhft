@@ -153,6 +153,7 @@ public class BitmexTopic : ExchangeTopic
     public static BitmexTopic Quote { get; } = new("quote", "quote:", "quote");
     // Top 10 levels using traditional full book push
     public static BitmexTopic OrderBook10 { get; } = new("orderBook10", "orderBook10:", "orderBook10");
+    public static BitmexTopic OrderBookL2_25 { get; } = new("orderBookL2_25", "orderBookL2_25:", "orderBookL2_25:");
 
     public static BitmexTopic Execution { get; } = new("execution", "execution", "Execution", isSymbolSpecific: false);
 
@@ -170,7 +171,7 @@ public class BitmexTopic : ExchangeTopic
     /// </summary>
     public static IEnumerable<BitmexTopic> GetAllMarketTopics()
     {
-        return _allTopics.Value.Where(t => t.IsSymbolSpecific);
+        return _allTopics.Value.Where(t => t.IsSymbolSpecific && t != OrderBookL2_25);
     }
 
     /// <summary>

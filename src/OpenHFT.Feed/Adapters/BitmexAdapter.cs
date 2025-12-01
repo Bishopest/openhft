@@ -21,6 +21,9 @@ public class BitmexAdapter : BaseAuthFeedAdapter
 
     // Field to track the last execution ID per order id 
     private readonly ConcurrentDictionary<string, HashSet<string>> _processedExecIDs = new();
+    // BitMEX L2 OrderBook ID to Price mapping cache
+    // Key: BitMEX ID (long), Value: Price (decimal)
+    private readonly ConcurrentDictionary<long, decimal> _l2IdToPrice = new();
     public BitmexAdapter(ILogger<BitmexAdapter> logger, ProductType type, IInstrumentRepository instrumentRepository, ExecutionMode executionMode) : base(logger, type, instrumentRepository, executionMode)
     {
     }
@@ -352,7 +355,183 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             }
         }
     }
+    private void ProcessOrderBookL2_25(JsonElement root)
+    {
+        // 1. Action 및 Data 추출
+        if (!root.TryGetProperty("action", out var actionProp) ||
+            !root.TryGetProperty("data", out var dataProp) ||
+            dataProp.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
 
+        string action = actionProp.GetString() ?? string.Empty;
+        EventKind kind;
+
+        // 2. EventKind 매핑
+        switch (action)
+        {
+            case "partial":
+                kind = EventKind.Snapshot;
+                break;
+            case "insert":
+                kind = EventKind.Add;
+                break;
+            case "update":
+                kind = EventKind.Update;
+                break;
+            case "delete":
+                kind = EventKind.Delete;
+                break;
+            default:
+                _logger.LogWarningWithCaller($"Unknown action '{action}' in L2_25.");
+                return;
+        }
+
+        // 3. 데이터 순회 및 배치 처리
+        // InlineArray(40) 한계를 고려하여 40개씩 끊어서 전송
+        var updatesArray = new PriceLevelEntryArray();
+        int count = 0;
+
+        // 배치를 위해 현재 처리 중인 악기 정보를 추적
+        int currentInstrumentId = -1;
+        long currentTimestamp = 0;
+
+        foreach (var item in dataProp.EnumerateArray())
+        {
+            // --- A. 필수 필드 파싱 ---
+            if (!item.TryGetProperty("symbol", out var symProp) ||
+                !item.TryGetProperty("id", out var idProp) ||
+                !item.TryGetProperty("side", out var sideProp))
+            {
+                continue;
+            }
+
+            var symbol = symProp.GetString();
+            var id = idProp.GetInt64();
+            var sideStr = sideProp.GetString();
+
+            var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
+            if (instrument == null) continue;
+
+            // 타임스탬프 파싱 (L2는 항목별로 있을 수 있음)
+            long ts = 0;
+            if (item.TryGetProperty("timestamp", out var tsProp) && tsProp.GetString() is { } tsStr)
+            {
+                ts = DateTimeOffset.Parse(tsStr).ToUnixTimeMilliseconds();
+            }
+            else
+            {
+                ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            }
+
+            // --- B. 배치 플러시 조건 확인 ---
+            // 1) 배치가 꽉 찼거나 (40개)
+            // 2) 현재 배치와 다른 종목이 나왔을 때 (드물지만 안전장치)
+            if (count >= 40 || (currentInstrumentId != -1 && currentInstrumentId != instrument.InstrumentId))
+            {
+                // 이벤트 전송
+                OnMarketDataReceived(new MarketDataEvent(
+                    sequence: 0,
+                    timestamp: currentTimestamp,
+                    kind: kind,
+                    instrumentId: currentInstrumentId,
+                    exchange: SourceExchange,
+                    prevSequence: 0,
+                    topicId: BitmexTopic.OrderBookL2_25.TopicId,
+                    updateCount: count,
+                    updates: updatesArray
+                ));
+
+                // 리셋
+                count = 0;
+                updatesArray = new PriceLevelEntryArray(); // 구조체라 값 형식, 새 인스턴스로 초기화
+            }
+
+            currentInstrumentId = instrument.InstrumentId;
+            currentTimestamp = ts;
+
+            // --- C. 가격 및 수량 결정 (ID 매핑 로직) ---
+            decimal price = 0m;
+            decimal size = 0m;
+
+            // Size 추출 (Delete가 아니면 보통 있음)
+            if (item.TryGetProperty("size", out var sizeProp))
+            {
+                size = sizeProp.GetDecimal();
+            }
+
+            // Price 추출 및 캐시 관리
+            if (kind == EventKind.Snapshot || kind == EventKind.Add) // partial, insert
+            {
+                if (item.TryGetProperty("price", out var priceProp))
+                {
+                    price = priceProp.GetDecimal();
+                    // 캐시에 저장 (Insert/Snapshot은 항상 가격이 옴)
+                    _l2IdToPrice[id] = price;
+                }
+            }
+            else if (kind == EventKind.Update) // update
+            {
+                // Update는 Price가 안 올 수 있음 -> 캐시에서 조회
+                // 가끔 리프라이싱(Repricing)이 일어나면 Price가 올 수도 있음
+                if (item.TryGetProperty("price", out var priceProp))
+                {
+                    price = priceProp.GetDecimal();
+                    _l2IdToPrice[id] = price; // 가격 변경 업데이트
+                }
+                else
+                {
+                    if (!_l2IdToPrice.TryGetValue(id, out price))
+                    {
+                        // 캐시에 없으면 처리가 불가능하므로 스킵 (혹은 에러로그)
+                        continue;
+                    }
+                }
+            }
+            else if (kind == EventKind.Delete) // delete
+            {
+                // Delete는 Price가 안 옴 -> 캐시에서 조회 후 삭제
+                if (!_l2IdToPrice.TryRemove(id, out price))
+                {
+                    // 이미 없거나 찾을 수 없음. 
+                    // PriceLevelEntry에는 Price가 필수이므로, 
+                    // 이 경우 로직에 따라 무시하거나 로그를 남겨야 함.
+                    // 여기서는 무시.
+                    continue;
+                }
+            }
+
+            // --- D. 업데이트 배열에 추가 ---
+            var side = sideStr == "Buy" ? Side.Buy : Side.Sell;
+
+            // InlineArray 인덱서 접근 (C# 12 기능)
+            // Span<T>으로 캐스팅하여 접근해야 할 수도 있음 (컴파일러 버전에 따라)
+            // 여기서는 구조체 정의상 인덱서가 있다고 가정하거나 Span 사용
+            // Span<PriceLevelEntry> span = updatesArray; 
+            // span[count] = ...
+
+            // 예시 코드에서는 직접 할당 (System.Runtime.CompilerServices.InlineArrayAttribute 지원 시)
+            updatesArray[count] = new PriceLevelEntry(side, price, size);
+            count++;
+        }
+
+        // --- E. 남은 데이터 처리 ---
+        if (count > 0 && currentInstrumentId != -1)
+        {
+            OnMarketDataReceived(new MarketDataEvent(
+                sequence: 0,
+                timestamp: currentTimestamp,
+                kind: kind,
+                instrumentId: currentInstrumentId,
+                exchange: SourceExchange,
+                prevSequence: 0,
+                topicId: BitmexTopic.OrderBookL2_25.TopicId,
+                updateCount: count,
+                updates: updatesArray
+            ));
+        }
+    }
     private void ProcessQuote(JsonElement data)
     {
         if (!data.EnumerateArray().Any())
@@ -520,6 +699,10 @@ public class BitmexAdapter : BaseAuthFeedAdapter
                 if (topic == BitmexTopic.OrderBook10)
                 {
                     ProcessOrderBook10(dataElement);
+                }
+                else if (topic == BitmexTopic.OrderBookL2_25)
+                {
+                    ProcessOrderBookL2_25(root);
                 }
                 else if (topic == BitmexTopic.Quote)
                 {

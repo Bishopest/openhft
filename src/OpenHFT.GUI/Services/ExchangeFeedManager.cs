@@ -124,7 +124,7 @@ public class ExchangeFeedManager : IExchangeFeedManager, IAsyncDisposable
         return exchange switch
         {
             ExchangeEnum.BINANCE => new List<BinanceTopic> { BinanceTopic.DepthUpdate },
-            ExchangeEnum.BITMEX => new List<BitmexTopic> { BitmexTopic.OrderBook10 },
+            ExchangeEnum.BITMEX => new List<BitmexTopic> { BitmexTopic.OrderBookL2_25 },
             // Add other exchanges here
             _ => Enumerable.Empty<ExchangeTopic>()
         };
