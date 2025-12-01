@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
@@ -9,46 +10,61 @@ using OpenHFT.Quoting.Models;
 
 namespace OpenHFT.Quoting;
 
-/// <summary>
-/// Manages a single active order for one side (Bid or Ask) of an instrument's order book.
-/// It handles placing, modifying, and cancelling the order based on incoming quotes.
-/// This class is designed to be thread-safe for its public methods.
-/// </summary>
-public sealed class SingleOrderQuoter : IQuoter
+public class SingleOrderQuoter : IQuoter
 {
     private readonly ILogger _logger;
     private readonly Side _side;
     private readonly Instrument _instrument;
     private readonly IOrderFactory _orderFactory; // To create IOrder objects
+    private readonly IMarketDataManager _marketDataManager;
     private readonly string _bookName;
     private readonly object _stateLock = new();
-
     private IOrder? _activeOrder;
     /// <summary>
     /// The most recent quote that was requested to be updated.
     /// Null if the last action was a cancellation.
     /// </summary>
     public Quote? LatestQuote { get; private set; }
-
+    private OrderBook? _cachedOrderBook;
     public event Action? OrderFullyFilled;
     public event Action<Fill>? OrderFilled;
 
     public SingleOrderQuoter(
-        ILogger logger,
-        Side side,
-        Instrument instrument,
-        IOrderFactory orderFactory,
-        string bookName)
+            ILogger logger,
+            Side side,
+            Instrument instrument,
+            IOrderFactory orderFactory,
+            string bookName,
+            IMarketDataManager marketDataManager)
     {
         _logger = logger;
         _side = side;
         _instrument = instrument;
         _orderFactory = orderFactory;
         _bookName = bookName;
+        _marketDataManager = marketDataManager;
+    }
+
+    private OrderBook? GetOrderBookFast()
+    {
+        if (_cachedOrderBook != null)
+        {
+            return _cachedOrderBook;
+        }
+
+        var book = _marketDataManager.GetOrderBook(_instrument.InstrumentId);
+        if (book != null)
+        {
+            _cachedOrderBook = book; // 찾았으면 캐싱
+        }
+
+        return _cachedOrderBook;
     }
 
     public async Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, CancellationToken cancellationToken = default)
     {
+        var quoteP = newQuote.Price;
+
         try
         {
             LatestQuote = newQuote;
@@ -67,7 +83,25 @@ public sealed class SingleOrderQuoter : IQuoter
             {
                 if (newQuote.Price != currentOrder.Price)
                 {
-                    await currentOrder.ReplaceAsync(newQuote.Price, OrderType.Limit, cancellationToken).ConfigureAwait(false);
+                    bool isPartiallyFilled = currentOrder.Quantity > currentOrder.LeavesQuantity;
+                    var book = GetOrderBookFast();
+                    bool isNearMid = false;
+                    if (book is not null)
+                    {
+                        var mid = book.GetMidPrice();
+                        var upperPrice = mid.ToDecimal() * (1m + 3m * 1e-4m);
+                        var lowerPrice = mid.ToDecimal() * (1m - 3m * 1e-4m);
+                        isNearMid = newQuote.Price.ToDecimal() >= lowerPrice && newQuote.Price.ToDecimal() <= upperPrice;
+                    }
+
+                    if (isPartiallyFilled && !isNearMid)
+                    {
+                        await currentOrder.CancelAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await currentOrder.ReplaceAsync(newQuote.Price, OrderType.Limit, cancellationToken).ConfigureAwait(false);
+                    }
                 }
             }
         }

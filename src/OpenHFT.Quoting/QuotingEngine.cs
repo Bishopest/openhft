@@ -32,6 +32,8 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
     // Skew-related state fields
     private long _unappliedBuyFillsInTicks = 0;
     private long _unappliedSellFillsInTicks = 0;
+    private long? _groupingTickMultiple;
+    private readonly object _groupingLock = new();
     public event EventHandler<QuotePair>? QuotePairCalculated;
     public event EventHandler<QuotingParameters>? ParametersUpdated;
     public event EventHandler<Fill>? EngineOrderFilled;
@@ -139,6 +141,11 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
 
         lock (_lock)
         {
+            if (_parameters.GroupingBp != newParameters.GroupingBp)
+            {
+                _groupingTickMultiple = null;
+            }
+
             if (newParameters.Equals(_parameters)) return;
 
             _logger.LogInformation("Updating tunable parameters for {Symbol}: {NewParams}",
@@ -276,6 +283,61 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
         }
     }
 
+    private QuotePair ApplyGrouping(QuotePair target)
+    {
+        // Grouping BP가 0이거나 설정 안됐으면 원본 반환
+        if (_parameters.GroupingBp <= 0) return target;
+
+        // 초기화 안됐으면 계산 (Bid/Ask 중 아무거나 사용, 보통 Bid 기준)
+        if (_groupingTickMultiple == null)
+        {
+            var refPrice = target.Bid?.Price ?? target.Ask?.Price;
+            if (refPrice.HasValue)
+            {
+                _groupingTickMultiple = CalculateGroupingMultiple(refPrice.Value);
+                _logger.LogInformationWithCaller($"Calculated {QuotingInstrument.Symbol} grouping multiple {_groupingTickMultiple} ticks.");
+            }
+        }
+
+        if (_groupingTickMultiple == null || _groupingTickMultiple <= 1) return target;
+
+        var tickSize = QuotingInstrument.TickSize.ToTicks();
+        var groupSizeInTicks = tickSize * _groupingTickMultiple.Value;
+
+        // Bid Grouping (Floor)
+        Quote? newBid = null;
+        if (target.Bid.HasValue)
+        {
+            var bidTicks = target.Bid.Value.Price.ToTicks();
+            var groupedBidTicks = (bidTicks / groupSizeInTicks) * groupSizeInTicks;
+            newBid = new Quote(Price.FromTicks(groupedBidTicks), target.Bid.Value.Size);
+        }
+
+        // Ask Grouping (Ceiling)
+        Quote? newAsk = null;
+        if (target.Ask.HasValue)
+        {
+            var askTicks = target.Ask.Value.Price.ToTicks();
+            // Ceiling: (x + n - 1) / n * n
+            var groupedAskTicks = ((askTicks + groupSizeInTicks - 1) / groupSizeInTicks) * groupSizeInTicks;
+            newAsk = new Quote(Price.FromTicks(groupedAskTicks), target.Ask.Value.Size);
+        }
+
+        return new QuotePair(target.InstrumentId, newBid, newAsk, target.CreationTimestamp, target.IsPostOnly);
+    }
+
+    private long? CalculateGroupingMultiple(Price refPrice)
+    {
+        // 1bp = 0.0001
+        var targetBpValue = refPrice.ToDecimal() * (_parameters.GroupingBp * 0.0001m);
+        var tickSizeDec = QuotingInstrument.TickSize.ToDecimal();
+
+        if (targetBpValue < tickSizeDec) return 1;
+
+        var multiple = (long)Math.Round(targetBpValue / tickSizeDec);
+        return Math.Max(1, multiple);
+    }
+
     private void UpdateSkewedParameters(decimal newBidSpreadBp, decimal newAskSpreadBp)
     {
         QuotingParameters newParams;
@@ -392,9 +454,11 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
             currentParams.PostOnly
         );
 
+        var groupedQuotePair = ApplyGrouping(targetQuotePair);
+
         // Delegate execution to the MarketMaker
         // This is a fire-and-forget call to avoid blocking the fair value update thread.
-        QuotePairCalculated?.Invoke(this, targetQuotePair);
+        QuotePairCalculated?.Invoke(this, groupedQuotePair);
 
         if (_isPausedByFill)
         {
@@ -403,7 +467,7 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
 
         if (IsActive)
         {
-            _ = _marketMaker.UpdateQuoteTargetAsync(targetQuotePair);
+            _ = _marketMaker.UpdateQuoteTargetAsync(groupedQuotePair);
         }
     }
 }

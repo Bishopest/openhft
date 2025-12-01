@@ -39,7 +39,7 @@ public class QuoterFactory : IQuoterFactory
                 return new LogQuoter(_loggerFactory.CreateLogger<LogQuoter>());
             case QuoterType.Single:
                 if (parameters.BookName == null) throw new ArgumentNullException("bookName");
-                return new GroupedSingleOrderQuoter(_loggerFactory.CreateLogger<GroupedSingleOrderQuoter>(), side, instrument, _orderFactory, parameters.BookName, _marketDataManager, parameters.GroupingBp);
+                return new SingleOrderQuoter(_loggerFactory.CreateLogger<SingleOrderQuoter>(), side, instrument, _orderFactory, parameters.BookName, _marketDataManager);
             default:
                 throw new ArgumentException($"Unsupported quoter type: {parameters.Type}");
         }

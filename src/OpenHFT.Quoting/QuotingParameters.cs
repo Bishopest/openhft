@@ -149,8 +149,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         return FvModel != other.FvModel ||
                FairValueSourceInstrumentId != other.FairValueSourceInstrumentId ||
                Type != other.Type ||
-               BookName != other.BookName ||
-               GroupingBp != other.GroupingBp;
+               BookName != other.BookName;
     }
 
     public bool Equals(QuotingParameters other)

@@ -19,6 +19,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
     private readonly ILogger<QuotingInstanceManager> _logger;
     private readonly IQuotingInstanceFactory _factory;
     private readonly ConcurrentDictionary<int, QuotingInstance> _activeInstances = new();
+    private readonly ConcurrentDictionary<int, QuotePair> _lastQuotePairs = new();
     private readonly IInstrumentRepository _instrumentRepository;
     private readonly IFeedHandler _feedHandler;
 
@@ -181,6 +182,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
             instance.Engine.ParametersUpdated -= InstanceParametersUpdated;
             instance.InstanceOrderFilled -= OnInstanceOrderFilled;
             instance.Stop();
+            _lastQuotePairs.TryRemove(instrumentId, out _);
             return instance;
         }
         return null;
@@ -191,6 +193,16 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
     /// </summary>
     private void OnEngineQuotePairCalculated(object? sender, QuotePair e)
     {
+        var instrumentId = e.InstrumentId;
+
+        bool hasLast = _lastQuotePairs.TryGetValue(instrumentId, out var lastPair);
+
+        if (!hasLast || !lastPair.ContentEquals(e))
+        {
+            _lastQuotePairs[instrumentId] = e;
+            InstanceQuotePairCalculated?.Invoke(sender, e);
+        }
+
         InstanceQuotePairCalculated?.Invoke(sender, e);
     }
 
@@ -216,5 +228,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
                 instance.Stop();
             }
         }
+
+        _lastQuotePairs.Clear();
     }
 }

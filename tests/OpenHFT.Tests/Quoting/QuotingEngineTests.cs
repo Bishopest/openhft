@@ -418,8 +418,10 @@ public class QuotingEngineTests
         // Bid Spread Amount = 50001 * (-12 / 10000) = -60.0012
         // Raw Ask = 50001 + 40.0008 = 50041.0008 -> Rounded to 50041.5
         // Raw Bid = 50001 - 60.0012 = 49940.9988 -> Rounded to 49940.5
-        var expectedAskPrice = Price.FromDecimal(50041.5m);
-        var expectedBidPrice = Price.FromDecimal(49940.5m);
+        // Grouped Ask = Ceil(50001 / 5) * 5 = 50045
+        // Grouped Bid = Floor(50001 / 5) * 5 = 5040
+        var expectedAskPrice = Price.FromDecimal(50045m);
+        var expectedBidPrice = Price.FromDecimal(49940m);
 
         _askQuoter.LatestQuote.Should().NotBeNull();
         _askQuoter.LatestQuote.Value.Price.Should().Be(expectedAskPrice);
@@ -501,6 +503,77 @@ public class QuotingEngineTests
         var expectedSkewAdjustment = 2m * 2 - 2m * 1; // SkewBp * (170 / 100)
         newParams.BidSpreadBp.Should().Be(initialParams.BidSpreadBp + expectedSkewAdjustment, "because sell fills should skew bid price up.");
         newParams.AskSpreadBp.Should().Be(initialParams.AskSpreadBp + expectedSkewAdjustment, "because sell fills should skew ask price up.");
+    }
+
+    [Test]
+    public void Requote_WithGroupingBp_ShouldRoundQuotesToGroupSize()
+    {
+        // --- Arrange ---
+        // 1. GroupingBp가 설정된 파라미터 (예: 5bp)
+        // 1bp = 0.0001. 5bp = 0.0005.
+        // FairValue = 50000.
+        // 5bp Value at 50000 = 50000 * 0.0005 = 25.
+        // TickSize = 0.5.
+        // GroupSize = 25 / 0.5 = 50 ticks.
+        // Grouping Unit = 50 * 0.5 = 25.0.
+
+        decimal groupingBp = 5.0m;
+        var initialParams = new QuotingParameters(
+            _xbtusd.InstrumentId, "test", FairValueModel.Midp, _btcusdt.InstrumentId,
+            askSpreadBp: 10m,  // +10bp
+            bidSpreadBp: -10m, // -10bp
+            skewBp: 0m,
+            size: Quantity.FromDecimal(100),
+            depth: 1, type: QuoterType.Log, postOnly: true,
+            maxCumBidFills: Quantity.FromDecimal(1000),
+            maxCumAskFills: Quantity.FromDecimal(1000),
+            groupingBp: groupingBp // [중요] Grouping BP 설정
+        );
+
+        _engine.Start();
+        _engine.UpdateParameters(initialParams);
+        _engine.Activate();
+
+        // 2. FairValue 설정 (50000)
+        // Bid Spread (-10bp) -> 50000 * (1 - 0.0010) = 49950
+        // Ask Spread (+10bp) -> 50000 * (1 + 0.0010) = 50050
+        // 이 값들은 우연히 25의 배수이므로 Grouping 효과를 보기 위해 FairValue를 살짝 비틂.
+
+        // FairValue = 50010 으로 설정.
+        // Raw Bid = 50010 * 0.9990 = 49959.99 -> Tick(0.5) Round -> 49960.0
+        // Raw Ask = 50010 * 1.0010 = 50060.01 -> Tick(0.5) Round -> 50060.0
+
+        // Grouping Unit = 25.0 (50010 * 5bp approx) -> 실제로는 FV가 아니라 Quote Price 기준임.
+        // Bid Quote(49960) 기준 5bp = 49960 * 0.0005 = 24.98 -> 25.0 (Tick 0.5 * 50)
+        // Ask Quote(50060) 기준 5bp = 50060 * 0.0005 = 25.03 -> 25.0 (Tick 0.5 * 50)
+
+        // Expected Bid (Floor): 49960 / 25 = 1998.4 -> 1998 * 25 = 49950.0
+        // Expected Ask (Ceiling): 50060 / 25 = 2002.4 -> 2003 * 25 = 50075.0
+
+        // --- Act ---
+        TriggerRequote(50010m);
+
+        // --- Assert ---
+        _bidQuoter.LatestQuote.Should().NotBeNull();
+        _askQuoter.LatestQuote.Should().NotBeNull();
+
+        var actualBid = _bidQuoter.LatestQuote.Value.Price.ToDecimal();
+        var actualAsk = _askQuoter.LatestQuote.Value.Price.ToDecimal();
+
+        TestContext.WriteLine($"Raw Bid: 49960.0, Actual Grouped Bid: {actualBid}");
+        TestContext.WriteLine($"Raw Ask: 50060.0, Actual Grouped Ask: {actualAsk}");
+
+        // 검증: Grouping 단위(25.0)로 나누어 떨어져야 함
+        (actualBid % 25.0m).Should().Be(0m, "Bid price should be a multiple of group size (25.0)");
+        (actualAsk % 25.0m).Should().Be(0m, "Ask price should be a multiple of group size (25.0)");
+
+        // 검증: 방향성 (Bid는 내려가고, Ask는 올라가야 함 -> Spread 벌어짐)
+        actualBid.Should().BeLessThanOrEqualTo(49960.0m); // Floor
+        actualAsk.Should().BeGreaterThanOrEqualTo(50060.0m); // Ceiling
+
+        // 정확한 값 검증
+        actualBid.Should().Be(49950.0m);
+        actualAsk.Should().Be(50075.0m);
     }
 
     private void TriggerRequote(decimal fairValue)

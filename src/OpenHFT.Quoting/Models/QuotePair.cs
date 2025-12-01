@@ -83,4 +83,15 @@ public readonly struct QuotePair : IEquatable<QuotePair>
 
     public override string ToString() =>
         $"InstrumentId: {InstrumentId}, Bid: [{Bid}], Ask: [{Ask}], CreatedAt: {CreationTimestampAsDateTimeOffset:o}";
+
+    /// <summary>
+    /// Checks if the content (Bid, Ask, IsPostOnly) matches another QuotePair, ignoring timestamps.
+    /// </summary>
+    public bool ContentEquals(QuotePair other)
+    {
+        return InstrumentId == other.InstrumentId &&
+               IsPostOnly == other.IsPostOnly &&
+               Nullable.Equals(Bid, other.Bid) && // Quote struct has its own Equals
+               Nullable.Equals(Ask, other.Ask);
+    }
 }
