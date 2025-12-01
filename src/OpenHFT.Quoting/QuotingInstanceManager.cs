@@ -127,10 +127,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
         var currentParameters = engine.CurrentParameters;
 
         // Check if core, immutable parameters have changed.
-        if (newParameters.FvModel != currentParameters.FvModel ||
-            newParameters.FairValueSourceInstrumentId != currentParameters.FairValueSourceInstrumentId ||
-            newParameters.Type != currentParameters.Type ||
-            newParameters.BookName != currentParameters.BookName)
+        if (currentParameters.HasCoreParameterChanges(newParameters))
         {
             _logger.LogInformationWithCaller($"Core parameters changed for InstrumentId {instrumentId}. Redeploying instance.");
             DestroyInstance(instrumentId);

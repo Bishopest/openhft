@@ -131,11 +131,7 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
     public void UpdateParameters(QuotingParameters newParameters)
     {
         // Validate that the core, immutable properties match.
-        if (newParameters.InstrumentId != _parameters.InstrumentId ||
-            newParameters.FvModel != _parameters.FvModel ||
-            newParameters.FairValueSourceInstrumentId != _parameters.FairValueSourceInstrumentId ||
-            newParameters.Type != _parameters.Type ||
-            newParameters.BookName != _parameters.BookName)
+        if (_parameters.HasCoreParameterChanges(newParameters))
         {
             _logger.LogWarningWithCaller($"Attempted to update immutable parameters. A new QuotingEngine instance is required. Old: {_parameters}, New: {newParameters}");
             return;

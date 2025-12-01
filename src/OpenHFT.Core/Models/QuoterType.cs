@@ -11,9 +11,4 @@ public enum QuoterType
     /// A quoter that submits single order to the exchange.
     /// </summary>
     Single,
-
-    /// <summary>
-    /// A quoter that submit order on ceiled/floored price(1bp) 
-    /// </summary>
-    Grouped
 }

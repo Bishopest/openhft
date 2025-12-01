@@ -80,4 +80,7 @@ public class QuotingConfig
     public decimal MaxCumAskFills { get; set; }
     [JsonProperty("maxCumBidFills")]
     public decimal MaxCumBidFills { get; set; }
+    [JsonProperty("groupingBp")]
+    public decimal GroupingBp { get; set; }
+
 }

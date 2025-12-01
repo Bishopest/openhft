@@ -80,7 +80,8 @@ public class QuotingBootstrapService : IHostedService
                 Enum.TryParse<QuoterType>(config.QuoterType, true, out var qType) ? qType : QuoterType.Log,
                 config.PostOnly,
                 Quantity.FromDecimal(config.MaxCumBidFills),
-                Quantity.FromDecimal(config.MaxCumAskFills)
+                Quantity.FromDecimal(config.MaxCumAskFills),
+                config.GroupingBp
             );
 
             if (_instanceManager.UpdateInstanceParameters(parameters) != null)

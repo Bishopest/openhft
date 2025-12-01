@@ -117,15 +117,6 @@ public class QuotingEngineTests
         _fvProvider = _serviceProvider.GetRequiredService<IFairValueProviderFactory>()
             .CreateProvider(FairValueModel.Midp, _btcusdt.InstrumentId);
 
-        _bidQuoter = (LogQuoter)quoterFactory.CreateQuoter(_xbtusd, Side.Buy, QuoterType.Log);
-        _askQuoter = (LogQuoter)quoterFactory.CreateQuoter(_xbtusd, Side.Sell, QuoterType.Log);
-
-        var marketMaker = new MarketMaker(
-            _serviceProvider.GetRequiredService<ILogger<MarketMaker>>(),
-            _xbtusd, _bidQuoter, _askQuoter,
-            _serviceProvider.GetRequiredService<IQuoteValidator>()
-        );
-
         var parameters = new QuotingParameters(
             _xbtusd.InstrumentId,
             "test",
@@ -141,6 +132,16 @@ public class QuotingEngineTests
             Quantity.FromDecimal(300),
             Quantity.FromDecimal(300)
         );
+
+        _bidQuoter = (LogQuoter)quoterFactory.CreateQuoter(parameters, Side.Buy);
+        _askQuoter = (LogQuoter)quoterFactory.CreateQuoter(parameters, Side.Sell);
+
+        var marketMaker = new MarketMaker(
+            _serviceProvider.GetRequiredService<ILogger<MarketMaker>>(),
+            _xbtusd, _bidQuoter, _askQuoter,
+            _serviceProvider.GetRequiredService<IQuoteValidator>()
+        );
+
         _engine = new QuotingEngine(
             _serviceProvider.GetRequiredService<ILogger<QuotingEngine>>(),
             _xbtusd,

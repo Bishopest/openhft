@@ -59,6 +59,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     /// Specifies the type of quoter to be used for this instance.
     /// </summary>
     public readonly QuoterType Type { get; }
+    public readonly decimal GroupingBp { get; }
+
     /// <summary>
     /// Initializes a new instance of the QuotingParameters struct with all required values.
     /// </summary>
@@ -72,6 +74,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     /// <param name="depth">The number of quote levels on each side.</param>
     /// <param name="type">The type of quoter to be used.</param>
     /// <param name="postOnly">If true, all limit orders will be submitted as Post-Only.</param>
+    /// <param name="groupingBp"> The minimum quote change ratio </param>
     [JsonConstructor]
     public QuotingParameters(
         int instrumentId,
@@ -86,7 +89,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         QuoterType type,
         bool postOnly,
         Quantity maxCumBidFills,
-        Quantity maxCumAskFills)
+        Quantity maxCumAskFills,
+        decimal groupingBp = 1.0m)
     {
         if (askSpreadBp <= bidSpreadBp)
         {
@@ -113,6 +117,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         PostOnly = postOnly;
         MaxCumBidFills = maxCumBidFills;
         MaxCumAskFills = maxCumAskFills;
+        GroupingBp = groupingBp;
     }
 
     public override string ToString()
@@ -131,7 +136,21 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
                $"\"PostOnly\": {PostOnly}" +
                $"\"MaxCumBidFills\": {MaxCumBidFills.ToDecimal()}, " +
                $"\"MaxCumAskFills\": {MaxCumAskFills.ToDecimal()}, " +
+               $"\"GroupingBp\": {GroupingBp}" +
                $" }}";
+    }
+
+    /// <summary>
+    /// Checks if any core (immutable) parameters have changed compared to another set of parameters.
+    /// Changing these requires a full restart/redeploy of the quoting instance.
+    /// </summary>
+    public bool HasCoreParameterChanges(QuotingParameters other)
+    {
+        return FvModel != other.FvModel ||
+               FairValueSourceInstrumentId != other.FairValueSourceInstrumentId ||
+               Type != other.Type ||
+               BookName != other.BookName ||
+               GroupingBp != other.GroupingBp;
     }
 
     public bool Equals(QuotingParameters other)
@@ -148,8 +167,10 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
                PostOnly == other.PostOnly &&
                Type == other.Type &&
                MaxCumBidFills == other.MaxCumBidFills &&
-               MaxCumAskFills == other.MaxCumAskFills;
+               MaxCumAskFills == other.MaxCumAskFills &&
+               GroupingBp == other.GroupingBp;
     }
+
     public override bool Equals(object? obj)
     {
         return obj is QuotingParameters other && Equals(other);
@@ -171,6 +192,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         hash.Add(PostOnly);
         hash.Add(MaxCumBidFills);
         hash.Add(MaxCumAskFills);
+        hash.Add(GroupingBp);
         return hash.ToHashCode();
     }
 

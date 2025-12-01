@@ -9,5 +9,5 @@ public interface IQuoterFactory
     /// <summary>
     /// Creates a quoter of the specified type for the given instrument and side.
     /// </summary>
-    IQuoter CreateQuoter(Instrument instrument, Side side, QuoterType type, string? bookName = null);
+    IQuoter CreateQuoter(QuotingParameters parameters, Side side);
 }

@@ -29,12 +29,19 @@
                     <MudSelectItem Value="fv">@fv.ToString()</MudSelectItem>
                 }
             </MudSelect>
-            <MudSelect @bind-Value="_model.Type" Label="Quote Type" Variant="Variant.Outlined" Required="true">
-                @foreach (QuoterType type in Enum.GetValues(typeof(QuoterType)))
-                {
-                    <MudSelectItem Value="type">@type.ToString()</MudSelectItem>
-                }
-            </MudSelect>
+            <MudGrid>
+                <MudItem xs="12" sm="7">
+                    <MudSelect @bind-Value="_model.Type" Label="Quote Type" Variant="Variant.Outlined" Required="true">
+                        @foreach (QuoterType type in Enum.GetValues(typeof(QuoterType)))
+                        {
+                            <MudSelectItem Value="type">@type.ToString()</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="5">
+                    <MudNumericField @bind-Value="_model.GroupingBp" Label="Grouping (bp)" Variant="Variant.Outlined" Required="true" />
+                </MudItem>
+            </MudGrid>
             <MudGrid>
                 <MudItem xs="12" sm="6">
                     <MudNumericField @bind-Value="_model.AskSpreadBp" Label="Spread A (bp)" Variant="Variant.Outlined"

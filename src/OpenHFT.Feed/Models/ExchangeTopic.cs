@@ -174,6 +174,11 @@ public class BitmexTopic : ExchangeTopic
         return _allTopics.Value.Where(t => t.IsSymbolSpecific && t != OrderBookL2_25);
     }
 
+    public static IEnumerable<BitmexTopic> GetAllTopics()
+    {
+        return _allTopics.Value;
+    }
+
     /// <summary>
     /// Gets all defined private user data topics for this exchange.
     /// </summary>
@@ -204,11 +209,7 @@ public static class TopicRegistry
         }
 
         // Register all BitMEX topics (market and private)
-        foreach (var topic in BitmexTopic.GetAllMarketTopics())
-        {
-            RegisterTopic(topic);
-        }
-        foreach (var topic in BitmexTopic.GetAllPrivateTopics())
+        foreach (var topic in BitmexTopic.GetAllTopics())
         {
             RegisterTopic(topic);
         }

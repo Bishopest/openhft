@@ -18,12 +18,12 @@ public class GroupedSingleOrderQuoter : IQuoter
     private readonly IOrderFactory _orderFactory; // To create IOrder objects
     private readonly IMarketDataManager _marketDataManager;
     private readonly string _bookName;
+    private readonly decimal _groupingBp;
     /// <summary>
     /// The multiple of the instrument's tick size used for price grouping.
     /// This is calculated once on the first valid order book update.
     /// </summary>
     private long? _groupingTickMultiple;
-
     private readonly object _stateLock = new();
     private readonly object _groupingLock = new object();
 
@@ -43,7 +43,8 @@ public class GroupedSingleOrderQuoter : IQuoter
             Instrument instrument,
             IOrderFactory orderFactory,
             string bookName,
-            IMarketDataManager marketDataManager)
+            IMarketDataManager marketDataManager,
+            decimal groupingBp = 1.0m)
     {
         _logger = logger;
         _side = side;
@@ -51,6 +52,8 @@ public class GroupedSingleOrderQuoter : IQuoter
         _orderFactory = orderFactory;
         _bookName = bookName;
         _marketDataManager = marketDataManager;
+        _groupingBp = groupingBp;
+        if (_groupingBp <= 0) _groupingBp = 1.0m;
     }
 
     private OrderBook? GetOrderBookFast()
@@ -270,14 +273,15 @@ public class GroupedSingleOrderQuoter : IQuoter
     private long? CalculateGroupingMultiple(Price quoteP)
     {
         // 1 basis point (bp) = 0.01% = 0.0001
-        var oneBasisPointValue = quoteP.ToDecimal() * 0.0001m;
+        var targetBpValue = quoteP.ToDecimal() * _groupingBp * 0.0001m;
+
         // N = (Value of 1bp in Ticks) / (Value of 1 TickSize in Ticks)
-        if (oneBasisPointValue < _instrument.TickSize.ToDecimal())
+        if (targetBpValue < _instrument.TickSize.ToDecimal())
         {
             return 1;
         }
 
-        var multiple = (long)Math.Round(oneBasisPointValue / _instrument.TickSize.ToDecimal());
+        var multiple = (long)Math.Round(targetBpValue / _instrument.TickSize.ToDecimal());
 
         return Math.Max(1, multiple);
     }
