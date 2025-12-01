@@ -25,6 +25,7 @@ public class SingleOrderQuoter : IQuoter
     /// Null if the last action was a cancellation.
     /// </summary>
     public Quote? LatestQuote { get; private set; }
+    private HittingLogic _hittingLogic = HittingLogic.AllowAll;
     private OrderBook? _cachedOrderBook;
     public event Action? OrderFullyFilled;
     public event Action<Fill>? OrderFilled;
@@ -61,13 +62,22 @@ public class SingleOrderQuoter : IQuoter
         return _cachedOrderBook;
     }
 
+    public void UpdateParameters(QuotingParameters parameters)
+    {
+        _hittingLogic = parameters.HittingLogic;
+    }
+
     public async Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, CancellationToken cancellationToken = default)
     {
-        var quoteP = newQuote.Price;
-
         try
         {
-            LatestQuote = newQuote;
+            var effectivePrice = ApplyHittingLogic(newQuote.Price);
+            var effectiveQuote = effectivePrice == newQuote.Price
+                ? newQuote
+                : new Quote(effectivePrice, newQuote.Size);
+
+            LatestQuote = effectiveQuote;
+
             IOrder? currentOrder;
             lock (_stateLock)
             {
@@ -77,11 +87,11 @@ public class SingleOrderQuoter : IQuoter
             if (currentOrder is null)
             {
                 // No active order, so place a new one.
-                await StartNewQuoteAsync(newQuote, isPostOnly, cancellationToken).ConfigureAwait(false);
+                await StartNewQuoteAsync(effectiveQuote, isPostOnly, cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                if (newQuote.Price != currentOrder.Price)
+                if (effectiveQuote.Price != currentOrder.Price)
                 {
                     bool isPartiallyFilled = currentOrder.Quantity > currentOrder.LeavesQuantity;
                     var book = GetOrderBookFast();
@@ -91,7 +101,7 @@ public class SingleOrderQuoter : IQuoter
                         var mid = book.GetMidPrice();
                         var upperPrice = mid.ToDecimal() * (1m + 3m * 1e-4m);
                         var lowerPrice = mid.ToDecimal() * (1m - 3m * 1e-4m);
-                        isNearMid = newQuote.Price.ToDecimal() >= lowerPrice && newQuote.Price.ToDecimal() <= upperPrice;
+                        isNearMid = effectiveQuote.Price.ToDecimal() >= lowerPrice && effectiveQuote.Price.ToDecimal() <= upperPrice;
                     }
 
                     if (isPartiallyFilled && !isNearMid)
@@ -100,7 +110,7 @@ public class SingleOrderQuoter : IQuoter
                     }
                     else
                     {
-                        await currentOrder.ReplaceAsync(newQuote.Price, OrderType.Limit, cancellationToken).ConfigureAwait(false);
+                        await currentOrder.ReplaceAsync(effectiveQuote.Price, OrderType.Limit, cancellationToken).ConfigureAwait(false);
                     }
                 }
             }
@@ -109,6 +119,103 @@ public class SingleOrderQuoter : IQuoter
         {
             _logger.LogErrorWithCaller(ex, $"({_side}) An unexpected error occurred during UpdateQuoteAsync.");
         }
+    }
+
+    /// <summary>
+    /// adjust quote price by HittingLogic.
+    /// </summary>
+    private Price ApplyHittingLogic(Price targetPrice)
+    {
+        if (_hittingLogic == HittingLogic.AllowAll)
+        {
+            return targetPrice;
+        }
+
+        var book = GetOrderBookFast();
+        if (book == null) return targetPrice; // 오더북 없으면 로직 적용 불가, 원본 반환
+
+        var bestBid = book.GetBestBid().price;
+        var bestAsk = book.GetBestAsk().price;
+
+        // 유효성 체크
+        if (bestBid.ToDecimal() <= 0 || bestAsk.ToDecimal() <= 0) return targetPrice;
+
+        var tickSize = _instrument.TickSize.ToDecimal();
+
+        if (_side == Side.Buy)
+        {
+            // Buy Side Logic
+            if (_hittingLogic == HittingLogic.OurBest)
+            {
+                // "prevent quoter to quote price over best price"
+                // Buy 주문이 Best Bid보다 높게 나가는 것을 방지 (Taker 방지보다는 Passive 유지 목적)
+                // 수정: OurBest = "Best Bid 까지만 허용" (즉, Spread 안쪽으로 들어가지 않음)
+
+                if (targetPrice.ToDecimal() > bestBid.ToDecimal())
+                {
+                    return bestBid;
+                }
+            }
+            else if (_hittingLogic == HittingLogic.Pennying)
+            {
+                // "quote price just +1 tick from best price ... only when our quote cross the best price"
+                // 목표가가 Best Bid보다 높다면 -> Best Bid + 1 Tick으로 제한 (Pennying)
+                // 목표가가 Best Bid 이하라면 -> 그냥 목표가 사용
+                if (_activeOrder is not null && _activeOrder.Price == bestBid)
+                {
+                    return bestBid;
+                }
+
+                if (targetPrice.ToDecimal() > bestBid.ToDecimal())
+                {
+                    // Best Bid + 1 Tick (단, Best Ask를 넘지 않도록 주의해야 Taker 방지됨)
+                    var pennyPrice = bestBid.ToDecimal() + tickSize;
+
+                    // (옵션) Best Ask와 겹치거나 넘어가면 Best Ask - 1 Tick 등으로 조정할 수도 있음 (PostOnly 보장 위해)
+                    if (pennyPrice >= bestAsk.ToDecimal())
+                    {
+                        // Spread가 1틱인 경우 Pennying 불가 -> Best Bid 유지 or Best Ask - 1 tick
+                        return bestBid;
+                    }
+
+                    return Price.FromDecimal(pennyPrice);
+                }
+            }
+        }
+        else // Sell Side
+        {
+            // Sell Side Logic
+            if (_hittingLogic == HittingLogic.OurBest)
+            {
+                // Sell 주문이 Best Ask보다 낮게 나가는 것을 방지
+                if (targetPrice.ToDecimal() < bestAsk.ToDecimal())
+                {
+                    return bestAsk;
+                }
+            }
+            else if (_hittingLogic == HittingLogic.Pennying)
+            {
+                if (_activeOrder is not null && _activeOrder.Price == bestAsk)
+                {
+                    return bestAsk;
+                }
+                // 목표가가 Best Ask보다 낮다면 -> Best Ask - 1 Tick으로 제한
+                if (targetPrice.ToDecimal() < bestAsk.ToDecimal())
+                {
+                    var pennyPrice = bestAsk.ToDecimal() - tickSize;
+
+                    // Best Bid와 겹치면 Pennying 불가
+                    if (pennyPrice <= bestBid.ToDecimal())
+                    {
+                        return bestAsk;
+                    }
+
+                    return Price.FromDecimal(pennyPrice);
+                }
+            }
+        }
+
+        return targetPrice;
     }
 
     public async Task CancelQuoteAsync(CancellationToken cancellationToken = default)

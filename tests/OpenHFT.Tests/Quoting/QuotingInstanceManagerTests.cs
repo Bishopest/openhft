@@ -128,7 +128,8 @@ public class QuotingInstanceManagerTests_Integration
             QuoterType.Log,
             true,
             Quantity.FromDecimal(300),
-            Quantity.FromDecimal(300)
+            Quantity.FromDecimal(300),
+            HittingLogic.AllowAll
         );
 
         // Act
@@ -154,7 +155,7 @@ public class QuotingInstanceManagerTests_Integration
         var initialParams = new QuotingParameters(
             bitmexInstrument.InstrumentId, "test", FairValueModel.Midp, binanceInstrument.InstrumentId,
             10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
-            Quantity.FromDecimal(300));
+            Quantity.FromDecimal(300), HittingLogic.AllowAll);
 
         _manager.UpdateInstanceParameters(initialParams);
         _manager.RetireInstance(initialParams.InstrumentId);
@@ -166,7 +167,7 @@ public class QuotingInstanceManagerTests_Integration
         var updatedParams = new QuotingParameters(
             bitmexInstrument.InstrumentId, "test", FairValueModel.Midp, binanceInstrument.InstrumentId,
             20m, -20m, 1.0m, Quantity.FromDecimal(200), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
-            Quantity.FromDecimal(300));
+            Quantity.FromDecimal(300), HittingLogic.AllowAll);
 
         // Act
         _manager.UpdateInstanceParameters(updatedParams);
@@ -191,7 +192,7 @@ public class QuotingInstanceManagerTests_Integration
         var initialParams = new QuotingParameters(
             bitmexInstrument.InstrumentId, "test", FairValueModel.Midp, binanceInstrument.InstrumentId,
             10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
-            Quantity.FromDecimal(300));
+            Quantity.FromDecimal(300), HittingLogic.AllowAll);
 
         _manager.UpdateInstanceParameters(initialParams);
         var instanceBefore = _manager.GetInstance(bitmexInstrument.InstrumentId);
@@ -200,7 +201,7 @@ public class QuotingInstanceManagerTests_Integration
         var newParams = new QuotingParameters(
             bitmexInstrument.InstrumentId, "test", FairValueModel.BestMidp, binanceInstrument.InstrumentId,
             10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
-            Quantity.FromDecimal(300));
+            Quantity.FromDecimal(300), HittingLogic.AllowAll);
 
         // Act
         _manager.UpdateInstanceParameters(newParams);
@@ -224,7 +225,7 @@ public class QuotingInstanceManagerTests_Integration
         var parameters = new QuotingParameters(
             bitmexInstrument.InstrumentId, "test", FairValueModel.Midp, 2,
             10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
-            Quantity.FromDecimal(300));
+            Quantity.FromDecimal(300), HittingLogic.AllowAll);
 
         _manager.UpdateInstanceParameters(parameters);
         var instance = _manager.GetInstance(bitmexInstrument.InstrumentId);
@@ -251,12 +252,12 @@ public class QuotingInstanceManagerTests_Integration
         var bitmexParams = new QuotingParameters(
             bitmexInstrument.InstrumentId, "test", FairValueModel.Midp, binanceInstrument.InstrumentId,
             10m, -10m, 0m, Quantity.FromDecimal(100), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
-            Quantity.FromDecimal(300));
+            Quantity.FromDecimal(300), HittingLogic.AllowAll);
 
         var binanceParams = new QuotingParameters(
             binanceInstrument.InstrumentId, "test", FairValueModel.Midp, bitmexInstrument.InstrumentId,
             5m, -5m, 0m, Quantity.FromDecimal(1), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
-            Quantity.FromDecimal(300));
+            Quantity.FromDecimal(300), HittingLogic.AllowAll);
 
         // 3. 두 전략을 배포하고 2번 활성화합니다.
         _manager.UpdateInstanceParameters(bitmexParams);

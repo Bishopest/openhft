@@ -151,6 +151,7 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
             _logger.LogInformation("Updating tunable parameters for {Symbol}: {NewParams}",
                 QuotingInstrument.Symbol, newParameters);
             _parameters = newParameters;
+            _marketMaker.UpdateParameters(newParameters);
         }
 
     }
@@ -348,7 +349,7 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
                 _parameters.InstrumentId, _parameters.BookName, _parameters.FvModel, _parameters.FairValueSourceInstrumentId,
                 newAskSpreadBp, newBidSpreadBp, // <-- 변경된 스프레드
                 _parameters.SkewBp, _parameters.Size, _parameters.Depth, _parameters.Type, _parameters.PostOnly,
-                _parameters.MaxCumBidFills, _parameters.MaxCumAskFills
+                _parameters.MaxCumBidFills, _parameters.MaxCumAskFills, _parameters.HittingLogic, _parameters.GroupingBp
             );
             _parameters = newParams;
         }

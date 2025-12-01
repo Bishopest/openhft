@@ -130,7 +130,7 @@ public class WebSocketHostTests
     public async Task When_UpdateParametersCommandSent_Should_CallStrategyManager()
     {
         // --- Arrange ---
-        var parameters = new QuotingParameters(123, "test", FairValueModel.Midp, 124, 1m, -1m, 1m, Quantity.FromDecimal(2m), 1, QuoterType.Single, true, Quantity.FromDecimal(6m), Quantity.FromDecimal(6m));
+        var parameters = new QuotingParameters(123, "test", FairValueModel.Midp, 124, 1m, -1m, 1m, Quantity.FromDecimal(2m), 1, QuoterType.Single, true, Quantity.FromDecimal(6m), Quantity.FromDecimal(6m), HittingLogic.AllowAll);
         var updateCommand = new UpdateParametersCommand(parameters);
         var commandJson = JsonSerializer.Serialize(updateCommand, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
         var commandBytes = Encoding.UTF8.GetBytes(commandJson);

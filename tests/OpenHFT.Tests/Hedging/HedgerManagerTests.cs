@@ -126,12 +126,12 @@ public class HedgerManagerTests
         var bitmexParams = new QuotingParameters(
             bitmexInstrument.InstrumentId, "test", FairValueModel.Midp, binanceInstrument.InstrumentId,
             10m, -10m, 0m, Quantity.FromDecimal(100), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
-            Quantity.FromDecimal(300));
+            Quantity.FromDecimal(300), HittingLogic.AllowAll);
 
         var binanceParams = new QuotingParameters(
             binanceInstrument.InstrumentId, "test", FairValueModel.Midp, bitmexInstrument.InstrumentId,
             5m, -5m, 0m, Quantity.FromDecimal(1), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
-            Quantity.FromDecimal(300));
+            Quantity.FromDecimal(300), HittingLogic.AllowAll);
 
         // 3. 두 전략을 배포하고 2번 활성화합니다.
         _quotingManager.UpdateInstanceParameters(bitmexParams);

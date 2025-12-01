@@ -59,6 +59,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     /// Specifies the type of quoter to be used for this instance.
     /// </summary>
     public readonly QuoterType Type { get; }
+    public readonly HittingLogic HittingLogic { get; }
+
     public readonly decimal GroupingBp { get; }
 
     /// <summary>
@@ -74,6 +76,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     /// <param name="depth">The number of quote levels on each side.</param>
     /// <param name="type">The type of quoter to be used.</param>
     /// <param name="postOnly">If true, all limit orders will be submitted as Post-Only.</param>
+    /// <param name="hittingLogic">The logic of hitting in IQuoter</param>
     /// <param name="groupingBp"> The minimum quote change ratio </param>
     [JsonConstructor]
     public QuotingParameters(
@@ -90,6 +93,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         bool postOnly,
         Quantity maxCumBidFills,
         Quantity maxCumAskFills,
+        HittingLogic hittingLogic,
         decimal groupingBp = 1.0m)
     {
         if (askSpreadBp <= bidSpreadBp)
@@ -117,6 +121,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         PostOnly = postOnly;
         MaxCumBidFills = maxCumBidFills;
         MaxCumAskFills = maxCumAskFills;
+        HittingLogic = hittingLogic;
         GroupingBp = groupingBp;
     }
 
@@ -136,6 +141,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
                $"\"PostOnly\": {PostOnly}" +
                $"\"MaxCumBidFills\": {MaxCumBidFills.ToDecimal()}, " +
                $"\"MaxCumAskFills\": {MaxCumAskFills.ToDecimal()}, " +
+               $"\"HittingLogic\": {HittingLogic}" +
                $"\"GroupingBp\": {GroupingBp}" +
                $" }}";
     }
@@ -167,6 +173,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
                Type == other.Type &&
                MaxCumBidFills == other.MaxCumBidFills &&
                MaxCumAskFills == other.MaxCumAskFills &&
+               HittingLogic == other.HittingLogic &&
                GroupingBp == other.GroupingBp;
     }
 
@@ -191,6 +198,7 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         hash.Add(PostOnly);
         hash.Add(MaxCumBidFills);
         hash.Add(MaxCumAskFills);
+        hash.Add(HittingLogic);
         hash.Add(GroupingBp);
         return hash.ToHashCode();
     }

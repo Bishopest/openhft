@@ -55,4 +55,9 @@ public class LogQuoter : IQuoter
     {
         OrderFilled?.Invoke(fill);
     }
+
+    public void UpdateParameters(QuotingParameters parameters)
+    {
+        return;
+    }
 }

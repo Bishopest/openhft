@@ -38,4 +38,5 @@ public interface IQuoter
     /// <returns>A task that represents the asynchronous cancellation operation.</returns>
     Task CancelQuoteAsync(CancellationToken cancellationToken = default);
 
+    void UpdateParameters(QuotingParameters parameters);
 }

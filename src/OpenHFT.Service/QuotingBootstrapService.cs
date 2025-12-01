@@ -81,6 +81,7 @@ public class QuotingBootstrapService : IHostedService
                 config.PostOnly,
                 Quantity.FromDecimal(config.MaxCumBidFills),
                 Quantity.FromDecimal(config.MaxCumAskFills),
+                config.HittingLogic,
                 config.GroupingBp
             );
 

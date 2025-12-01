@@ -96,6 +96,7 @@ public partial class QuotingParametersController
         public decimal MaxCumAskFills { get; set; } = 10000m;
         public decimal MaxCumBidFills { get; set; } = 10000m;
         public decimal GroupingBp { get; set; } = 1.0m;
+        public HittingLogic HittingLogic { get; set; }
     }
 
     protected override void OnInitialized()
@@ -152,6 +153,7 @@ public partial class QuotingParametersController
         _model.MaxCumAskFills = newParameters.MaxCumAskFills.ToDecimal();
         _model.MaxCumBidFills = newParameters.MaxCumBidFills.ToDecimal();
         _model.GroupingBp = newParameters.GroupingBp;
+        _model.HittingLogic = newParameters.HittingLogic;
 
         // We need to update the instrument selection as well
         SelectedInstrument = _availableInstruments.FirstOrDefault(i => i.InstrumentId == newParameters.InstrumentId);
@@ -228,6 +230,7 @@ public partial class QuotingParametersController
             _model.PostOnly,
             Quantity.FromDecimal(_model.MaxCumBidFills),
             Quantity.FromDecimal(_model.MaxCumAskFills),
+            _model.HittingLogic,
             _model.GroupingBp
         );
 

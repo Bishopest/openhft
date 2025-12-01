@@ -41,6 +41,7 @@
     "postOnly": true,
     "maxCumAskFills": 3000,
     "maxCumBidFills": 3000,
+    "hittingLogic": "allowAll",
     "groupingBp": 1
   },
   "dataFolder": "/Users/jskim/workspace/openhft/data"

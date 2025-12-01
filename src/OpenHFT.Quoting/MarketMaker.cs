@@ -69,6 +69,12 @@ public sealed class MarketMaker
         _quotingStateProvider = provider;
     }
 
+    public void UpdateParameters(QuotingParameters parameters)
+    {
+        _bidQuoter.UpdateParameters(parameters);
+        _askQuoter.UpdateParameters(parameters);
+    }
+
     /// <summary>
     /// This is the primary entry point. The quoting engine calls this method
     /// when a new target quote pair has been calculated.

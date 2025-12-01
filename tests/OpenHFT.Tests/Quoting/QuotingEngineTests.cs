@@ -130,7 +130,8 @@ public class QuotingEngineTests
             QuoterType.Log,
             true,
             Quantity.FromDecimal(300),
-            Quantity.FromDecimal(300)
+            Quantity.FromDecimal(300),
+            HittingLogic.AllowAll
         );
 
         _bidQuoter = (LogQuoter)quoterFactory.CreateQuoter(parameters, Side.Buy);
@@ -324,7 +325,7 @@ public class QuotingEngineTests
         var parameters = new QuotingParameters(
             _xbtusd.InstrumentId, "test", FairValueModel.Midp, _btcusdt.InstrumentId,
             10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true,
-            Quantity.FromDecimal(200), Quantity.FromDecimal(200) // MaxCumBidFills = 200
+            Quantity.FromDecimal(200), Quantity.FromDecimal(200), HittingLogic.AllowAll // MaxCumBidFills = 200
         );
         _engine.UpdateParameters(parameters);
 
@@ -356,7 +357,7 @@ public class QuotingEngineTests
         var parameters = new QuotingParameters(
             _xbtusd.InstrumentId, "test", FairValueModel.Midp, _btcusdt.InstrumentId,
             10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true,
-            Quantity.FromDecimal(150), Quantity.FromDecimal(150) // MaxCumAskFills = 150
+            Quantity.FromDecimal(150), Quantity.FromDecimal(150), HittingLogic.AllowAll // MaxCumAskFills = 150
         );
         _engine.UpdateParameters(parameters);
 
@@ -389,7 +390,8 @@ public class QuotingEngineTests
             size: Quantity.FromDecimal(100), // 주문 사이즈 100
             depth: 1, type: QuoterType.Log, postOnly: true,
             maxCumBidFills: Quantity.FromDecimal(1000),
-            maxCumAskFills: Quantity.FromDecimal(1000)
+            maxCumAskFills: Quantity.FromDecimal(1000),
+            hittingLogic: HittingLogic.AllowAll
         );
         _engine.Start();
         _engine.UpdateParameters(initialParams);
@@ -443,7 +445,8 @@ public class QuotingEngineTests
             size: Quantity.FromDecimal(100),
             depth: 1, type: QuoterType.Log, postOnly: true,
             maxCumBidFills: Quantity.FromDecimal(1000),
-            maxCumAskFills: Quantity.FromDecimal(1000)
+            maxCumAskFills: Quantity.FromDecimal(1000),
+            HittingLogic.AllowAll
         );
         _engine.Start();
         _engine.UpdateParameters(initialParams);
@@ -477,7 +480,8 @@ public class QuotingEngineTests
             size: Quantity.FromDecimal(100),
             depth: 1, type: QuoterType.Log, postOnly: true,
             maxCumBidFills: Quantity.FromDecimal(1000),
-            maxCumAskFills: Quantity.FromDecimal(1000)
+            maxCumAskFills: Quantity.FromDecimal(1000),
+            HittingLogic.AllowAll
         );
         _engine.Start();
         _engine.UpdateParameters(initialParams);
@@ -527,6 +531,7 @@ public class QuotingEngineTests
             depth: 1, type: QuoterType.Log, postOnly: true,
             maxCumBidFills: Quantity.FromDecimal(1000),
             maxCumAskFills: Quantity.FromDecimal(1000),
+            hittingLogic: HittingLogic.AllowAll,
             groupingBp: groupingBp // [중요] Grouping BP 설정
         );
 

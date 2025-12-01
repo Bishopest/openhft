@@ -29,6 +29,12 @@
                     <MudSelectItem Value="fv">@fv.ToString()</MudSelectItem>
                 }
             </MudSelect>
+            <MudSelect @bind-Value="_model.HittingLogic" Label="Hitting Logic" Variant="Variant.Outlined" Required="true">
+                @foreach (HittingLogic hl in Enum.GetValues(typeof(HittingLogic)))
+                {
+                    <MudSelectItem Value="hl">@hl.ToString()</MudSelectItem>
+                }
+            </MudSelect>
             <MudGrid>
                 <MudItem xs="12" sm="7">
                     <MudSelect @bind-Value="_model.Type" Label="Quote Type" Variant="Variant.Outlined" Required="true">

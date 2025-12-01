@@ -82,5 +82,6 @@ public class QuotingConfig
     public decimal MaxCumBidFills { get; set; }
     [JsonProperty("groupingBp")]
     public decimal GroupingBp { get; set; }
-
+    [JsonProperty("hittingLogic")]
+    public HittingLogic HittingLogic { get; set; }
 }

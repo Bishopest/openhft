@@ -41,6 +41,9 @@ public class QuotingInstanceFactory : IQuotingInstanceFactory
         }
         var bidQuoter = _quoterFactory.CreateQuoter(parameters, Side.Buy);
         var askQuoter = _quoterFactory.CreateQuoter(parameters, Side.Sell);
+        bidQuoter.UpdateParameters(parameters);
+        askQuoter.UpdateParameters(parameters);
+
         var validator = new DefaultQuoteValidator(_loggerFactory.CreateLogger<DefaultQuoteValidator>());
 
         var fvProvider = _fairValueProviderFactory.CreateProvider(parameters.FvModel, parameters.FairValueSourceInstrumentId);
