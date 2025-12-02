@@ -8,7 +8,7 @@ namespace OpenHFT.Core.Orders;
 
 // A sample concrete Order class to make the builder work.
 // Note how properties are mutable (public set) for the builder to use.
-public class Order : IOrder, IOrderUpdatable
+public class Order : IOrder, IOrderUpdatable, IOrderSettable
 {
     private readonly ILogger _logger;
     private readonly IOrderRouter _router;
@@ -22,11 +22,11 @@ public class Order : IOrder, IOrderUpdatable
 
 
     // Mutable properties for the builder
-    public Price Price { get; internal set; }
-    public Quantity Quantity { get; internal set; }
-    public Quantity LeavesQuantity { get; internal set; }
-    public OrderType OrderType { get; internal set; } // Added for completeness
-    public bool IsPostOnly { get; internal set; }
+    public Price Price { get; set; }
+    public Quantity Quantity { get; set; }
+    public Quantity LeavesQuantity { get; set; }
+    public OrderType OrderType { get; set; } // Added for completeness
+    public bool IsPostOnly { get; set; }
 
     public long LastUpdateTime { get; internal set; }
     public OrderStatusReport? LatestReport { get; internal set; }
@@ -66,6 +66,11 @@ public class Order : IOrder, IOrderUpdatable
         _gateway = gateway;
         _logger = logger;
         _router.RegisterOrder(this);
+    }
+
+    public void AddStatusChangedHandler(EventHandler<OrderStatusReport> handler)
+    {
+        StatusChanged += handler;
     }
 
     // --- Action Methods ---

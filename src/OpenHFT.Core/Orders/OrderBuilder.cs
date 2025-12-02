@@ -9,7 +9,7 @@ namespace OpenHFT.Core.Orders;
 /// </summary>
 public class OrderBuilder : IOrderBuilder
 {
-    private readonly IOrder _order;
+    private readonly IOrderSettable _settleableOrder;
 
     /// <summary>
     /// Initializes a new instance of the OrderBuilder.
@@ -24,76 +24,53 @@ public class OrderBuilder : IOrderBuilder
         if (orderFactory == null) throw new ArgumentNullException(nameof(orderFactory));
 
         // The factory provides the basic shell of the order.
-        _order = orderFactory.Create(instrumentId, side, bookName);
-    }
+        IOrder baseOrder = orderFactory.Create(instrumentId, side, bookName);
 
-    public IOrderBuilder WithBookName(string bookName)
-    {
-        if (_order is Order concreteOrder)
-        {
-            concreteOrder.BookName = bookName;
-        }
-        return this;
+        // Factory가 반환한 객체는 반드시 IOrderSettable이어야 합니다.
+        _settleableOrder = baseOrder as IOrderSettable
+                           ?? throw new InvalidCastException("Factory must create an object implementing IOrderSettable.");
     }
 
     public IOrderBuilder WithPrice(Price price)
     {
-        // In a real implementation, you would set a property on the concrete Order class.
-        // This requires casting or a mutable interface, which can be tricky.
-        // Let's assume the concrete Order class has mutable properties for the builder.
-        if (_order is Order concreteOrder)
-        {
-            concreteOrder.Price = price;
-        }
+        _settleableOrder.Price = price;
         return this;
     }
 
     public IOrderBuilder WithQuantity(Quantity quantity)
     {
-        if (_order is Order concreteOrder)
-        {
-            concreteOrder.Quantity = quantity;
-            // When first built, remaining quantity is the same as the initial quantity.
-            concreteOrder.LeavesQuantity = quantity;
-        }
+        _settleableOrder.Quantity = quantity;
+        _settleableOrder.LeavesQuantity = quantity;
         return this;
     }
 
     public IOrderBuilder WithOrderType(OrderType orderType)
     {
-        if (_order is Order concreteOrder)
-        {
-            concreteOrder.OrderType = orderType;
-        }
+        _settleableOrder.OrderType = orderType;
         return this;
     }
 
     public IOrderBuilder WithStatusChangedHandler(EventHandler<OrderStatusReport> handler)
     {
-        if (handler != null)
-        {
-            _order.StatusChanged += handler;
-        }
+        _settleableOrder.AddStatusChangedHandler(handler);
         return this;
     }
 
     public IOrderBuilder WithPostOnly(bool isPostOnly)
     {
-        if (_order is Order concreteOrder)
-        {
-            concreteOrder.IsPostOnly = isPostOnly; // Order 클래스에 IsPostOnly 속성 추가 필요
-        }
+        _settleableOrder.IsPostOnly = isPostOnly; // Order 클래스에 IsPostOnly 속성 추가 필요
         return this;
     }
 
     public IOrder Build()
     {
         // Perform any final validation before returning the order.
-        if (_order.Price.ToTicks() <= 0 || _order.Quantity.ToTicks() <= 0)
+        var order = (IOrder)_settleableOrder;
+        if (order.Price.ToTicks() <= 0 || order.Quantity.ToTicks() <= 0)
         {
             throw new InvalidOperationException("Order price and quantity must be positive.");
         }
 
-        return _order;
+        return order;
     }
 }
