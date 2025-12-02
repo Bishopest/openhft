@@ -51,29 +51,51 @@ cp "${LOCAL_DATA_SOURCE_DIR}/book_info.json" "${LOCAL_PUBLISH_DIR_ABSOLUTE}/data
 echo "🔧 Modifying config.json for '$TARGET_ENV' environment..."
 CONFIG_FILE_PATH="${LOCAL_PUBLISH_DIR_ABSOLUTE}/config.json"
 
+# jq 설치 확인
+if ! command -v jq &> /dev/null; then
+    echo "❌ Error: 'jq' is not installed. Please install it (e.g., brew install jq) to parse JSON."
+    exit 1
+fi
+
 # Function to handle sed compatibility
-modify_config() {
-  local key=$1
-  local value=$2
-  local file=$3
+# modify_config() {
+#   local key=$1
+#   local value=$2
+#   local file=$3
 
-  # sed 명령어는 JSON 구조를 완벽하게 파싱하지 못하므로, 단순 치환에만 적합합니다.
-  # "key": "any value" 형태를 찾아서 "key": "new value"로 바꿉니다.
-  local pattern="s|\"${key}\": \".*\"|\"${key}\": \"${value}\"|g"
+#   # sed 명령어는 JSON 구조를 완벽하게 파싱하지 못하므로, 단순 치환에만 적합합니다.
+#   # "key": "any value" 형태를 찾아서 "key": "new value"로 바꿉니다.
+#   local pattern="s|\"${key}\": \".*\"|\"${key}\": \"${value}\"|g"
 
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' "$pattern" "$file"
-  else
-    sed -i "$pattern" "$file"
-  fi
-}
+#   if [[ "$OSTYPE" == "darwin"* ]]; then
+#     sed -i '' "$pattern" "$file"
+#   else
+#     sed -i "$pattern" "$file"
+#   fi
+# }
 
 # dataFolder와 omsIdentifier 값을 동적으로 수정
-modify_config "dataFolder" "data" "$CONFIG_FILE_PATH"
-modify_config "omsIdentifier" "$OMS_IDENTIFIER" "$CONFIG_FILE_PATH"
+# modify_config "dataFolder" "data" "$CONFIG_FILE_PATH"
+# modify_config "omsIdentifier" "$OMS_IDENTIFIER" "$CONFIG_FILE_PATH"
 
-echo "   -> dataFolder set to 'data'"
-echo "   -> omsIdentifier set to '$OMS_IDENTIFIER'"
+# jq를 사용하여 omsIdentifier, dataFolder, subscriptions를 한 번에 업데이트
+# --arg: 일반 문자열 변수 주입
+# --argjson: JSON 객체/배열 변수 주입
+# echo "   -> dataFolder set to 'data'"
+# echo "   -> omsIdentifier set to '$OMS_IDENTIFIER'"
+
+echo "   -> Updating configuration using jq..."
+
+tmp=$(mktemp)
+jq --arg oms "$OMS_IDENTIFIER" \
+   --argjson subs "$SUBSCRIPTIONS_JSON" \
+   '.omsIdentifier = $oms | .dataFolder = "data" | .subscriptions = $subs' \
+   "$CONFIG_FILE_PATH" > "$tmp" && mv "$tmp" "$CONFIG_FILE_PATH"
+
+echo "   -> config.json updated successfully."
+echo "      - omsIdentifier: $OMS_IDENTIFIER"
+echo "      - subscriptions updated from env."
+
 
 # --- 7. EC2 인스턴스로 아티팩트 복사 ---
 echo "📡 Uploading artifacts to $EC2_HOST..."
