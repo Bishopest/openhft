@@ -15,5 +15,6 @@ public enum FairValueModel
     /// This model is more stable and less susceptible to noise than the simple mid-price.
     /// </summary>
     VwapMidp,
-    OppositeBest
+    OppositeBest,
+    Penalty
 }
