@@ -9,11 +9,13 @@ namespace OpenHFT.Quoting.Interfaces;
 public readonly struct FairValueUpdate
 {
     public readonly int InstrumentId;
-    public readonly Price FairValue;
-    public FairValueUpdate(int instrumentId, Price fairValue)
+    public readonly Price FairAskValue;
+    public readonly Price FairBidValue;
+    public FairValueUpdate(int instrumentId, Price fairAskValue, Price fairBidValue)
     {
         InstrumentId = instrumentId;
-        FairValue = fairValue;
+        FairAskValue = fairAskValue;
+        FairBidValue = fairBidValue;
     }
 }
 

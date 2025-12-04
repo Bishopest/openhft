@@ -28,10 +28,11 @@ public class MidpFairValueProvider : AbstractFairValueProvider, IOrderBookConsum
             return;
         }
 
-        if (midP != _lastFairValue)
+        if (midP != _lastFairAskValue || midP != _lastFairBidValue)
         {
-            _lastFairValue = midP;
-            OnFairValueChanged(new FairValueUpdate(SourceInstrumentId, midP));
+            _lastFairAskValue = midP;
+            _lastFairBidValue = midP;
+            OnFairValueChanged(new FairValueUpdate(SourceInstrumentId, midP, midP));
         }
     }
 }

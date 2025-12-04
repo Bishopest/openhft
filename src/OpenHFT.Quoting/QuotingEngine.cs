@@ -160,7 +160,7 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
     {
         if (update.InstrumentId == _parameters.FairValueSourceInstrumentId)
         {
-            Requote(update.FairValue);
+            Requote(update);
         }
     }
 
@@ -416,7 +416,7 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
         }
     }
 
-    private void Requote(Price fairValue)
+    private void Requote(FairValueUpdate fairValueUpdate)
     {
         ApplySkew();
 
@@ -426,16 +426,16 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
             currentParams = _parameters;
         }
 
-        if (fairValue.ToTicks() == 0) return;
+        if (fairValueUpdate.FairAskValue.ToTicks() == 0 || fairValueUpdate.FairBidValue.ToTicks() == 0) return;
 
         // 1. Calculate raw bid/ask prices based on spread.
         // Use Price arithmetic to avoid precision issues with decimal.
-        var askSpreadAmountInDecimal = fairValue.ToDecimal() * currentParams.AskSpreadBp * 0.0001m;
-        var bidSpreadAmountInDecimal = fairValue.ToDecimal() * currentParams.BidSpreadBp * 0.0001m;
+        var askSpreadAmountInDecimal = fairValueUpdate.FairAskValue.ToDecimal() * currentParams.AskSpreadBp * 0.0001m;
+        var bidSpreadAmountInDecimal = fairValueUpdate.FairBidValue.ToDecimal() * currentParams.BidSpreadBp * 0.0001m;
         var askSpreadAmount = Price.FromDecimal(askSpreadAmountInDecimal);
         var bidSpreadAmount = Price.FromDecimal(bidSpreadAmountInDecimal);
-        var rawAskPrice = fairValue + askSpreadAmount;
-        var rawBidPrice = fairValue + bidSpreadAmount;
+        var rawAskPrice = fairValueUpdate.FairAskValue + askSpreadAmount;
+        var rawBidPrice = fairValueUpdate.FairBidValue + bidSpreadAmount;
 
         // 2. Round prices to the instrument's tick size.
         var tickSizeInTicks = QuotingInstrument.TickSize.ToTicks();

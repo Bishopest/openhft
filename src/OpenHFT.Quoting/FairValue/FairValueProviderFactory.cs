@@ -42,10 +42,8 @@ public class FairValueProviderFactory : IFairValueProviderFactory
                 return new BestMidpFairValueProvider(_logger, fvInstrumentId);
             case FairValueModel.VwapMidp:
                 return new VwapMidpFairValueProvider(_logger, fvInstrumentId);
-            case FairValueModel.GroupedMidp:
-                var instrument = _instrumentRepo.GetById(fvInstrumentId);
-                if (instrument is null) throw new Exception($"Instrument with ID {fvInstrumentId} not found.");
-                return new GroupedMidpFairValueProvider(_logger, fvInstrumentId, instrument.TickSize);
+            case FairValueModel.OppositeBest:
+                return new OppositeBestFairValueProvider(_logger, fvInstrumentId);
             case FairValueModel.FR:
                 throw new NotImplementedException($"FairValueModel '{model}' is not yet implemented in FairValueProviderFactory.");
             default:

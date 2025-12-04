@@ -9,19 +9,11 @@ public enum FairValueModel
     Midp,
     FR,
     BestMidp,
-
     /// <summary>
     /// Calculates Fair Value based on the Volume-Weighted Average Price (VWAP)
     /// of the each top N levels of the bid and ask sides of the order book.
     /// This model is more stable and less susceptible to noise than the simple mid-price.
     /// </summary>
     VwapMidp,
-
-    /// <summary>
-    /// Calculates Fair Value based on the mid-price of the order book,
-    /// but after grouping price levels into buckets. The size of the bucket
-    /// is dynamically determined to be close to 1 basis point of the instrument's price.
-    /// This reduces noise from minor price fluctuations.
-    /// </summary>
-    GroupedMidp
+    OppositeBest
 }

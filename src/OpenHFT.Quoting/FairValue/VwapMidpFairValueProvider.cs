@@ -77,10 +77,11 @@ public class VwapMidpFairValueProvider : AbstractFairValueProvider, IOrderBookCo
             return;
         }
 
-        if (fairValue != _lastFairValue)
+        if (fairValue != _lastFairAskValue || fairValue != _lastFairBidValue)
         {
-            _lastFairValue = fairValue;
-            OnFairValueChanged(new FairValueUpdate(SourceInstrumentId, fairValue.Value));
+            _lastFairAskValue = fairValue;
+            _lastFairBidValue = fairValue;
+            OnFairValueChanged(new FairValueUpdate(SourceInstrumentId, fairValue.Value, fairValue.Value));
         }
     }
 }

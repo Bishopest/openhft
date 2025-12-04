@@ -10,8 +10,10 @@ namespace OpenHFT.Quoting.FairValue;
 public abstract class AbstractFairValueProvider : IFairValueProvider
 {
     protected readonly ILogger Logger;
-    protected Price? _lastFairValue;
-    public Price? LastFairValue => _lastFairValue;
+    protected Price? _lastFairAskValue;
+    protected Price? _lastFairBidValue;
+    public Price? LastFairAskValue => _lastFairAskValue;
+    public Price? LastFairBidValue => _lastFairBidValue;
 
     public abstract FairValueModel Model { get; }
 
@@ -23,7 +25,7 @@ public abstract class AbstractFairValueProvider : IFairValueProvider
     {
         Logger = logger;
         SourceInstrumentId = instrumentId;
-        _lastFairValue = null;
+        _lastFairAskValue = null;
     }
 
     /// <summary>
