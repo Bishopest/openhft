@@ -82,8 +82,10 @@ public class QuotingEngineTests
         services.AddSingleton<IMarketDataManager, MarketDataManager>();
         services.AddSingleton<IOrderRouter, OrderRouter>();
         services.AddSingleton<IOrderUpdateHandler, OrderUpdateDistributor>();
-        services.AddSingleton<IOrderGateway, NullOrderGateway>();
-        services.AddSingleton<IOrderGatewayRegistry, OrderGatewayRegistry>();
+        var mockGateway = new Mock<IOrderGateway>();
+        var mockGatewayRegistry = new Mock<IOrderGatewayRegistry>();
+        mockGatewayRegistry.Setup(r => r.GetGatewayForInstrument(It.IsAny<int>())).Returns(mockGateway.Object);
+        services.AddSingleton(mockGatewayRegistry.Object);
         services.AddSingleton<IQuoteValidator, DefaultQuoteValidator>();
         services.AddSingleton<IOrderFactory, OrderFactory>();
         services.AddSingleton<IQuoterFactory, QuoterFactory>();
@@ -579,6 +581,215 @@ public class QuotingEngineTests
         // 정확한 값 검증
         actualBid.Should().Be(49950.0m);
         actualAsk.Should().Be(50075.0m);
+    }
+
+    /// <summary>
+    /// This test verifies the core functionality of the lazy deregistration mechanism.
+    /// Scenario:
+    /// 1. A quote order is created and becomes active.
+    /// 2. A 'Cancelled' report arrives. The SingleOrderQuoter receives this,
+    ///    clears its internal _activeOrder reference, and calls DeregisterOrder on the router.
+    /// 3. The OrderRouter puts the order into its lazy-deregister buffer instead of deleting it immediately.
+    /// 4. A "late" Fill report arrives for the same order.
+    /// 5. The router should still find the order object in its active dictionary and route the fill.
+    /// 6. The QuotingEngine should successfully receive the EngineOrderFilled event.
+    /// </summary>
+    [Test]
+    public async Task LateFill_IsProcessed_AfterOrderIsClearedInQuoter_DueToLazyDeregister()
+    {
+        // --- Arrange ---
+        TestContext.WriteLine("Setting up test with SingleOrderQuoter...");
+
+        // 1. Use SingleOrderQuoter instead of LogQuoter for this specific test.
+        var parameters = new QuotingParameters(
+            _xbtusd.InstrumentId,
+            "test-lazy",
+            FairValueModel.Midp,
+            _btcusdt.InstrumentId,
+            10m, -10m, 0.5m, Quantity.FromDecimal(100), 1,
+            QuoterType.Single, // IMPORTANT: Use the real quoter
+            true,
+            Quantity.FromDecimal(1000), Quantity.FromDecimal(1000), HittingLogic.AllowAll
+        );
+
+        var quoterFactory = _serviceProvider.GetRequiredService<IQuoterFactory>();
+        var bidQuoter = quoterFactory.CreateQuoter(parameters, Side.Buy);
+        var askQuoter = quoterFactory.CreateQuoter(parameters, Side.Sell);
+
+        var marketMaker = new MarketMaker(
+            _serviceProvider.GetRequiredService<ILogger<MarketMaker>>(),
+            _xbtusd, bidQuoter, askQuoter,
+            _serviceProvider.GetRequiredService<IQuoteValidator>()
+        );
+
+        var engine = new QuotingEngine(
+            _serviceProvider.GetRequiredService<ILogger<QuotingEngine>>(),
+            _xbtusd, marketMaker, _fvProvider, parameters, _marketDataManager
+        );
+
+        engine.Start();
+        engine.Activate();
+
+        // 2. Trigger a requote to create an active order.
+        TriggerRequote(50000m);
+        await Task.Delay(200); // Allow time for the order to be created and registered.
+
+        var activeOrders = _orderRouter.GetActiveOrders();
+        activeOrders.Should().NotBeEmpty("An order should have been created.");
+        var testOrder = activeOrders.First(o => o.Side == Side.Buy);
+        long testClientOrderId = testOrder.ClientOrderId;
+        TestContext.WriteLine($"Test order created with ClientOrderId: {testClientOrderId}");
+
+        // 3. Setup a listener to catch the final Fill event on the engine.
+        Fill? receivedFill = null;
+        engine.EngineOrderFilled += (sender, fill) =>
+        {
+            TestContext.WriteLine($"SUCCESS: QuotingEngine received the fill event for ExecutionId: {fill.ExecutionId}");
+            receivedFill = fill;
+        };
+
+        // --- Act ---
+
+        // 4. Simulate a terminal status report (e.g., Cancelled) to clear the quoter.
+        // This will trigger the call to OrderRouter.DeregisterOrder().
+        TestContext.WriteLine("Simulating a 'Cancelled' report to clear the quoter's active order...");
+        var cancelReport = new OrderStatusReport(
+            testClientOrderId, "E1", null, _xbtusd.InstrumentId, Side.Buy,
+            OrderStatus.Cancelled, // Terminal status
+            Price.FromDecimal(49990), Quantity.FromDecimal(100), Quantity.FromDecimal(0),
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        );
+        _orderRouter.RouteReport(cancelReport);
+        await Task.Delay(100); // Allow event propagation.
+
+        // At this point, SingleOrderQuoter._activeOrder is null, but the Order object
+        // is still in the OrderRouter's _activeOrders dictionary, pending lazy removal.
+
+        // 5. Simulate the "late" fill arriving AFTER the cancellation confirmation.
+        TestContext.WriteLine("Simulating the 'late' Fill report...");
+        var lateFillReport = new OrderStatusReport(
+            testClientOrderId, "E1", "LateExec123", // Unique execution ID
+            _xbtusd.InstrumentId, Side.Buy,
+            OrderStatus.PartiallyFilled, // A fill status
+            Price.FromDecimal(49990), Quantity.FromDecimal(100), Quantity.FromDecimal(50),
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            lastPrice: Price.FromDecimal(49990),
+            lastQuantity: Quantity.FromDecimal(50)
+        );
+        _orderRouter.RouteReport(lateFillReport);
+        await Task.Delay(100); // Allow processing.
+
+
+        // --- Assert ---
+        receivedFill.Should().NotBeNull("The late fill event should have been received by the QuotingEngine.");
+        receivedFill.Value.ExecutionId.Should().Be("LateExec123", "The details of the late fill should be correct.");
+        receivedFill.Value.Quantity.ToDecimal().Should().Be(50);
+    }
+
+    /// <summary>
+    /// This test verifies that when the deregistration buffer exceeds its capacity,
+    /// the oldest order is truly removed from the active dictionary and can no longer
+    /// process subsequent reports.
+    /// Scenario:
+    /// 1. Create an OrderRouter with a small buffer size (e.g., 3).
+    /// 2. Create and register 4 orders (Order1, Order2, Order3, Order4).
+    /// 3. Deregister Order1, Order2, and Order3. They should now be in the buffer.
+    ///    The buffer is now full: [Order1, Order2, Order3].
+    /// 4. Deregister Order4. This should cause Order1 to be pushed out of the buffer
+    ///    and permanently removed from the active orders dictionary.
+    ///    The buffer now contains: [Order2, Order3, Order4].
+    /// 5. Send a late fill report for Order1 (the removed one) and Order2 (still in the buffer).
+    /// 6. Assert that only the fill for Order2 was processed, and the fill for Order1 was ignored.
+    /// </summary>
+    [Test]
+    public void Order_IsFinallyRemoved_WhenDeregisterBufferOverflows_AndIgnoresSubsequentReports()
+    {
+        // --- Arrange ---
+        // 1. Create a dedicated OrderRouter with a small buffer size for this test.
+        const int bufferSize = 3;
+        var testRouter = new OrderRouter(
+            _serviceProvider.GetRequiredService<ILogger<OrderRouter>>(),
+            deregistrationBufferSize: bufferSize
+        );
+
+        // CRITICAL FIX: Create a new OrderFactory manually, injecting our local 'testRouter'.
+        // Do NOT use the factory from the service provider, as it holds a different router instance.
+        var orderFactory = new OrderFactory(
+            testRouter, // <--- Inject the local router instance here
+            _serviceProvider.GetRequiredService<IOrderGatewayRegistry>(),
+            _serviceProvider.GetRequiredService<ILogger<Order>>()
+        );
+
+        // 2. Create 4 orders (buffer size + 1) using the new factory.
+        // Now, these orders will hold a reference to 'testRouter'.
+        var order1 = orderFactory.Create(_xbtusd.InstrumentId, Side.Buy, "test-lazy");
+        var order2 = orderFactory.Create(_xbtusd.InstrumentId, Side.Buy, "test-lazy");
+        var order3 = orderFactory.Create(_xbtusd.InstrumentId, Side.Buy, "test-lazy");
+        var order4 = orderFactory.Create(_xbtusd.InstrumentId, Side.Buy, "test-lazy");
+
+        // The rest of the registration logic is correct.
+        testRouter.RegisterOrder(order1);
+        testRouter.RegisterOrder(order2);
+        testRouter.RegisterOrder(order3);
+        testRouter.RegisterOrder(order4);
+
+        testRouter.GetActiveOrders().Count.Should().Be(4, "all orders should be registered initially.");
+
+        // 3. Setup a listener to capture processed fills.
+        // This handler is now correctly attached to the same router instance used by the orders.
+        var processedFills = new List<Fill>();
+        testRouter.OrderFilled += (sender, fill) =>
+        {
+            processedFills.Add(fill);
+        };
+
+        // --- Act --- (No changes needed below this line)
+        // ... (rest of the test method is unchanged)
+        TestContext.WriteLine($"Deregistering orders to fill the buffer (size={bufferSize})...");
+        testRouter.DeregisterOrder(order1);
+        testRouter.DeregisterOrder(order2);
+        testRouter.DeregisterOrder(order3);
+
+        // ... and so on
+        testRouter.GetActiveOrders().Count.Should().Be(4);
+        TestContext.WriteLine("Buffer is now full with [Order1, Order2, Order3].");
+
+        TestContext.WriteLine("Deregistering Order4, which should push Order1 out of the buffer...");
+        testRouter.DeregisterOrder(order4);
+
+        var activeOrdersAfterOverflow = testRouter.GetActiveOrders();
+        activeOrdersAfterOverflow.Count.Should().Be(3, "Order1 should have been permanently removed.");
+        activeOrdersAfterOverflow.Any(o => o.ClientOrderId == order1.ClientOrderId).Should().BeFalse();
+        TestContext.WriteLine("Order1 has been finalized and removed.");
+        TestContext.WriteLine("Sending late fill reports for removed Order1 and buffered Order2...");
+
+        var reportForRemovedOrder = new OrderStatusReport(
+            order1.ClientOrderId, "E1", "ExecForRemoved", _xbtusd.InstrumentId, Side.Buy,
+            OrderStatus.Filled, Price.FromDecimal(0m), Quantity.FromDecimal(0m), Quantity.FromDecimal(0m),
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), lastPrice: Price.FromDecimal(1m), lastQuantity: Quantity.FromDecimal(1m)
+        );
+        var reportForBufferedOrder = new OrderStatusReport(
+            order2.ClientOrderId, "E2", "ExecForBuffered", _xbtusd.InstrumentId, Side.Buy,
+            OrderStatus.PartiallyFilled, Price.FromDecimal(0m), Quantity.FromDecimal(0m), Quantity.FromDecimal(0m),
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), lastPrice: Price.FromDecimal(1m), lastQuantity: Quantity.FromDecimal(1m)
+        );
+
+        testRouter.RouteReport(reportForRemovedOrder);
+        testRouter.RouteReport(reportForBufferedOrder);
+
+        // --- Assert ---
+        processedFills.Should().HaveCount(1, "only the report for the buffered order should be processed.");
+        processedFills[0].ExecutionId.Should().Be("ExecForBuffered", "the processed fill should be from Order2.");
+
+        TestContext.WriteLine("SUCCESS: The late fill for the finalized order was correctly ignored.");
+        testRouter.RouteReport(reportForRemovedOrder);
+        testRouter.RouteReport(reportForBufferedOrder);
+
+        // --- Assert ---
+        processedFills.Should().HaveCount(1, "only the report for the buffered order should be processed.");
+        processedFills[0].ExecutionId.Should().Be("ExecForBuffered", "the processed fill should be from Order2.");
+
+        TestContext.WriteLine("SUCCESS: The late fill for the finalized order was correctly ignored.");
     }
 
     private void TriggerRequote(decimal fairValue)

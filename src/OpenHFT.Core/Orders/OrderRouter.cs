@@ -16,12 +16,20 @@ public class OrderRouter : IOrderRouter
     private readonly ILogger<OrderRouter> _logger;
     private readonly ConcurrentDictionary<long, IOrderUpdatable> _activeOrders = new();
 
+    // A queue to hold the IDs of orders pending final deregistration.
+    // It acts as a buffer. An order is only truly removed when it's pushed out of this queue.
+    private readonly Queue<long> _deregistrationBuffer;
+    private readonly int _bufferCapacity;
+    // A lock to ensure atomic operations on the non-thread-safe Queue.
+    private readonly object _bufferLock = new();
     public event EventHandler<OrderStatusReport> OrderStatusChanged;
     public event EventHandler<Fill> OrderFilled;
 
-    public OrderRouter(ILogger<OrderRouter> logger)
+    public OrderRouter(ILogger<OrderRouter> logger, int deregistrationBufferSize = 20)
     {
         _logger = logger;
+        _bufferCapacity = deregistrationBufferSize > 0 ? deregistrationBufferSize : 1;
+        _deregistrationBuffer = new Queue<long>(_bufferCapacity);
     }
 
     public IReadOnlyCollection<IOrder> GetActiveOrders()
@@ -48,12 +56,43 @@ public class OrderRouter : IOrderRouter
         }
     }
 
+    /// <summary>
+    /// Places the order in a buffer for delayed deregistration.
+    /// If the buffer is full, the oldest order in the buffer is dequeued and
+    /// removed from the main active orders dictionary.
+    /// </summary>
+    /// <param name="order">The order to deregister.</param>
     public void DeregisterOrder(IOrder order)
     {
-        if (_activeOrders.TryRemove(order.ClientOrderId, out _))
+        long orderIdToFinalize = -1;
+
+        // The check, dequeue, and enqueue operations must be atomic.
+        lock (_bufferLock)
         {
-            _logger.LogDebug("Order {ClientOrderId} deregistered from the router.", order.ClientOrderId);
+            // If the buffer is at capacity, make room by removing the oldest item.
+            if (_deregistrationBuffer.Count >= _bufferCapacity)
+            {
+                orderIdToFinalize = _deregistrationBuffer.Dequeue();
+            }
+
+            _deregistrationBuffer.Enqueue(order.ClientOrderId);
         }
+
+        // If an order was dequeued, remove it from the active dictionary now.
+        // This is done outside the lock to minimize lock contention.
+        if (orderIdToFinalize > 0)
+        {
+            if (_activeOrders.TryRemove(orderIdToFinalize, out var finalOrder))
+            {
+                _logger.LogDebug("Order {ClientOrderId} was finally deregistered from the router.", orderIdToFinalize);
+                if (finalOrder is IOrder ord)
+                {
+                    ord.ResetState();
+                }
+            }
+        }
+
+        _logger.LogDebug("Order {ClientOrderId} was buffered for lazy deregistration.", order.ClientOrderId);
     }
 
     public void RouteReport(in OrderStatusReport report)

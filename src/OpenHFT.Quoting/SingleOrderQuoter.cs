@@ -315,9 +315,9 @@ public class SingleOrderQuoter : IQuoter
                 OrderFullyFilled?.Invoke();
             }
 
-            // Unsubscribe to prevent memory leaks
-            _activeOrder.RemoveStatusChangedHandler(OnOrderStatusChanged);
-            _activeOrder.RemoveFillHandler(OnOrderFilled);
+            // do not unsubscribe fill and status change event handler
+            // because lazy update could possibily happen.
+            // order router will finally reset event handlers with lazy deregister
             _activeOrder = null;
         }
     }
