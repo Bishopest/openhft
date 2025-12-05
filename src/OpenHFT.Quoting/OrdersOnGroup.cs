@@ -156,16 +156,46 @@ public class OrdersOnGroup
         {
             foreach (var order in _activeOrders)
             {
-                if (order.Status == OrderStatus.New || order.Status == OrderStatus.PartiallyFilled)
+                // Only attempt to cancel orders that are in a cancellable state.
+                if (order.Status is OrderStatus.New or OrderStatus.PartiallyFilled or OrderStatus.ReplaceRequest or OrderStatus.NewRequest)
                 {
-                    cancelTasks.Add(order.CancelAsync(cancellationToken));
+                    // Create a task that wraps the cancellation and its specific exception handling.
+                    var cancelTask = order.CancelAsync(cancellationToken)
+                        .ContinueWith(t =>
+                        {
+                            // We are only interested in faults that are NOT OperationCanceledException.
+                            if (t.IsFaulted)
+                            {
+                                // Flatten the AggregateException to look at each inner exception.
+                                var innerExceptions = t.Exception.Flatten().InnerExceptions;
+
+                                // Filter out the expected cancellation exceptions.
+                                var unexpectedExceptions = innerExceptions
+                                    .Where(ex => ex is not OperationCanceledException)
+                                    .ToList();
+
+                                if (unexpectedExceptions.Any())
+                                {
+                                    _logger.LogWarningWithCaller($"An unexpected error occurred during bulk cancellation for order {order.ClientOrderId}.");
+                                }
+                                else
+                                {
+                                    _logger.LogInformationWithCaller($"Cancellation for order {order.ClientOrderId} was superseded. This is normal.");
+                                }
+                            }
+                            // If the task was Canceled or RanToCompletion, we do nothing.
+                        }, TaskContinuationOptions.ExecuteSynchronously); // Use synchronous execution for performance
+
+                    cancelTasks.Add(cancelTask);
                 }
             }
         }
 
         if (cancelTasks.Any())
         {
-            // TODO: Use a Bulk Cancel API if available on the gateway
+            // TODO: Use a Bulk Cancel API if available on the gateway.
+            // We now wait for the continuation tasks to complete.
+            // Since we handle exceptions inside the ContinueWith, this WhenAll will not throw for handled exceptions.
             await Task.WhenAll(cancelTasks).ConfigureAwait(false);
         }
     }

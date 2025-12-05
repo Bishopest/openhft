@@ -93,7 +93,14 @@ public class Hedger
 
         if (_hedgeOrder is not null)
         {
-            _ = _hedgeOrder.CancelAsync(CancellationToken.None);
+            try
+            {
+                _ = _hedgeOrder.CancelAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogErrorWithCaller(ex, "Failed to cancel hedge order.");
+            }
         }
     }
 
@@ -291,26 +298,38 @@ public class Hedger
             currentOrder = _hedgeOrder;
         }
 
-        if (target is null)
+        try
         {
-            if (currentOrder is not null)
+            if (target is null)
             {
-                await currentOrder.CancelAsync(CancellationToken.None).ConfigureAwait(false);
+                if (currentOrder is not null)
+                {
+                    // This cancel request might be superseded by another request later.
+                    await currentOrder.CancelAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+                return;
             }
 
-            return;
-        }
-
-        if (currentOrder == null)
-        {
-            await StartNewHedgeAsync(target.Value);
-        }
-        else
-        {
-            if (target.Value.Price != currentOrder.Price)
+            if (currentOrder == null)
             {
-                await currentOrder.ReplaceAsync(target.Value.Price, OrderType.Limit, CancellationToken.None).ConfigureAwait(false);
+                await StartNewHedgeAsync(target.Value);
             }
+            else
+            {
+                if (target.Value.Price != currentOrder.Price)
+                {
+                    // This replace request is a primary candidate for being superseded.
+                    await currentOrder.ReplaceAsync(target.Value.Price, OrderType.Limit, CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformationWithCaller($"A hedge order request for instrument {_hedgeInstrument.Symbol} was superseded by a newer request. This is normal.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogErrorWithCaller(ex, $"An unexpected error occurred during hedge execution for instrument {_hedgeInstrument.Symbol}.");
         }
     }
 
