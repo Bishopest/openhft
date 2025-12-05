@@ -223,7 +223,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             "PartiallyFilled" => OrderStatus.PartiallyFilled,
             "Canceled" => OrderStatus.Cancelled,
             "Rejected" => OrderStatus.Rejected,
-            _ => OrderStatus.Pending // Or log a warning for unknown status
+            _ => HandleUnknownStatus(ordStatusStr) // Or log a warning for unknown status
         };
 
         var side = sideStr switch
@@ -270,6 +270,12 @@ public class BitmexAdapter : BaseAuthFeedAdapter
         );
 
         return report;
+    }
+
+    private OrderStatus HandleUnknownStatus(string? status)
+    {
+        _logger.LogWarning($"Unknown order status received: '{status}'. Returning OrderStatus.Pending.");
+        return OrderStatus.Pending;
     }
 
     private void ProcessOrderBook10(JsonElement data)

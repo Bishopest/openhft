@@ -1,10 +1,12 @@
 using System;
+using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Books;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.Orders;
 using OpenHFT.Core.Utils;
 using OpenHFT.Hedging;
 using OpenHFT.Quoting;
@@ -136,7 +138,22 @@ public class WebSocketNotificationService : IHostedService
 
     private void OnOrderStatusChanged(object? sender, OrderStatusReport report)
     {
-        _logger.LogTrace("Broadcasting order status update for CID {ClientOrderId}", report.ClientOrderId);
+        if (report.Status == OrderStatus.Pending)
+        {
+            _logger.LogInformationWithCaller($"Broadcasting order status update for the order of which last report {report}");
+            if (sender is Order order)
+            {
+                var currentFills = order.Fills;
+                var sb = new StringBuilder();
+                sb.AppendLine($"--- Order {report.ClientOrderId} Fills ({currentFills.Count} total) ---");
+                foreach (var fill in currentFills)
+                {
+                    sb.AppendLine($"  - {fill.ToString()}");
+                }
+                sb.AppendLine("-------------------------------------------------");
+                _logger.LogInformationWithCaller(sb.ToString());
+            }
+        }
         var payload = new ActiveOrdersPayload(_omsIdentifier, new List<OrderStatusReport>() { report });
         var updateEvent = new ActiveOrdersListEvent(payload);
         _ = _channel.SendAsync(updateEvent);
