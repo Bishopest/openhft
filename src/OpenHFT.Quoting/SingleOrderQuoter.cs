@@ -254,8 +254,8 @@ public class SingleOrderQuoter : IQuoter
             .WithOrderType(OrderType.Limit)
             .WithPostOnly(isPostOnly)
             .WithStatusChangedHandler(OnOrderStatusChanged)
+            .WithFillHandler(OnOrderFilled)
             .Build();
-        newOrder.OrderFilled += OnOrderFilled;
 
         lock (_stateLock)
         {
@@ -263,8 +263,8 @@ public class SingleOrderQuoter : IQuoter
             if (_activeOrder is not null)
             {
                 _logger.LogWarningWithCaller($"({_side}) Aborting StartNewQuoteAsync; an active order was created concurrently.");
-                newOrder.StatusChanged -= OnOrderStatusChanged;
-                newOrder.OrderFilled -= OnOrderFilled;
+                newOrder.RemoveStatusChangedHandler(OnOrderStatusChanged);
+                newOrder.RemoveFillHandler(OnOrderFilled);
                 return;
             }
 
@@ -316,8 +316,8 @@ public class SingleOrderQuoter : IQuoter
             }
 
             // Unsubscribe to prevent memory leaks
-            _activeOrder.StatusChanged -= OnOrderStatusChanged;
-            _activeOrder.OrderFilled -= OnOrderFilled;
+            _activeOrder.RemoveStatusChangedHandler(OnOrderStatusChanged);
+            _activeOrder.RemoveFillHandler(OnOrderFilled);
             _activeOrder = null;
         }
     }
@@ -329,8 +329,8 @@ public class SingleOrderQuoter : IQuoter
         {
             if (_activeOrder != null)
             {
-                _activeOrder.StatusChanged -= OnOrderStatusChanged;
-                _activeOrder.OrderFilled -= OnOrderFilled;
+                _activeOrder.RemoveStatusChangedHandler(OnOrderStatusChanged);
+                _activeOrder.RemoveFillHandler(OnOrderFilled);
                 _activeOrder = null; // Or consider sending a final cancel request.
             }
         }

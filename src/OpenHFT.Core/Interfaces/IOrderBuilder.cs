@@ -35,6 +35,8 @@ public interface IOrderBuilder
     /// <param name="handler">The event handler to subscribe to the StatusChanged event.</param>
     IOrderBuilder WithStatusChangedHandler(EventHandler<OrderStatusReport> handler);
 
+    IOrderBuilder WithFillHandler(EventHandler<Fill> handler);
+
     /// <summary>
     /// Constructs and returns the final IOrder object.
     /// </summary>

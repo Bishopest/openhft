@@ -133,6 +133,12 @@ public class TestOrder : IOrder, IOrderUpdatable
 
     public bool IsPostOnly => true;
 
+    Price IOrder.Price { get => Price; set => throw new NotImplementedException(); }
+    Quantity IOrder.Quantity { get => Quantity; set => throw new NotImplementedException(); }
+    Quantity IOrder.LeavesQuantity { get => LeavesQuantity; set => throw new NotImplementedException(); }
+    bool IOrder.IsPostOnly { get => IsPostOnly; set => throw new NotImplementedException(); }
+    public OrderType OrderType { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+
     public event EventHandler<OrderStatusReport>? StatusChanged;
     public event EventHandler<Fill>? OrderFilled;
 
@@ -141,6 +147,31 @@ public class TestOrder : IOrder, IOrderUpdatable
     public Task CancelAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
     public Task ReconcileStateAsync(CancellationToken cancellationToken = default)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void AddStatusChangedHandler(EventHandler<OrderStatusReport> handler)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void RemoveStatusChangedHandler(EventHandler<OrderStatusReport> handler)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void AddFillHandler(EventHandler<Fill> handler)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void RemoveFillHandler(EventHandler<Fill> handler)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void ResetState()
     {
         throw new NotImplementedException();
     }

@@ -322,8 +322,8 @@ public class Hedger
             .WithQuantity(target.Size)
             .WithOrderType(OrderType.Limit)
             .WithStatusChangedHandler(OnOrderStatusChanged)
+            .WithFillHandler(OnHedgingFill)
             .Build();
-        newOrder.OrderFilled += OnHedgingFill;
 
         lock (_stateLock)
         {
@@ -331,8 +331,8 @@ public class Hedger
             if (_hedgeOrder is not null)
             {
                 _logger.LogWarningWithCaller($"({target.Side}) Aborting StartNewHedgeAsync; an hedge order was created concurrently.");
-                newOrder.StatusChanged -= OnOrderStatusChanged;
-                newOrder.OrderFilled -= OnHedgingFill;
+                newOrder.RemoveStatusChangedHandler(OnOrderStatusChanged);
+                newOrder.RemoveFillHandler(OnHedgingFill);
                 return;
             }
 
@@ -379,9 +379,8 @@ public class Hedger
                 _logger.LogInformationWithCaller($"Hedge order {finalReport.ClientOrderId} has been fully filled.");
             }
 
-            // Unsubscribe to prevent memory leaks
-            _hedgeOrder.StatusChanged -= OnOrderStatusChanged;
-            _hedgeOrder.OrderFilled -= OnHedgingFill;
+            _hedgeOrder.RemoveStatusChangedHandler(OnOrderStatusChanged);
+            _hedgeOrder.RemoveFillHandler(OnHedgingFill);           // Unsubscribe to prevent memory leaks
             _hedgeOrder = null;
         }
     }

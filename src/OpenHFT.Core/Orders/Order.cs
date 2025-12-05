@@ -8,7 +8,7 @@ namespace OpenHFT.Core.Orders;
 
 // A sample concrete Order class to make the builder work.
 // Note how properties are mutable (public set) for the builder to use.
-public class Order : IOrder, IOrderUpdatable, IOrderSettable
+public class Order : IOrder, IOrderUpdatable
 {
     private readonly ILogger _logger;
     private readonly IOrderRouter _router;
@@ -71,6 +71,22 @@ public class Order : IOrder, IOrderUpdatable, IOrderSettable
     public void AddStatusChangedHandler(EventHandler<OrderStatusReport> handler)
     {
         StatusChanged += handler;
+    }
+
+    public void RemoveStatusChangedHandler(EventHandler<OrderStatusReport> handler)
+    {
+        // Essential: Allow consumers to unsubscribe explicitly
+        StatusChanged -= handler;
+    }
+
+    public void AddFillHandler(EventHandler<Fill> handler)
+    {
+        OrderFilled += handler;
+    }
+
+    public void RemoveFillHandler(EventHandler<Fill> handler)
+    {
+        OrderFilled -= handler;
     }
 
     // --- Action Methods ---
@@ -246,6 +262,30 @@ public class Order : IOrder, IOrderUpdatable, IOrderSettable
                     _router.DeregisterOrder(this);
                     break;
             }
+        }
+    }
+
+    /// <summary>
+    /// Resets the order object to a clean state for reuse in an object pool.
+    /// This is critical for GC-Free architecture to prevent old listeners from receiving new events.
+    /// </summary>
+    public void ResetState()
+    {
+        lock (_stateLock)
+        {
+            ExchangeOrderId = null;
+            Status = OrderStatus.Pending;
+            BookName = string.Empty;
+            Price = default;
+            Quantity = default;
+            LeavesQuantity = default;
+            LatestReport = null;
+            _fills.Clear();
+
+            // 2. Clear Event Subscribers (Aggressive cleanup)
+            // This prevents "Ghost Events" where an old strategy keeps listening to a pooled order.
+            StatusChanged = null;
+            OrderFilled = null;
         }
     }
 

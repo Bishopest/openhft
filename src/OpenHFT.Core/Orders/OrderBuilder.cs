@@ -9,7 +9,7 @@ namespace OpenHFT.Core.Orders;
 /// </summary>
 public class OrderBuilder : IOrderBuilder
 {
-    private readonly IOrderSettable _settleableOrder;
+    private readonly IOrder _order;
 
     /// <summary>
     /// Initializes a new instance of the OrderBuilder.
@@ -23,49 +23,51 @@ public class OrderBuilder : IOrderBuilder
     {
         if (orderFactory == null) throw new ArgumentNullException(nameof(orderFactory));
 
-        // The factory provides the basic shell of the order.
         IOrder baseOrder = orderFactory.Create(instrumentId, side, bookName);
-
-        // Factory가 반환한 객체는 반드시 IOrderSettable이어야 합니다.
-        _settleableOrder = baseOrder as IOrderSettable
-                           ?? throw new InvalidCastException("Factory must create an object implementing IOrderSettable.");
+        _order = baseOrder;
     }
 
     public IOrderBuilder WithPrice(Price price)
     {
-        _settleableOrder.Price = price;
+        _order.Price = price;
         return this;
     }
 
     public IOrderBuilder WithQuantity(Quantity quantity)
     {
-        _settleableOrder.Quantity = quantity;
-        _settleableOrder.LeavesQuantity = quantity;
+        _order.Quantity = quantity;
+        _order.LeavesQuantity = quantity;
         return this;
     }
 
     public IOrderBuilder WithOrderType(OrderType orderType)
     {
-        _settleableOrder.OrderType = orderType;
+        _order.OrderType = orderType;
         return this;
     }
 
     public IOrderBuilder WithStatusChangedHandler(EventHandler<OrderStatusReport> handler)
     {
-        _settleableOrder.AddStatusChangedHandler(handler);
+        _order.AddStatusChangedHandler(handler);
+        return this;
+    }
+
+    public IOrderBuilder WithFillHandler(EventHandler<Fill> handler)
+    {
+        _order.AddFillHandler(handler);
         return this;
     }
 
     public IOrderBuilder WithPostOnly(bool isPostOnly)
     {
-        _settleableOrder.IsPostOnly = isPostOnly; // Order 클래스에 IsPostOnly 속성 추가 필요
+        _order.IsPostOnly = isPostOnly; // Order 클래스에 IsPostOnly 속성 추가 필요
         return this;
     }
 
     public IOrder Build()
     {
         // Perform any final validation before returning the order.
-        var order = (IOrder)_settleableOrder;
+        var order = (IOrder)_order;
         if (order.Price.ToTicks() <= 0 || order.Quantity.ToTicks() <= 0)
         {
             throw new InvalidOperationException("Order price and quantity must be positive.");

@@ -31,22 +31,27 @@ public interface IOrder
     /// <summary>
     /// The price of the order.
     /// </summary>
-    Price Price { get; }
+    Price Price { get; set; }
 
     /// <summary>
     /// The original quantity of the order.
     /// </summary>
-    Quantity Quantity { get; }
+    Quantity Quantity { get; set; }
 
     /// <summary>
     /// The quantity remaining to be filled.
     /// </summary>
-    Quantity LeavesQuantity { get; }
+    Quantity LeavesQuantity { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether this is a Post-Only order.
     /// </summary>
-    bool IsPostOnly { get; }
+    bool IsPostOnly { get; set; }
+
+    /// <summary>
+    /// Gets the type of this order
+    /// </summary>
+    OrderType OrderType { get; set; }
 
     /// <summary>
     /// The UTC Unix timestamp of the last update to this order's state.
@@ -72,8 +77,34 @@ public interface IOrder
     /// </summary>
     event EventHandler<Fill> OrderFilled;
 
-    // --- Action Methods ---
+    /// <summary>
+    /// Subscribes a handler to the status changed event.
+    /// </summary>
+    void AddStatusChangedHandler(EventHandler<OrderStatusReport> handler);
 
+    /// <summary>
+    /// Unsubscribes a handler from the status changed event.
+    /// Crucial to prevent memory leaks (lapsed listener problem).
+    /// </summary>
+    void RemoveStatusChangedHandler(EventHandler<OrderStatusReport> handler);
+
+    /// <summary>
+    /// Subscribes a handler to the order filled event.
+    /// </summary>
+    void AddFillHandler(EventHandler<Fill> handler);
+
+    /// <summary>
+    /// Unsubscribes a handler from the order filled event.
+    /// </summary>
+    void RemoveFillHandler(EventHandler<Fill> handler);
+
+    /// <summary>
+    /// Clears all internal state and event subscribers.
+    /// Essential for GC-Free Object Pooling to reuse this instance safely.
+    /// </summary>
+    void ResetState();
+
+    // --- Action Methods ---
     /// <summary>
     /// Submits this order to the exchange for the first time.
     /// </summary>

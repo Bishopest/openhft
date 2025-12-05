@@ -20,7 +20,7 @@ using OpenHFT.Feed.Models;
 namespace OpenHFT.Tests.Quoting;
 
 // Test Helper Order Implementation
-public class TestOrder : IOrder, IOrderSettable
+public class TestOrder : IOrder
 {
     public long ClientOrderId { get; set; } = new Random().Next();
     public string ExchangeOrderId { get; set; } = "";
@@ -73,6 +73,27 @@ public class TestOrder : IOrder, IOrderSettable
     public void AddStatusChangedHandler(EventHandler<OrderStatusReport> handler)
     {
         StatusChanged += handler;
+    }
+
+    public void RemoveStatusChangedHandler(EventHandler<OrderStatusReport> handler)
+    {
+        // Essential: Allow consumers to unsubscribe explicitly
+        StatusChanged -= handler;
+    }
+
+    public void AddFillHandler(EventHandler<Fill> handler)
+    {
+        OrderFilled += handler;
+    }
+
+    public void RemoveFillHandler(EventHandler<Fill> handler)
+    {
+        OrderFilled -= handler;
+    }
+
+    public void ResetState()
+    {
+        throw new NotImplementedException();
     }
 }
 

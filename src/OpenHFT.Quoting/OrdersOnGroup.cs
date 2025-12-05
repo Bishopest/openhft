@@ -363,9 +363,8 @@ public class OrdersOnGroup
             .WithOrderType(OrderType.Limit)
             .WithPostOnly(isPostOnly)
             .WithStatusChangedHandler(OnOrderStatusChanged)
+            .WithFillHandler(OnOrderFilled)
             .Build();
-
-        order.OrderFilled += OnOrderFilled;
 
         lock (_lock)
         {
@@ -403,8 +402,9 @@ public class OrdersOnGroup
             _logger.LogInformationWithCaller($"({_side}) Order {finalReport.ClientOrderId} reached terminal state {finalReport.Status}. Clearing active order.");
 
             // Unsubscribe to prevent memory leaks
-            order.StatusChanged -= OnOrderStatusChanged;
-            order.OrderFilled -= OnOrderFilled;
+            order.RemoveStatusChangedHandler(OnOrderStatusChanged);
+            order.RemoveFillHandler(OnOrderFilled);
+
             _activeOrders.Remove(order);
 
             if (!_activeOrders.Any() && finalReport.Status == OrderStatus.Filled)
