@@ -379,14 +379,21 @@ public class Hedger
                 _logger.LogInformationWithCaller($"Hedge order {finalReport.ClientOrderId} has been fully filled.");
             }
 
-            _hedgeOrder.RemoveStatusChangedHandler(OnOrderStatusChanged);
-            _hedgeOrder.RemoveFillHandler(OnHedgingFill);           // Unsubscribe to prevent memory leaks
             _hedgeOrder = null;
         }
     }
 
     public void Dispose()
     {
-        Deactivate();
+        lock (_stateLock)
+        {
+            if (_hedgeOrder != null)
+            {
+                _hedgeOrder.RemoveStatusChangedHandler(OnOrderStatusChanged);
+                _hedgeOrder.RemoveFillHandler(OnHedgingFill);           // Unsubscribe to prevent memory leaks
+                _hedgeOrder = null; // Or consider sending a final cancel request.
+            }
+            Deactivate();
+        }
     }
 }
