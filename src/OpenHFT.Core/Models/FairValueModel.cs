@@ -16,5 +16,6 @@ public enum FairValueModel
     /// </summary>
     VwapMidp,
     OppositeBest,
-    Penalty
+    Penalty,
+    OrderBookImbalance
 }

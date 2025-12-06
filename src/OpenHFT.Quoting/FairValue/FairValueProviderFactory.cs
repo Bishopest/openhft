@@ -46,6 +46,8 @@ public class FairValueProviderFactory : IFairValueProviderFactory
                 return new OppositeBestFairValueProvider(_logger, fvInstrumentId);
             case FairValueModel.Penalty:
                 return new PenaltyBasedFairValueProvider(_logger, fvInstrumentId);
+            case FairValueModel.OrderBookImbalance:
+                return new OrderBookImbalanceFairValueProvider(_logger, fvInstrumentId, 5);
             case FairValueModel.FR:
                 throw new NotImplementedException($"FairValueModel '{model}' is not yet implemented in FairValueProviderFactory.");
             default:
