@@ -158,16 +158,17 @@ public class SingleOrderQuoter : IQuoter
             }
             else if (_hittingLogic == HittingLogic.Pennying)
             {
-                // "quote price just +1 tick from best price ... only when our quote cross the best price"
-                // 목표가가 Best Bid보다 높다면 -> Best Bid + 1 Tick으로 제한 (Pennying)
-                // 목표가가 Best Bid 이하라면 -> 그냥 목표가 사용
-                if (_activeOrder is not null && _activeOrder.Price == bestBid)
-                {
-                    return bestBid;
-                }
 
                 if (targetPrice.ToDecimal() > bestBid.ToDecimal())
                 {
+                    // "quote price just +1 tick from best price ... only when our quote cross the best price"
+                    // 목표가가 Best Bid보다 높다면 -> Best Bid + 1 Tick으로 제한 (Pennying)
+                    // 목표가가 Best Bid 이하라면 -> 그냥 목표가 사용
+                    if (_activeOrder is not null && _activeOrder.Price == bestBid)
+                    {
+                        return bestBid;
+                    }
+
                     // Best Bid + 1 Tick (단, Best Ask를 넘지 않도록 주의해야 Taker 방지됨)
                     var pennyPrice = bestBid.ToDecimal() + tickSize;
 
@@ -195,13 +196,14 @@ public class SingleOrderQuoter : IQuoter
             }
             else if (_hittingLogic == HittingLogic.Pennying)
             {
-                if (_activeOrder is not null && _activeOrder.Price == bestAsk)
-                {
-                    return bestAsk;
-                }
                 // 목표가가 Best Ask보다 낮다면 -> Best Ask - 1 Tick으로 제한
                 if (targetPrice.ToDecimal() < bestAsk.ToDecimal())
                 {
+                    if (_activeOrder is not null && _activeOrder.Price == bestAsk)
+                    {
+                        return bestAsk;
+                    }
+
                     var pennyPrice = bestAsk.ToDecimal() - tickSize;
 
                     // Best Bid와 겹치면 Pennying 불가
