@@ -29,6 +29,7 @@ using System.Text.Json.Serialization;
 using OpenHFT.Core.DataBase;
 using System.Runtime.InteropServices;
 using OpenHFT.Hedging;
+using OpenHFT.Core.Api;
 
 public class Program
 {
@@ -199,11 +200,29 @@ public class Program
                                     provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BitmexRestApiClient)),
                                     productType,
                                     executionConfig.Api, apiSecret, apiKey));
-                                services.AddSingleton<IOrderGateway, BitmexOrderGateway>(provider => new BitmexOrderGateway(
+                                // 1. Register the REAL gateway as its concrete type.
+                                // This instance is intended for internal use by the decorator.
+                                services.AddSingleton<BitmexOrderGateway>(provider => new BitmexOrderGateway(
                                     provider.GetRequiredService<ILogger<BitmexOrderGateway>>(),
                                     provider.GetRequiredService<BitmexRestApiClient>(),
                                     provider.GetRequiredService<IInstrumentRepository>(),
                                     productType));
+
+                                // 2. Register the IOrderGateway interface to resolve to the DECORATOR.
+                                // This is the instance that the rest of the application will use.
+                                services.AddSingleton<IOrderGateway>(provider =>
+                                {
+                                    // Get the real gateway instance that we just registered.
+                                    var realGateway = provider.GetRequiredService<BitmexOrderGateway>();
+                                    var logger = provider.GetRequiredService<ILogger<ThrottlingGatewayDecorator>>();
+
+                                    // Define BitMEX rate limits from configuration or hardcode them.
+                                    // It's better to move these to config.json in the long run.
+                                    var perSecondConfig = new RateLimiterConfig(Limit: 300, Window: TimeSpan.FromSeconds(1));
+                                    var perMinuteConfig = new RateLimiterConfig(Limit: 3000, Window: TimeSpan.FromMinutes(1));
+
+                                    return new ThrottlingGatewayDecorator(realGateway, logger, perSecondConfig, perMinuteConfig);
+                                });
                                 services.AddSingleton<IFeedAdapter>(provider => new BitmexAdapter(
                                     provider.GetRequiredService<ILogger<BitmexAdapter>>(), productType,
                                     provider.GetRequiredService<IInstrumentRepository>(),

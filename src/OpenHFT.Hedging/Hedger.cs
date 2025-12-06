@@ -80,21 +80,28 @@ public class Hedger
 
     public void Deactivate()
     {
+        if (_hedgeOrder is not null)
+        {
+            try
+            {
+                _ = _hedgeOrder.CancelAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogErrorWithCaller(ex, "Failed to cancel hedge order.");
+            }
+        }
+
         if (!_isActive)
         {
             _logger.LogWarningWithCaller($"Can not deactivate non-active hedger on quoting instrument {_quoteInstrument.Symbol}, hedging instrument {_hedgeInstrument.Symbol} on book {_bookName}");
             return;
         }
-        _isActive = false;
 
+        _isActive = false;
         _logger.LogInformationWithCaller($"Stop Hedger for Q:{_quoteInstrument.Symbol} H:{_hedgeInstrument.Symbol}.");
         var subscriptionKey = $"Hedger_{_quoteInstrument.Symbol}_{_hedgeInstrument.Symbol}_{_bookName}";
         _marketDataManager.UnsubscribeOrderBook(_hedgeInstrument.InstrumentId, subscriptionKey);
-
-        if (_hedgeOrder is not null)
-        {
-            _ = _hedgeOrder.CancelAsync(CancellationToken.None);
-        }
     }
 
     private bool IsValidCurrency(Currency c) => SupportedCurrencies.Contains(c.Symbol.ToUpper());
@@ -291,26 +298,34 @@ public class Hedger
             currentOrder = _hedgeOrder;
         }
 
-        if (target is null)
+        try
         {
-            if (currentOrder is not null)
+            if (target is null)
             {
-                await currentOrder.CancelAsync(CancellationToken.None).ConfigureAwait(false);
+                if (currentOrder is not null)
+                {
+                    // This cancel request might be superseded by another request later.
+                    await currentOrder.CancelAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+                return;
             }
 
-            return;
-        }
-
-        if (currentOrder == null)
-        {
-            await StartNewHedgeAsync(target.Value);
-        }
-        else
-        {
-            if (target.Value.Price != currentOrder.Price)
+            if (currentOrder == null)
             {
-                await currentOrder.ReplaceAsync(target.Value.Price, OrderType.Limit, CancellationToken.None).ConfigureAwait(false);
+                await StartNewHedgeAsync(target.Value);
             }
+            else
+            {
+                if (target.Value.Price != currentOrder.Price)
+                {
+                    // This replace request is a primary candidate for being superseded.
+                    await currentOrder.ReplaceAsync(target.Value.Price, OrderType.Limit, CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogErrorWithCaller(ex, $"An unexpected error occurred during hedge execution for instrument {_hedgeInstrument.Symbol}.");
         }
     }
 
