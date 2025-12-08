@@ -218,7 +218,7 @@ public class Program
 
                                     // Define BitMEX rate limits from configuration or hardcode them.
                                     // It's better to move these to config.json in the long run.
-                                    var perSecondConfig = new RateLimiterConfig(Limit: 300, Window: TimeSpan.FromSeconds(1));
+                                    var perSecondConfig = new RateLimiterConfig(Limit: 270, Window: TimeSpan.FromSeconds(1));
                                     var perMinuteConfig = new RateLimiterConfig(Limit: 3000, Window: TimeSpan.FromMinutes(1));
 
                                     return new ThrottlingGatewayDecorator(realGateway, logger, perSecondConfig, perMinuteConfig);
