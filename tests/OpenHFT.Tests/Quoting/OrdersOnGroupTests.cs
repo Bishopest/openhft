@@ -95,6 +95,16 @@ public class TestOrder : IOrder
     {
         throw new NotImplementedException();
     }
+
+    public bool MarkAsCancelRequested()
+    {
+        throw new NotImplementedException();
+    }
+
+    public void RevertPendingStateChange()
+    {
+        throw new NotImplementedException();
+    }
 }
 
 [TestFixture]
@@ -102,6 +112,7 @@ public class OrdersOnGroupTests
 {
     private Mock<ILogger> _mockLogger;
     private Mock<IOrderFactory> _mockOrderFactory;
+    private Mock<IOrderGateway> _mockOrderGateway;
     private Mock<IMarketDataManager> _mockMarketDataManager;
     private CryptoPerpetual _instrument;
 
@@ -114,6 +125,8 @@ public class OrdersOnGroupTests
         _mockLogger = new Mock<ILogger>();
         _mockOrderFactory = new Mock<IOrderFactory>();
         _mockMarketDataManager = new Mock<IMarketDataManager>();
+        _mockOrderGateway = new Mock<IOrderGateway>();
+
         _createdOrders = new List<TestOrder>();
 
         // Instrument: TickSize 0.5
@@ -183,7 +196,7 @@ public class OrdersOnGroupTests
     {
         return new OrdersOnGroup(
             _mockLogger.Object, _instrument, side,
-            _mockOrderFactory.Object, "TestBook",
+            _mockOrderFactory.Object, _mockOrderGateway.Object, "TestBook",
             _mockMarketDataManager.Object, depth, groupingBp);
     }
 

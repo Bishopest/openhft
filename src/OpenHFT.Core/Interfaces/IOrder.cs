@@ -126,4 +126,17 @@ public interface IOrder
     /// <param name="cancellationToken">A token for cancelling the cancellation request.</param>
     Task CancelAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Synchronously transitions the order's internal state to 'CancelRequest'
+    /// without sending an API request. This is used to flag an order for an
+    /// upcoming bulk cancellation, preventing duplicate actions.
+    /// </summary>
+    /// <returns>True if the state was successfully transitioned; false if the order was not in a cancellable state.</returns>
+    bool MarkAsCancelRequested();
+
+    /// <summary>
+    /// Reverts the order's status from a transient 'request' state (like CancelRequest)
+    /// back to its last known stable state, typically after an API call failure.
+    /// </summary>
+    void RevertPendingStateChange();
 }

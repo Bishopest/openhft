@@ -11,4 +11,9 @@ public enum QuoterType
     /// A quoter that submits single order to the exchange.
     /// </summary>
     Single,
+
+    /// <summary>
+    /// A quoter that submits multiple orders by ordersOnGroup structure.
+    /// </summary>
+    Multi
 }

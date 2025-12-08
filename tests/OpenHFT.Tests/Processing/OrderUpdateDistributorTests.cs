@@ -175,5 +175,15 @@ public class TestOrder : IOrder, IOrderUpdatable
     {
         throw new NotImplementedException();
     }
+
+    public bool MarkAsCancelRequested()
+    {
+        throw new NotImplementedException();
+    }
+
+    public void RevertPendingStateChange()
+    {
+        throw new NotImplementedException();
+    }
     #endregion
 }

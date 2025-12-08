@@ -10,6 +10,9 @@ namespace OpenHFT.Core.Orders;
 // Note how properties are mutable (public set) for the builder to use.
 public class Order : IOrder, IOrderUpdatable
 {
+    // A static counter to ensure ClientOrderId is always unique across all Order instances.
+    private static long _clientOrderIdCounter = DateTimeOffset.UtcNow.Ticks;
+
     private readonly ILogger _logger;
     private readonly IOrderRouter _router;
     private readonly IOrderGateway _gateway;
@@ -59,7 +62,8 @@ public class Order : IOrder, IOrderUpdatable
         InstrumentId = instrumentId;
         Side = side;
         BookName = bookName;
-        ClientOrderId = GenerateClientId(); // Should be a robust method
+        // Use the thread-safe increment operation to generate a unique ID.
+        ClientOrderId = Interlocked.Increment(ref _clientOrderIdCounter);
         Status = OrderStatus.Pending;
 
         _router = router;
@@ -200,7 +204,45 @@ public class Order : IOrder, IOrderUpdatable
         // On success, we wait for a WebSocket update to confirm the cancellation.
     }
 
-    private static long GenerateClientId() => DateTimeOffset.UtcNow.Ticks;
+    /// <summary>
+    /// Synchronously marks the order for cancellation.
+    /// </summary>
+    public bool MarkAsCancelRequested()
+    {
+        lock (_stateLock)
+        {
+            // Only transition to CancelRequest if the order is in a live, cancellable state.
+            if (Status is OrderStatus.New or OrderStatus.PartiallyFilled or OrderStatus.NewRequest or OrderStatus.ReplaceRequest)
+            {
+                Status = OrderStatus.CancelRequest;
+                _logger.LogDebug("Order {ClientOrderId} has been marked for cancellation.", ClientOrderId);
+                return true;
+            }
+        }
+        _logger.LogWarningWithCaller($"Attempted to mark order {ClientOrderId} for cancellation, but its status is '{Status}'.");
+        return false;
+    }
+
+    /// <summary>
+    /// Reverts a transient status like 'CancelRequest' back to the last stable status.
+    /// </summary>
+    public void RevertPendingStateChange()
+    {
+        lock (_stateLock)
+        {
+            // Only revert if we are in a transient 'request' state.
+            if (Status is OrderStatus.CancelRequest or OrderStatus.ReplaceRequest)
+            {
+                // Revert to the status from the latest report.
+                // If there's no report yet (e.g., a New order that failed to submit),
+                // revert to the initial Pending state.
+                var previousStatus = LatestReport?.Status ?? OrderStatus.New;
+
+                _logger.LogInformationWithCaller($"Reverting status for Order {ClientOrderId} from '{Status}' to '{previousStatus}' due to a failed API call.");
+                Status = previousStatus;
+            }
+        }
+    }
 
     public void OnStatusReportReceived(in OrderStatusReport report)
     {

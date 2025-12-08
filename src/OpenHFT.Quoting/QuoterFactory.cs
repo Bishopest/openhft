@@ -14,13 +14,16 @@ public class QuoterFactory : IQuoterFactory
     private readonly IOrderFactory _orderFactory;
     private readonly IMarketDataManager _marketDataManager;
     private readonly IInstrumentRepository _repository;
+    private readonly IOrderGatewayRegistry _orderGatewayRegistry;
 
-    public QuoterFactory(ILoggerFactory loggerFactory, IOrderFactory orderFactory, IMarketDataManager marketDataManager, IInstrumentRepository repository)
+
+    public QuoterFactory(ILoggerFactory loggerFactory, IOrderFactory orderFactory, IMarketDataManager marketDataManager, IInstrumentRepository repository, IOrderGatewayRegistry orderGatewayRegistry)
     {
         _loggerFactory = loggerFactory;
         _orderFactory = orderFactory;
         _marketDataManager = marketDataManager;
         _repository = repository;
+        _orderGatewayRegistry = orderGatewayRegistry;
     }
 
     public IQuoter CreateQuoter(QuotingParameters parameters, Side side)
@@ -40,6 +43,11 @@ public class QuoterFactory : IQuoterFactory
             case QuoterType.Single:
                 if (parameters.BookName == null) throw new ArgumentNullException("bookName");
                 return new SingleOrderQuoter(_loggerFactory.CreateLogger<SingleOrderQuoter>(), side, instrument, _orderFactory, parameters.BookName, _marketDataManager);
+            case QuoterType.Multi:
+                if (parameters.BookName == null) throw new ArgumentNullException("bookName");
+                var gateway = _orderGatewayRegistry.GetGatewayForInstrument(instrument.InstrumentId);
+                if (gateway == null) throw new ArgumentNullException("gateway");
+                return new MultiOrderQuoter(_loggerFactory.CreateLogger<MultiOrderQuoter>(), side, instrument, _orderFactory, gateway, parameters.BookName, _marketDataManager, parameters);
             default:
                 throw new ArgumentException($"Unsupported quoter type: {parameters.Type}");
         }

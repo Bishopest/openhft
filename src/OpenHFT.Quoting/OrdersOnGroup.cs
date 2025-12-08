@@ -5,6 +5,7 @@ using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Orders;
 using OpenHFT.Core.Utils;
+using OpenHFT.Feed;
 using OpenHFT.Quoting.Models;
 
 namespace OpenHFT.Quoting;
@@ -19,6 +20,7 @@ public class OrdersOnGroup
     private readonly Instrument _instrument;
     private readonly Side _side;
     private readonly IOrderFactory _orderFactory;
+    private readonly IOrderGateway _orderGateway;
     private readonly string _bookName;
     private readonly IMarketDataManager _marketDataManager; // For hitting logic checks
 
@@ -29,6 +31,9 @@ public class OrdersOnGroup
     // State
     private readonly List<IOrder> _activeOrders = new();
     private readonly object _lock = new();
+    // Create a semaphore with an initial and max count of 1.
+    // This ensures that only one thread can enter the UpdateAsync logic at a time.
+    private readonly SemaphoreSlim _updateSemaphore = new(1, 1);
 
     // 현재 이 그룹이 목표로 하는 기준 가격 (Engine에서 Grouping된 가격)
     public Price TargetQuotePrice { get; private set; }
@@ -44,6 +49,7 @@ public class OrdersOnGroup
         Instrument instrument,
         Side side,
         IOrderFactory orderFactory,
+        IOrderGateway orderGateway,
         string bookName,
         IMarketDataManager marketDataManager,
         int depth,
@@ -53,6 +59,7 @@ public class OrdersOnGroup
         _instrument = instrument;
         _side = side;
         _orderFactory = orderFactory;
+        _orderGateway = orderGateway;
         _bookName = bookName;
         _marketDataManager = marketDataManager;
         _depth = Math.Max(1, depth);
@@ -66,46 +73,62 @@ public class OrdersOnGroup
     /// </summary>
     public async Task UpdateAsync(Quote targetQuote, HittingLogic hittingLogic, bool isPostOnly, CancellationToken cancellationToken)
     {
-        // 0. Check target quoter price changed
-        if (TargetQuotePrice != targetQuote.Price)
+        // Attempt to acquire the semaphore. If another update is in progress,
+        // this will wait until it's released.
+        await _updateSemaphore.WaitAsync(cancellationToken);
+
+        try
         {
-            _isCancellingForMove = true;
-            TargetQuotePrice = targetQuote.Price;
-        }
-        else
-        {
-            // if not changed and currently on filling state then do nothing
-            if (IsFilling())
+            // The entire reconciliation logic is now protected from concurrent execution.
+
+            // 0. Check target quote price change
+            if (TargetQuotePrice != targetQuote.Price)
             {
-                return;
+                _isCancellingForMove = true;
+                TargetQuotePrice = targetQuote.Price;
             }
-        }
-
-
-        // 1. Check _isCancellingForMove
-        if (_isCancellingForMove)
-        {
-            await CancelOneOrderAsync(cancellationToken);
-
-            lock (_lock)
+            else
             {
-                if (!_activeOrders.Any())
+                if (IsFilling())
                 {
-                    _isCancellingForMove = false;
-                }
-                else
-                {
-                    // still remaining to cancel to move
-                    return;
+                    return; // No change and filling, so exit early.
                 }
             }
+
+            // 1. Handle moving to a new price group
+            if (_isCancellingForMove)
+            {
+                // This will perform one cancel action and then the method will exit.
+                // The next call to UpdateAsync will continue the cancellation process.
+                await CancelOneOrderAsync(cancellationToken);
+
+                lock (_lock)
+                {
+                    if (!_activeOrders.Any())
+                    {
+                        _isCancellingForMove = false;
+                        // All orders are cancelled, we can now proceed to place new ones in the same call.
+                    }
+                    else
+                    {
+                        // Still have orders to cancel, so we stop here for this update cycle.
+                        return;
+                    }
+                }
+            }
+
+            // 2. Normal order reconciliation process
+            var layerPrices = CalculateLayerPrices(targetQuote.Price);
+            var validPrices = ApplyHittingLogic(layerPrices, hittingLogic);
+
+            // This method will now execute without interference.
+            await ReconcileOrdersAsync(validPrices, targetQuote.Size, isPostOnly, cancellationToken);
         }
-
-        // 2. Normal order process
-        var layerPrices = CalculateLayerPrices(targetQuote.Price);
-        var validPrices = ApplyHittingLogic(layerPrices, hittingLogic);
-
-        await ReconcileOrdersAsync(validPrices, targetQuote.Size, isPostOnly, cancellationToken);
+        finally
+        {
+            // CRITICAL: Always release the semaphore, even if an exception occurs.
+            _updateSemaphore.Release();
+        }
     }
 
     private bool IsFilling()
@@ -151,22 +174,80 @@ public class OrdersOnGroup
     /// </summary>
     public async Task CancelAllAsync(CancellationToken cancellationToken)
     {
-        List<Task> cancelTasks = new();
+        List<IOrder> ordersToCancel;
+        List<string> exchangeOrderIdsToCancel;
+
+        // --- Phase 1: Identify and Mark orders for cancellation ---
         lock (_lock)
         {
-            foreach (var order in _activeOrders)
+            ordersToCancel = _activeOrders
+                .Where(o => o.Status is OrderStatus.New or OrderStatus.PartiallyFilled) // Only target cancellable orders
+                .ToList();
+
+            if (!ordersToCancel.Any())
             {
-                if (order.Status == OrderStatus.New || order.Status == OrderStatus.PartiallyFilled)
+                return;
+            }
+
+            foreach (var order in ordersToCancel)
+            {
+                order.MarkAsCancelRequested();
+            }
+
+            // Now, collect the IDs for the API call.
+            exchangeOrderIdsToCancel = ordersToCancel
+                .Where(o => !string.IsNullOrEmpty(o.ExchangeOrderId))
+                .Select(o => o.ExchangeOrderId!)
+                .ToList();
+        }
+
+        // If there are no orders with an ExchangeOrderId yet, there's nothing to send to the API.
+        if (!exchangeOrderIdsToCancel.Any())
+        {
+            _logger.LogInformationWithCaller($"Identified {ordersToCancel.Count} orders to cancel, but none have an ExchangeOrderId yet. They will be handled by their state.");
+            return;
+        }
+
+        // --- Phase 2: Send the API request and process the response ---
+        _logger.LogInformationWithCaller($"Attempting to bulk cancel {exchangeOrderIdsToCancel.Count} orders.");
+
+        try
+        {
+            var request = new BulkCancelOrdersRequest(exchangeOrderIdsToCancel, _instrument.InstrumentId);
+            var results = await _orderGateway.SendBulkCancelOrdersAsync(request, cancellationToken);
+
+            // Process the response reports.
+            // This part remains the same as your implementation, routing reports back.
+            foreach (var result in results)
+            {
+                if (result.Report.HasValue)
                 {
-                    cancelTasks.Add(order.CancelAsync(cancellationToken));
+                    var orderToUpdate = ordersToCancel.FirstOrDefault(o => o.ExchangeOrderId == result.Report.Value.ExchangeOrderId);
+                    if (orderToUpdate is Order concreteOrder)
+                    {
+                        concreteOrder.OnStatusReportReceived(result.Report.Value);
+                    }
+                }
+                else if (!result.IsSuccess)
+                {
+                    _logger.LogWarningWithCaller($"Failed to cancel order {result.OrderId} during bulk op: {result.FailureReason}");
+
+                    // Optional: Create a manual rejection report and route it.
+                    var failedOrder = ordersToCancel.FirstOrDefault(o => o.ExchangeOrderId == result.OrderId);
+                    failedOrder.RevertPendingStateChange();
                 }
             }
         }
-
-        if (cancelTasks.Any())
+        catch (Exception ex)
         {
-            // TODO: Use a Bulk Cancel API if available on the gateway
-            await Task.WhenAll(cancelTasks).ConfigureAwait(false);
+            _logger.LogErrorWithCaller(ex, "An exception occurred during the bulk cancellation API call.");
+            lock (_lock)
+            {
+                foreach (var order in ordersToCancel)
+                {
+                    order.RevertPendingStateChange();
+                }
+            }
         }
     }
 
@@ -399,7 +480,7 @@ public class OrdersOnGroup
             var order = _activeOrders.FirstOrDefault(order => order.ClientOrderId == finalReport.ClientOrderId);
             if (order == null) return;
 
-            _logger.LogInformationWithCaller($"({_side}) Order {finalReport.ClientOrderId} reached terminal state {finalReport.Status}. Clearing active order.");
+            _logger.LogDebug($"({_side}) Order {finalReport.ClientOrderId} reached terminal state {finalReport.Status}. Clearing active order.");
 
             // Unsubscribe to prevent memory leaks
             order.RemoveStatusChangedHandler(OnOrderStatusChanged);
