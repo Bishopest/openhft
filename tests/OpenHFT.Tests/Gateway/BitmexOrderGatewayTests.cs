@@ -144,6 +144,74 @@ public class BitmexOrderGatewayTests
         cancelResult.IsSuccess.Should().BeTrue(because: cancelResult.FailureReason);
     }
 
+    [Test, Order(2), Category("Lifecycle")]
+    public async Task BulkCancel_ShouldSucceed_ForMultipleOrders()
+    {
+        // --- 1. Arrange: Create multiple live orders to cancel ---
+        int ordersToCreate = 3;
+        var orderIdsToCancel = new List<string>();
+        var tasks = new List<Task<OrderPlacementResult>>();
+
+        var apiClient = _serviceProvider.GetRequiredService<BitmexRestApiClient>();
+        var book = await GetOrderBookL2Async(apiClient, _btcUsdt.Symbol);
+        var safeBidPrice = Price.FromDecimal(book.First(l => l.Side == "Buy").Price - 1000);
+
+        TestContext.WriteLine($"Creating {ordersToCreate} orders to be cancelled in bulk...");
+
+        for (int i = 0; i < ordersToCreate; i++)
+        {
+            var newOrderRequest = new NewOrderRequest(
+                _btcUsdt.InstrumentId,
+                GenerateClientOrderId(),
+                Side.Buy,
+                safeBidPrice - Price.FromDecimal(i * 10), // Use slightly different prices
+                Quantity.FromDecimal(100m),
+                OrderType.Limit,
+                true);
+
+            tasks.Add(_gateway.SendNewOrderAsync(newOrderRequest));
+        }
+
+        var placementResults = await Task.WhenAll(tasks);
+
+        foreach (var result in placementResults)
+        {
+            result.IsSuccess.Should().BeTrue("Order placement must succeed for setup.");
+            result.InitialReport.Should().NotBeNull();
+            orderIdsToCancel.Add(result.InitialReport!.Value.ExchangeOrderId!);
+        }
+
+        orderIdsToCancel.Should().HaveCount(ordersToCreate, "All orders should be created successfully.");
+        TestContext.WriteLine($"Successfully created orders: {string.Join(", ", orderIdsToCancel)}");
+
+        // Give the exchange a moment to process the new orders
+        await Task.Delay(1000);
+
+        // --- 2. Act: Send the bulk cancel request ---
+        TestContext.WriteLine("Sending bulk cancel request...");
+        var bulkCancelRequest = new BulkCancelOrdersRequest(orderIdsToCancel, _btcUsdt.InstrumentId);
+        var results = await _gateway.SendBulkCancelOrdersAsync(bulkCancelRequest);
+
+        // --- 3. Assert: Verify the results of the bulk cancellation ---
+        results.Should().NotBeNull();
+        results.Should().HaveCount(ordersToCreate, "the result list should contain an entry for each requested order.");
+
+        // Check if the set of IDs in the response matches the set of IDs we sent
+        results.Select(r => r.OrderId).Should().BeEquivalentTo(orderIdsToCancel,
+            "the response should contain results for all the orders we requested to cancel.");
+
+        // Check each individual result
+        foreach (var result in results)
+        {
+            result.IsSuccess.Should().BeTrue(because: $"order {result.OrderId} should have been cancelled successfully.");
+            result.Report.Should().NotBeNull();
+            result.Report!.Value.Status.Should().Be(OrderStatus.Cancelled,
+                because: $"the status for order {result.OrderId} should be reported as Cancelled.");
+        }
+
+        TestContext.WriteLine("Bulk cancellation successful and all results verified.");
+    }
+
     // [Test, Order(2), Category("Execution")]
     // public async Task NewOrder_TakerOrder_ShouldFillImmediately()
     // {

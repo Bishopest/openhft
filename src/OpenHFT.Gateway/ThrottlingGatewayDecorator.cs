@@ -78,6 +78,29 @@ public sealed class ThrottlingGatewayDecorator : IOrderGateway
         return _wrappedGateway.FetchOrderStatusAsync(exchangeOrderId, cancellationToken);
     }
 
+    /// <summary>
+    /// Applies rate limiting to a bulk cancel request. If the limit is exceeded,
+    /// it immediately returns a failure result for all requested orders.
+    /// </summary>
+    public Task<IReadOnlyList<OrderModificationResult>> SendBulkCancelOrdersAsync(BulkCancelOrdersRequest request, CancellationToken cancellationToken = default)
+    {
+        if (_perSecondLimiter.TryAcquireToken() && _perMinuteLimiter.TryAcquireToken())
+        {
+            // Rate limit token acquired. Pass the request directly.
+            return _wrappedGateway.SendBulkCancelOrdersAsync(request, cancellationToken);
+        }
+
+        // Rate limit exceeded. Immediately return a failure result for each order in the request.
+        _logger.LogWarning("Rate limit exceeded. Rejecting bulk cancel request for {Count} orders on instrument {InstrumentId}.",
+            request.ExchangeOrderIds.Count, request.InstrumentId);
+
+        var rejectionResults = request.ExchangeOrderIds
+            .Select(id => new OrderModificationResult(false, id, "Rate limit exceeded."))
+            .ToList();
+
+        return Task.FromResult<IReadOnlyList<OrderModificationResult>>(rejectionResults);
+    }
+
     public Task CancelAllOrdersAsync(string symbol, CancellationToken cancellationToken = default)
     {
         _logger.LogWarning("Bypassing rate limiter for critical CancelAllOrdersAsync on symbol {Symbol}.", symbol);

@@ -108,6 +108,50 @@ public class BitmexOrderGateway : IOrderGateway
         return new OrderModificationResult(true, request.OrderId, report: cancelReport);
     }
 
+    public async Task<IReadOnlyList<OrderModificationResult>> SendBulkCancelOrdersAsync(BulkCancelOrdersRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request.ExchangeOrderIds == null || !request.ExchangeOrderIds.Any())
+        {
+            return Array.Empty<OrderModificationResult>();
+        }
+
+        var payload = new Dictionary<string, object> { { "orderID", request.ExchangeOrderIds } };
+
+        var result = await _apiClient.SendPrivateRequestAsync<List<BitmexOrderResponse>>(
+            HttpMethod.Delete, _apiClient.ExecutionMode == ExecutionMode.Realtime ? "/api/v2/order" : "/api/v1/order", queryParams: null, bodyParams: payload, cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            _logger.LogWarningWithCaller($"Bulk cancel API call failed: {result.Error.Message}");
+            // If the whole request fails, create a failure result for each requested order.
+            return request.ExchangeOrderIds
+                .Select(id => new OrderModificationResult(false, id, result.Error.Message))
+                .ToList();
+        }
+
+        var results = new List<OrderModificationResult>();
+        var responseMap = result.Data.ToDictionary(r => r.OrderId, r => r);
+
+        // Correlate requests with responses
+        foreach (var requestedId in request.ExchangeOrderIds)
+        {
+            if (responseMap.TryGetValue(requestedId, out var response))
+            {
+                // Successful cancellation for this specific order
+                var report = MapResponseToReport(response, request.InstrumentId);
+                results.Add(new OrderModificationResult(true, requestedId, report: report));
+            }
+            else
+            {
+                // The response did not contain an entry for this order, assume failure.
+                // This can happen if the order was already filled/cancelled.
+                results.Add(new OrderModificationResult(false, requestedId, "Order not found in bulk cancel response."));
+            }
+        }
+
+        return results;
+    }
+
     public async Task<RestApiResult<OrderStatusReport>> FetchOrderStatusAsync(string exchangeOrderId, CancellationToken cancellationToken = default)
     {
         // BitMEX는 clOrdID로 주문을 필터링할 수 있습니다.

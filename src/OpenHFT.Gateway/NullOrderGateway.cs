@@ -23,6 +23,11 @@ public class NullOrderGateway : IOrderGateway
         throw new NotImplementedException();
     }
 
+    public Task<IReadOnlyList<OrderModificationResult>> SendBulkCancelOrdersAsync(BulkCancelOrdersRequest request, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<OrderModificationResult>>(new List<OrderModificationResult>().AsReadOnly());
+    }
+
     public Task<OrderModificationResult> SendCancelOrderAsync(CancelOrderRequest request, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(new OrderModificationResult());

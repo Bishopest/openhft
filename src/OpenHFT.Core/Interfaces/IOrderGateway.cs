@@ -47,4 +47,9 @@ public interface IOrderGateway
     /// Primarily used for cleanup in integration tests or emergency stops.
     /// </summary>
     Task CancelAllOrdersAsync(string symbol, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Submits a request to cancel multiple existing orders in a single batch.
+    /// </summary>
+    /// <returns>A list of result objects, one for each order cancellation attempt.</returns>
+    Task<IReadOnlyList<OrderModificationResult>> SendBulkCancelOrdersAsync(BulkCancelOrdersRequest request, CancellationToken cancellationToken = default);
 }

@@ -61,3 +61,20 @@ public readonly struct CancelOrderRequest
         InstrumentId = instrumentId;
     }
 }
+
+/// <summary>
+/// A request to cancel multiple existing orders in a single batch.
+/// </summary>
+public readonly struct BulkCancelOrdersRequest
+{
+    // BitMEX supports cancelling by either ID, so we can include both.
+    public readonly IReadOnlyList<string> ExchangeOrderIds { get; }
+    // public readonly IReadOnlyList<long> ClientOrderIds { get; } // For exchanges supporting it
+    public readonly int InstrumentId { get; }
+
+    public BulkCancelOrdersRequest(IReadOnlyList<string> exchangeOrderIds, int instrumentId)
+    {
+        ExchangeOrderIds = exchangeOrderIds;
+        InstrumentId = instrumentId;
+    }
+}
