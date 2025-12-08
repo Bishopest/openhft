@@ -201,6 +201,7 @@ public class Hedger
         {
             case OrderStatus.Cancelled:
             case OrderStatus.Rejected:
+            case OrderStatus.Filled:
                 ClearActiveOrder(report);
                 break;
         }

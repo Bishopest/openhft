@@ -139,11 +139,11 @@ public class BitmexOrderGateway : IOrderGateway
         }
 
         var report = MapResponseToReport(orderResponse, instrument.InstrumentId);
-        return RestApiResult<OrderStatusReport>.Success(report);
+        return report is null ? RestApiResult<OrderStatusReport>.Failure(new RestApiException("Failed to map order response.", System.Net.HttpStatusCode.InternalServerError, null)) : RestApiResult<OrderStatusReport>.Success(report.Value);
     }
 
     // Helper to map exchange-specific response to our standard DTO
-    private OrderStatusReport MapResponseToReport(BitmexOrderResponse response, int instrumentId)
+    private OrderStatusReport? MapResponseToReport(BitmexOrderResponse response, int instrumentId)
     {
         var status = response.OrdStatus switch
         {
@@ -154,6 +154,12 @@ public class BitmexOrderGateway : IOrderGateway
             "PartiallyFilled" => OrderStatus.PartiallyFilled,
             _ => OrderStatus.Pending // Or another default/unknown status
         };
+
+        if (status == OrderStatus.Pending)
+        {
+            _logger.LogWarningWithCaller($"Can not map status({response.OrdStatus}), return null");
+            return null;
+        }
 
         return new OrderStatusReport(
             clientOrderId: long.TryParse(response.ClOrdId, out var cid) ? cid : 0,

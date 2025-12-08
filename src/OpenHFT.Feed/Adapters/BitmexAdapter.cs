@@ -223,6 +223,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             "PartiallyFilled" => OrderStatus.PartiallyFilled,
             "Canceled" => OrderStatus.Cancelled,
             "Rejected" => OrderStatus.Rejected,
+            "PendingReplace" => OrderStatus.PartiallyFilled,
             _ => HandleUnknownStatus(ordStatusStr) // Or log a warning for unknown status
         };
 
