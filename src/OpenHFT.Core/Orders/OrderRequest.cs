@@ -28,6 +28,10 @@ public readonly struct NewOrderRequest
         OrderType = orderType;
         IsPostOnly = isPostOnly;
     }
+
+    public override string ToString() =>
+        $"NEW | CID:{ClientOrderId} | {Side} {Quantity.ToDecimal()} @ {Price.ToDecimal()} " +
+        $"| ID:{InstrumentId} | Type:{OrderType} | PostOnly:{IsPostOnly}";
 }
 
 /// <summary>
@@ -45,6 +49,9 @@ public readonly struct ReplaceOrderRequest
         NewPrice = newPrice;
         InstrumentId = instrumentId;
     }
+
+    public override string ToString() =>
+        $"REPLACE | EXID:{OrderId} | New Price: {NewPrice.ToDecimal()} | ID:{InstrumentId}";
 }
 
 /// <summary>
@@ -60,6 +67,9 @@ public readonly struct CancelOrderRequest
         OrderId = orderId;
         InstrumentId = instrumentId;
     }
+
+    public override string ToString() =>
+        $"CANCEL | EXID:{OrderId} | ID:{InstrumentId}";
 }
 
 /// <summary>
@@ -76,5 +86,15 @@ public readonly struct BulkCancelOrdersRequest
     {
         ExchangeOrderIds = exchangeOrderIds;
         InstrumentId = instrumentId;
+    }
+
+    public override string ToString()
+    {
+        // 취소 ID가 많을 경우를 대비하여 첫 3개만 표시하고 나머지는 생략합니다.
+        string idSummary = ExchangeOrderIds.Count > 3
+            ? string.Join(", ", ExchangeOrderIds.Take(3)) + $", ...({ExchangeOrderIds.Count - 3} more)"
+            : string.Join(", ", ExchangeOrderIds);
+
+        return $"BULK CANCEL | Count:{ExchangeOrderIds.Count} | IDs: [{idSummary}] | ID:{InstrumentId}";
     }
 }

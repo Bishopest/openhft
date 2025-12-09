@@ -43,7 +43,7 @@ public sealed class ThrottlingGatewayDecorator : IOrderGateway
             return _wrappedGateway.SendNewOrderAsync(request, cancellationToken);
         }
 
-        _logger.LogWarningWithCaller($"Rate limit exceeded. Rejecting new order request for ClientOrderId {request.ClientOrderId}.");
+        _logger.LogWarningWithCaller($"Rate limit exceeded. Rejecting new order request info => {request}.");
         var rejectionResult = new OrderPlacementResult(false, null, "Rate limit exceeded.");
         return Task.FromResult(rejectionResult);
     }
@@ -55,7 +55,7 @@ public sealed class ThrottlingGatewayDecorator : IOrderGateway
             return _wrappedGateway.SendReplaceOrderAsync(request, cancellationToken);
         }
 
-        _logger.LogWarningWithCaller($"Rate limit exceeded. Rejecting replace order request for ExchangeOrderId {request.OrderId}.");
+        _logger.LogWarningWithCaller($"Rate limit exceeded. Rejecting replace order request info => {request}.");
         var rejectionResult = new OrderModificationResult(false, request.OrderId, "Rate limit exceeded.");
         return Task.FromResult(rejectionResult);
     }
@@ -67,7 +67,7 @@ public sealed class ThrottlingGatewayDecorator : IOrderGateway
             return _wrappedGateway.SendCancelOrderAsync(request, cancellationToken);
         }
 
-        _logger.LogWarningWithCaller($"Rate limit exceeded. Rejecting cancel order request for ExchangeOrderId {request.OrderId}.");
+        _logger.LogWarningWithCaller($"Rate limit exceeded. Rejecting cancel order request info => {request}.");
         var rejectionResult = new OrderModificationResult(false, request.OrderId, "Rate limit exceeded.");
         return Task.FromResult(rejectionResult);
     }
