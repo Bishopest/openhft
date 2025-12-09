@@ -98,9 +98,7 @@ public class OrdersOnGroup
             // 1. Handle moving to a new price group
             if (_isCancellingForMove)
             {
-                // This will perform one cancel action and then the method will exit.
-                // The next call to UpdateAsync will continue the cancellation process.
-                await CancelOneOrderAsync(cancellationToken);
+                await CancelAllAsync(cancellationToken);
 
                 lock (_lock)
                 {
@@ -209,7 +207,7 @@ public class OrdersOnGroup
         }
 
         // --- Phase 2: Send the API request and process the response ---
-        _logger.LogInformationWithCaller($"Attempting to bulk cancel {exchangeOrderIdsToCancel.Count} orders.");
+        _logger.LogDebug($"Attempting to bulk cancel {exchangeOrderIdsToCancel.Count} orders.");
 
         try
         {
