@@ -20,6 +20,7 @@ public class ExchangeFeedManager : IExchangeFeedManager, IAsyncDisposable
     private readonly ConcurrentDictionary<(ExchangeEnum, ProductType), Task> _connectionTasks = new();
     private readonly List<FeedAdapterConfig> _feedAdapterConfigs = new();
     public event EventHandler<MarketDataEvent>? OnMarketDataReceived;
+    public event EventHandler<ConnectionStateChangedEventArgs>? AdapterConnectionStateChanged;
 
     public ExchangeFeedManager(
         ILogger<ExchangeFeedManager> logger,
@@ -104,6 +105,7 @@ public class ExchangeFeedManager : IExchangeFeedManager, IAsyncDisposable
             // Store the adapter instance immediately
             _activeAdapters[key] = newAdapter;
             newAdapter.MarketDataReceived += (sender, e) => OnMarketDataReceived?.Invoke(sender, e);
+            newAdapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
 
             _logger.LogInformationWithCaller($"Connecting to {exchange}/{productType} adapter...");
             // Return the connection task itself, so it can be awaited.
@@ -128,6 +130,15 @@ public class ExchangeFeedManager : IExchangeFeedManager, IAsyncDisposable
             // Add other exchanges here
             _ => Enumerable.Empty<ExchangeTopic>()
         };
+    }
+    private void OnAdapterConnectionStateChanged(object? sender, ConnectionStateChangedEventArgs e)
+    {
+        var adapter = sender as IFeedAdapter;
+        if (adapter == null) return;
+
+        AdapterConnectionStateChanged?.Invoke(adapter, e);
+
+        _logger.LogInformationWithCaller($"Adapter({adapter?.SourceExchange}) connection state changed: {e.IsConnected} - {e.Reason}");
     }
 
     public async ValueTask DisposeAsync()

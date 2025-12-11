@@ -1,4 +1,5 @@
 using System;
+using System.Reflection.Metadata;
 using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
@@ -7,6 +8,7 @@ using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
+using OpenHFT.Feed.Interfaces;
 using OpenHFT.GUI.Components.Shared;
 using OpenHFT.GUI.Services;
 using OpenHFT.Hedging;
@@ -48,6 +50,7 @@ public partial class Home : ComponentBase, IDisposable
         OmsConnector.OnConnectionStatusChanged += HandleStatusChange;
         OrderCache.OnInstancesUpdated += HandleInstancesUpdated;
         HedgingCache.OnHedgingStatusUpdated += HandleHedgingStatusUpdate;
+        FeedManager.AdapterConnectionStateChanged += HandleAdapterConnectionStateChanged;
     }
 
     private async void HandleHedgingStatusUpdate()
@@ -65,6 +68,17 @@ public partial class Home : ComponentBase, IDisposable
         if (_isDisposed) return;
         _activeInstances = OrderCache.GetAllActiveInstances().ToList();
         await InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleAdapterConnectionStateChanged(object? sender, ConnectionStateChangedEventArgs e)
+    {
+        if (_isDisposed) return;
+
+        if (!e.IsConnected && sender is IFeedAdapter adapter)
+        {
+            Logger.LogWarningWithCaller($"Connection to {adapter.SourceExchange} lost. Clearing related state.");
+            _subscribedInstrumentIds.Clear();
+        }
     }
 
     private async void HandleStatusChange((OmsServerConfig Server, ConnectionStatus Status) args)
@@ -238,6 +252,8 @@ public partial class Home : ComponentBase, IDisposable
             // Unsubscribe from all events here.
             OmsConnector.OnConnectionStatusChanged -= HandleStatusChange;
             OrderCache.OnInstancesUpdated -= HandleInstancesUpdated;
+            HedgingCache.OnHedgingStatusUpdated -= HandleHedgingStatusUpdate;
+            FeedManager.AdapterConnectionStateChanged -= HandleAdapterConnectionStateChanged;
         }
 
         _isDisposed = true;
