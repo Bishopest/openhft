@@ -76,8 +76,25 @@ public partial class Home : ComponentBase, IDisposable
 
         if (!e.IsConnected && sender is IFeedAdapter adapter)
         {
-            Logger.LogWarningWithCaller($"Connection to {adapter.SourceExchange} lost. Clearing related state.");
-            _subscribedInstrumentIds.Clear();
+            Logger.LogWarningWithCaller($"Connection to {adapter.SourceExchange} feed lost. Clearing relevant subscriptions from UI state.");
+
+            var idsToRemove = _subscribedInstrumentIds
+                .Where(id =>
+                {
+                    var instrument = InstrumentRepository.GetById(id);
+                    return instrument != null && instrument.SourceExchange == adapter.SourceExchange;
+                })
+                .ToList();
+
+            if (idsToRemove.Any())
+            {
+                Logger.LogInformationWithCaller($"Removing {idsToRemove.Count} subscribed instrument IDs from UI state due to {adapter.SourceExchange} disconnection: {string.Join(", ", idsToRemove)}");
+
+                foreach (var id in idsToRemove)
+                {
+                    _subscribedInstrumentIds.Remove(id);
+                }
+            }
         }
     }
 
