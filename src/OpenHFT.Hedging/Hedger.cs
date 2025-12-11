@@ -258,7 +258,7 @@ public class Hedger
                 return new SideQuote(sideToHedge, Price.FromDecimal(properPriceDecimal), qtyToOrder);
             }
         }
-        else // FirstFollow (Maker)
+        else if (_hedgeParameters.OrderType == HedgeOrderType.FirstFollow)// FirstFollow (Maker)
         {
             if (sideToHedge == Side.Buy)
             {
@@ -289,6 +289,31 @@ public class Hedger
                 }
             }
         }
+        else if (_hedgeParameters.OrderType == HedgeOrderType.AnchorInner)
+        {
+            if (_hedgeOrder is not null)
+            {
+                if (_hedgeOrder.Quantity != qtyToOrder)
+                {
+                    return null;
+                }
+
+                return new SideQuote(sideToHedge, _hedgeOrder.Price, _hedgeOrder.Quantity);
+            }
+
+            if (sideToHedge == Side.Buy)
+            {
+                Price ourSideFirstMarketPrice = bestBid;
+                return new SideQuote(sideToHedge, ourSideFirstMarketPrice, qtyToOrder);
+            }
+            else
+            {
+                Price ourSideFirstMarketPrice = bestAsk;
+                return new SideQuote(sideToHedge, ourSideFirstMarketPrice, qtyToOrder);
+            }
+        }
+
+        return null;
     }
 
     public async Task ExecuteQuoteUpdateAsync(SideQuote? target)
