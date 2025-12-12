@@ -248,19 +248,6 @@ public class Order : IOrder, IOrderUpdatable
     {
         lock (_stateLock)
         {
-            if (report.Timestamp < this.LastUpdateTime) return;
-
-            Status = report.Status;
-            Price = report.Price;
-            Quantity = report.Quantity;
-            LeavesQuantity = report.LeavesQuantity;
-            LastUpdateTime = report.Timestamp;
-            LatestReport = report;
-            if (!string.IsNullOrEmpty(report.ExchangeOrderId))
-            {
-                ExchangeOrderId = report.ExchangeOrderId;
-            }
-
             if (report.LastQuantity.HasValue &&
                 report.LastPrice.HasValue &&
                 report.ExecutionId != null &&
@@ -291,6 +278,20 @@ public class Order : IOrder, IOrderUpdatable
                     _router.DeregisterOrder(this);
                 }
             }
+
+            if (report.Timestamp < this.LastUpdateTime) return;
+
+            Status = report.Status;
+            Price = report.Price;
+            Quantity = report.Quantity;
+            LeavesQuantity = report.LeavesQuantity;
+            LastUpdateTime = report.Timestamp;
+            LatestReport = report;
+            if (!string.IsNullOrEmpty(report.ExchangeOrderId))
+            {
+                ExchangeOrderId = report.ExchangeOrderId;
+            }
+
 
             StatusChanged?.Invoke(this, report);
             _router.RaiseStatusChanged(this, report);
