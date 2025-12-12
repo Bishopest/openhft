@@ -98,7 +98,18 @@ public class BinanceAdapter : BaseAuthFeedAdapter
             OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Invalid instrument(symbol: {symbol}) in bookticker message", null, null, BinanceTopic.BookTicker.TopicId), null));
             return;
         }
-        var eventTime = data.GetProperty("E").GetInt64();
+
+        long eventTime;
+        if (data.TryGetProperty("E", out var eventTimeElement) && eventTimeElement.TryGetInt64(out long parsedEventTime))
+        {
+            // Use the event time from the message (Perpetual Futures).
+            eventTime = parsedEventTime;
+        }
+        else
+        {
+            // Fallback to current time when 'E' is not available (Spot).
+            eventTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        }
         var updatesArray = new PriceLevelEntryArray();
 
         // Process Best Bid
@@ -252,23 +263,23 @@ public class BinanceAdapter : BaseAuthFeedAdapter
 
             // Combined stream format: {"stream":"<streamName>","data":{...}}
             if (root.TryGetProperty("stream", out var streamElement) &&
-                root.TryGetProperty("data", out var dataElement))
+                root.TryGetProperty("data", out var dataElement) &&
+                streamElement.GetString() is { } streamName)
             {
-                if (dataElement.TryGetProperty("e", out var eventTypeElement) &&
-                    eventTypeElement.GetString() is { } eventTypeString &&
-                    TopicRegistry.TryGetTopic(eventTypeString, out var topic))
+                int atIndex = streamName.IndexOf('@');
+                if (atIndex > 0)
                 {
-                    if (topic == BinanceTopic.AggTrade)
+                    var streamSuffix = streamName.Substring(atIndex);
+
+                    var topic = BinanceTopic.GetAllMarketTopics()
+                        .FirstOrDefault(t => t.GetStreamName("").Equals(streamSuffix, StringComparison.OrdinalIgnoreCase));
+
+                    if (topic != null)
                     {
-                        ProcessAggTrade(dataElement);
-                    }
-                    else if (topic == BinanceTopic.BookTicker)
-                    {
-                        ProcessBookTicker(dataElement);
-                    }
-                    else if (topic == BinanceTopic.DepthUpdate)
-                    {
-                        ProcessDepthUpdate(dataElement);
+                        // Now we have the correct topic object.
+                        if (topic == BinanceTopic.AggTrade) ProcessAggTrade(dataElement);
+                        else if (topic == BinanceTopic.BookTicker) ProcessBookTicker(dataElement);
+                        else if (topic == BinanceTopic.DepthUpdate) ProcessDepthUpdate(dataElement);
                     }
                 }
             }
