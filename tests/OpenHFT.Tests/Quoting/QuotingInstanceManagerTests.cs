@@ -298,4 +298,64 @@ public class QuotingInstanceManagerTests_Integration
 
         TestContext.WriteLine($"Validation successful: BitMEX instance IsActive={bitmexInstance.IsActive}, Binance instance IsActive={binanceInstance.IsActive}");
     }
+
+    [Test]
+    public void OnConnectionRestored_ShouldRedeployAndActivatePreviouslyRetiredInstances()
+    {
+        // --- Arrange ---
+        // 1. Setup instruments and parameters for a BITMEX instance.
+        var bitmexInstrument = _instrumentRepo.FindBySymbol("XBTUSD", ProductType.PerpetualFuture, ExchangeEnum.BITMEX)!;
+        var binanceInstrument = _instrumentRepo.FindBySymbol("BTCUSDT", ProductType.PerpetualFuture, ExchangeEnum.BINANCE)!;
+
+        var bitmexParams = new QuotingParameters(
+            bitmexInstrument.InstrumentId, "test", FairValueModel.Midp, binanceInstrument.InstrumentId,
+            10m, -10m, 0m, Quantity.FromDecimal(100), 1, QuoterType.Log, true, Quantity.FromDecimal(300),
+            Quantity.FromDecimal(300), HittingLogic.AllowAll);
+
+        // 2. Deploy and activate the instance.
+        _manager.UpdateInstanceParameters(bitmexParams); // Deploys
+        _manager.UpdateInstanceParameters(bitmexParams); // Activates
+        var instance = _manager.GetInstance(bitmexInstrument.InstrumentId);
+        instance!.IsActive.Should().BeTrue("instance should be active initially.");
+
+        // 3. Simulate a connection loss for BITMEX, which should retire the instance.
+        TestContext.WriteLine("Step 1: Simulating connection loss for BITMEX...");
+        _mockFeedHandler.Raise(
+            handler => handler.AdapterConnectionStateChanged += null,
+            this,
+            new ConnectionStateChangedEventArgs(false, ExchangeEnum.BITMEX, "Simulated connection drop")
+        );
+        Task.Delay(100).Wait(); // Allow time for the event to be processed.
+
+        // Verify that the instance is now inactive.
+        instance.IsActive.Should().BeFalse("instance should be retired after connection loss.");
+        TestContext.WriteLine($"Instance for {bitmexInstrument.Symbol} is now inactive as expected.");
+
+        // --- Act ---
+        // 4. Simulate the connection being restored for BITMEX.
+        TestContext.WriteLine("Step 2: Simulating connection restoration for BITMEX...");
+        _mockFeedHandler.Raise(
+            handler => handler.AdapterConnectionStateChanged += null,
+            this,
+            new ConnectionStateChangedEventArgs(true, ExchangeEnum.BITMEX, "Connection restored")
+        );
+
+        // The redeployment logic includes a Task.Delay, so we need to wait longer.
+        // Let's wait for a reasonable time for the async redeployment to complete.
+        Task.Delay(TimeSpan.FromSeconds(6)).Wait(); // Wait for more than the 5s delay in RedeployRetiredInstancesAsync.
+
+        // --- Assert ---
+        // 5. Verify the instance has been redeployed and is now active.
+        var redeployedInstance = _manager.GetInstance(bitmexInstrument.InstrumentId);
+        redeployedInstance.Should().NotBeNull("the instance should exist after redeployment.");
+
+        // The instance might be a new object after redeployment, so we check its properties.
+        redeployedInstance!.IsActive.Should().BeTrue(
+            "the instance should be automatically activated after its exchange's connection is restored.");
+
+        redeployedInstance.CurrentParameters.Should().BeEquivalentTo(bitmexParams,
+            "the redeployed instance should have the same parameters as before.");
+
+        TestContext.WriteLine($"Validation successful: Instance for {bitmexInstrument.Symbol} is active again after reconnection.");
+    }
 }

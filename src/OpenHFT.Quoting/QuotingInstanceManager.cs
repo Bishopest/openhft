@@ -23,6 +23,8 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
     private readonly IInstrumentRepository _instrumentRepository;
     private readonly IFeedHandler _feedHandler;
 
+    private readonly ConcurrentDictionary<ExchangeEnum, ConcurrentDictionary<int, QuotingParameters>> _retiredInstancesForRedeployment = new();
+
     public event EventHandler<QuotePair>? InstanceQuotePairCalculated;
     public event EventHandler<QuotingParameters>? InstanceParametersUpdated;
     public event EventHandler<Fill>? GlobalOrderFilled;
@@ -46,17 +48,44 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
     {
         if (e.IsConnected)
         {
-            return;
+            _logger.LogInformationWithCaller($"Connection re-established for exchange {e.SourceExchange}. Checking for instance to redeploy.");
+            _ = RedeployRetiredInstancesAsync(e.SourceExchange);
         }
-
-        _logger.LogWarningWithCaller($"Connection lost for exchange {e.SourceExchange}. Retiring all related quoting instances.");
-
-        foreach (var instance in _activeInstances.Values.ToList())
+        else
         {
-            var instrument = _instrumentRepository.GetById(instance.InstrumentId);
-            if (instrument != null && instrument.SourceExchange == e.SourceExchange)
+            _logger.LogWarningWithCaller($"Connection lost for exchange {e.SourceExchange}. Retiring all related quoting instances.");
+            var instancesToRetire = _activeInstances.Values.Where(inst =>
             {
+                var instrument = _instrumentRepository.GetById(inst.CurrentParameters.InstrumentId);
+                return instrument != null && instrument.SourceExchange == e.SourceExchange;
+            });
+
+            foreach (var instance in instancesToRetire)
+            {
+                _logger.LogInformationWithCaller($"Storing parameters for InstrumentId {instance.InstrumentId} for later redeployment.");
+                var exchangeStore = _retiredInstancesForRedeployment.GetOrAdd(e.SourceExchange, _ => new ConcurrentDictionary<int, QuotingParameters>());
+                exchangeStore[instance.InstrumentId] = instance.CurrentParameters;
+
                 RetireInstance(instance.InstrumentId);
+            }
+        }
+    }
+
+    private async Task RedeployRetiredInstancesAsync(ExchangeEnum sourceExchange)
+    {
+        // Give the system a moment to stabilize after reconnection.
+        await Task.Delay(TimeSpan.FromSeconds(5));
+
+        if (_retiredInstancesForRedeployment.TryRemove(sourceExchange, out var instancesToRedeploy))
+        {
+            _logger.LogInformationWithCaller($"Found {instancesToRedeploy.Count} instances to automatically redeploy for {sourceExchange}.");
+            foreach (var entry in instancesToRedeploy)
+            {
+                var instrumentId = entry.Key;
+                var parameters = entry.Value;
+
+                _logger.LogInformationWithCaller($"Redeploying instance for InstrumentId {instrumentId}...");
+                UpdateInstanceParameters(parameters);
             }
         }
     }
