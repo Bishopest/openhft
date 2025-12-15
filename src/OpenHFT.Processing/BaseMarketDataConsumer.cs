@@ -14,83 +14,41 @@ public abstract class BaseMarketDataConsumer : IMarketDataConsumer
     public abstract string ConsumerName { get; }
     public abstract IReadOnlyCollection<Instrument> Instruments { get; }
     protected readonly ExchangeTopic _topic;
-
     protected readonly ILogger _logger;
-    private readonly BlockingCollection<MarketDataEvent> _eventQueue;
-    private Task? _processingTask;
-    private CancellationTokenSource? _cancellationTokenSource;
-
     public ExchangeTopic Topic => _topic;
 
 
-    protected BaseMarketDataConsumer(ILogger logger, ExchangeTopic topic, int queueCapacity = 1024)
+    protected BaseMarketDataConsumer(ILogger logger, ExchangeTopic topic)
     {
         _logger = logger;
-        // Bounded capacity acts as a back-pressure mechanism.
-        _eventQueue = new BlockingCollection<MarketDataEvent>(queueCapacity);
         _topic = topic;
     }
 
     public void Start()
     {
         _logger.LogInformationWithCaller($"Starting consumer: {ConsumerName}");
-        _cancellationTokenSource = new CancellationTokenSource();
-        _processingTask = Task.Factory.StartNew(
-            () =>
-            {
-                Thread.CurrentThread.Name = $"Consumer: {ConsumerName}";
-                ProcessEventQueue(_cancellationTokenSource.Token);
-            },
-            _cancellationTokenSource.Token,
-            TaskCreationOptions.LongRunning, // Hint to the scheduler that this is a dedicated thread
-            TaskScheduler.Default);
     }
 
     public void Stop()
     {
         _logger.LogInformationWithCaller($"Stopping consumer: {ConsumerName}");
-        _eventQueue.CompleteAdding();
-        _cancellationTokenSource?.Cancel();
-
-        // Wait for the processing task to finish.
-        _processingTask?.Wait(TimeSpan.FromSeconds(5));
     }
 
+    /// <summary>
+    /// This method is now called DIRECTLY by the MarketDataDistributor
+    /// on the Disruptor's consumer thread.
+    /// </summary>
     public void Post(in MarketDataEvent data)
     {
-        // Non-blocking. If the queue is full, it will drop the event.
-        if (!_eventQueue.TryAdd(data))
-        {
-            _logger.LogWarning("{ConsumerName}'s event queue is full. Dropping event for InstrumentId {InstrumentId}.", ConsumerName, data.InstrumentId);
-        }
-    }
-
-    private void ProcessEventQueue(CancellationToken cancellationToken)
-    {
-        _logger.LogInformationWithCaller($"{ConsumerName} processing thread started.");
         try
         {
-            foreach (var marketEvent in _eventQueue.GetConsumingEnumerable(cancellationToken))
-            {
-                try
-                {
-                    OnMarketData(marketEvent);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error in {ConsumerName} while processing event for InstrumentId {InstrumentId}.", ConsumerName, marketEvent.InstrumentId);
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // This is expected on shutdown.
+            // The logic from the old ProcessEventQueue is now here.
+            OnMarketData(data);
         }
         catch (Exception ex)
         {
-            _logger.LogErrorWithCaller(ex, $"{ConsumerName} processing thread terminated unexpectedly.");
+            _logger.LogErrorWithCaller(ex, $"Error in {ConsumerName} while processing event for InstrumentId {data.InstrumentId}.");
         }
-        _logger.LogInformationWithCaller($"{ConsumerName} processing thread stopped.");
     }
 
     /// <summary>
