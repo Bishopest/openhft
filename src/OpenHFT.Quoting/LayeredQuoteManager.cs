@@ -205,7 +205,7 @@ public sealed class LayeredQuoteManager : IDisposable
             var newInnerPrice = Price.FromDecimal(mostInnerPrice.ToDecimal() + signedInterval);
             await ReplaceOrderAndUpdateStateAsync(outerOrder, newInnerPrice, cancellationToken);
         }
-        else
+        else if (signedQuotePriceDec < mostInnerPrice.ToDecimal() * direction)
         {
             var newOuterPrice = Price.FromDecimal(mostOuterPrice.ToDecimal() - signedInterval);
             await ReplaceOrderAndUpdateStateAsync(innerOrder, newOuterPrice, cancellationToken);
