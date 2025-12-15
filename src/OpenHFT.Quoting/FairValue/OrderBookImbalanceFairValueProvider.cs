@@ -111,9 +111,7 @@ public class OrderBookImbalanceFairValueProvider : AbstractFairValueProvider, IO
 
         // 5. Calculate the imbalance-adjusted fair price.
         // This is a weighted average of the best bid and ask prices.
-        var fairPriceDecimal = (bestAskPrice.ToDecimal() * imbalanceRatio) +
-                               (bestBidPrice.ToDecimal() * (1.0m - imbalanceRatio));
-
+        var fairPriceDecimal = lowerBound + (upperBound - lowerBound) * imbalanceRatio;
         return Price.FromDecimal(fairPriceDecimal);
     }
 }
