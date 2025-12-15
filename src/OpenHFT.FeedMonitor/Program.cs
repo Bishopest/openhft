@@ -112,16 +112,18 @@ public class Program
                         switch (exchange)
                         {
                             case ExchangeEnum.BINANCE:
-                                services.AddSingleton<BaseRestApiClient, BinanceRestApiClient>(provider => new BinanceRestApiClient(
+                                services.AddSingleton<BinanceRestApiClient>(provider => new BinanceRestApiClient(
                                     provider.GetRequiredService<ILogger<BinanceRestApiClient>>(),
                                     provider.GetRequiredService<IInstrumentRepository>(),
                                     provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BinanceRestApiClient)),
                                     productType,
                                     executionConfig.Api));
                                 services.AddSingleton<IFeedAdapter>(provider => new BinanceAdapter(
-                                    provider.GetRequiredService<ILogger<BinanceAdapter>>(), productType,
+                                    provider.GetRequiredService<ILogger<BinanceAdapter>>(),
+                                    productType,
                                     provider.GetRequiredService<IInstrumentRepository>(),
-                                    executionConfig.Feed
+                                    executionConfig.Feed,
+                                    provider.GetRequiredService<BinanceRestApiClient>()
                                 ));
                                 break;
                             case ExchangeEnum.BITMEX:

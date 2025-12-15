@@ -102,7 +102,7 @@ public class BinanceTopic : ExchangeTopic
     // Static properties to access topics like an enum
     public static BinanceTopic AggTrade { get; } = new("aggTrade", "@aggTrade", "AggTrade");
     public static BinanceTopic BookTicker { get; } = new("bookTicker", "@bookTicker", "BookTicker");
-    public static BinanceTopic DepthUpdate { get; } = new("depthUpdate", "@depth20@100ms", "DepthUpdate");
+    public static BinanceTopic DepthUpdate { get; } = new("depthUpdate", "@depth@100ms", "DepthUpdate");
 
     public override ExchangeEnum Exchange => ExchangeEnum.BINANCE;
     private static readonly Lazy<IEnumerable<BinanceTopic>> _allTopics = new(() =>

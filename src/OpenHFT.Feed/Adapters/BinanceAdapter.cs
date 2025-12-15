@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -19,19 +20,21 @@ namespace OpenHFT.Feed.Adapters;
 /// </summary>
 public class BinanceAdapter : BaseAuthFeedAdapter
 {
-    private readonly BinanceRestApiClient _restApiClient;
+    private readonly BinanceRestApiClient _apiClient;
+    private readonly ConcurrentDictionary<int, BinanceBookManager> _bookManagers = new();
     private string _listenKey;
     public override ExchangeEnum SourceExchange => ExchangeEnum.BINANCE;
 
-    public BinanceAdapter(ILogger<BinanceAdapter> logger, ProductType type, IInstrumentRepository instrumentRepository, ExecutionMode executionMode) : base(logger, type, instrumentRepository, executionMode)
+    public BinanceAdapter(ILogger<BinanceAdapter> logger, ProductType type, IInstrumentRepository instrumentRepository, ExecutionMode executionMode, BinanceRestApiClient apiClient) : base(logger, type, instrumentRepository, executionMode)
     {
+        _apiClient = apiClient;
     }
 
     protected override async Task DoAuthenticateAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformationWithCaller("Requesting a new listen key from Binance REST API...");
 
-        var listenKeyResponse = await _restApiClient.CreateListenKeyAsync(ProdType, cancellationToken);
+        var listenKeyResponse = await _apiClient.CreateListenKeyAsync(ProdType, cancellationToken);
         _listenKey = listenKeyResponse.ListenKey;
 
         _logger.LogInformationWithCaller("Successfully obtained listen key from Binance.");
@@ -153,7 +156,7 @@ public class BinanceAdapter : BaseAuthFeedAdapter
         OnMarketDataReceived(bookTickerEvent);
     }
 
-    private void ProcessDepthUpdate(JsonElement data)
+    private void ProcessPartialDepthUpdate(JsonElement data)
     {
         var symbol = data.GetProperty("s").GetString();
         if (symbol == null)
@@ -231,6 +234,25 @@ public class BinanceAdapter : BaseAuthFeedAdapter
                     ));
     }
 
+    private void ProcessDepthUpdate(JsonElement data)
+    {
+        var symbol = data.GetProperty("s").GetString();
+        if (string.IsNullOrEmpty(symbol)) return;
+
+        var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
+        if (instrument == null) return;
+
+        // Route the update to the correct book manager.
+        if (_bookManagers.TryGetValue(instrument.InstrumentId, out var bookManager))
+        {
+            bookManager.ProcessWsUpdate(data);
+        }
+        else
+        {
+            // This can happen if a message arrives before the subscription process is complete.
+            _logger.LogWarningWithCaller($"Received depth update for {symbol} but book manager is not yet ready. Message will be dropped.");
+        }
+    }
     protected override string GetBaseUrl()
     {
         var baseUrl = ProdType switch
@@ -258,6 +280,12 @@ public class BinanceAdapter : BaseAuthFeedAdapter
             // Subscription response, ignore it.
             if (root.TryGetProperty("result", out _) || root.TryGetProperty("id", out _))
             {
+                // Start the sync process in the background for each instrument.
+                foreach (var instrument in _bookManagers.Keys)
+                {
+                    var bookManager = _bookManagers[instrument];
+                    _ = bookManager.StartSyncAsync(CancellationToken.None);
+                }
                 return;
             }
 
@@ -303,8 +331,23 @@ public class BinanceAdapter : BaseAuthFeedAdapter
         return reader.ReadToEnd();
     }
 
-    protected override Task DoSubscribeAsync(IDictionary<Instrument, List<ExchangeTopic>> subscriptions, CancellationToken cancellationToken)
+    protected override async Task DoSubscribeAsync(IDictionary<Instrument, List<ExchangeTopic>> subscriptions, CancellationToken cancellationToken)
     {
+        var depthUpdateTopic = subscriptions
+            .SelectMany(kvp => kvp.Value)
+            .FirstOrDefault(t => t == BinanceTopic.DepthUpdate);
+
+        if (depthUpdateTopic != null)
+        {
+            foreach (var instrument in subscriptions.Keys)
+            {
+                var bookManager = _bookManagers.GetOrAdd(instrument.InstrumentId,
+                    _ => new BinanceBookManager(_logger, _apiClient, instrument.InstrumentId, OnMarketDataReceived));
+
+
+            }
+        }
+
         var allStreams = subscriptions
             .SelectMany(kvp =>
             {
@@ -317,7 +360,7 @@ public class BinanceAdapter : BaseAuthFeedAdapter
 
         if (!allStreams.Any())
         {
-            return Task.CompletedTask;
+            return;
         }
 
         var subscribeMessage = JsonSerializer.Serialize(new
@@ -328,11 +371,17 @@ public class BinanceAdapter : BaseAuthFeedAdapter
         });
 
         _logger.LogInformationWithCaller($"Sending Binance subscribe request: {string.Join(", ", allStreams)}");
-        return SendMessageAsync(subscribeMessage, cancellationToken);
+        await SendMessageAsync(subscribeMessage, cancellationToken);
+
     }
 
     protected override Task DoUnsubscribeAsync(IDictionary<Instrument, List<ExchangeTopic>> subscriptions, CancellationToken cancellationToken)
     {
+        foreach (var instrument in subscriptions.Keys)
+        {
+            _bookManagers.TryRemove(instrument.InstrumentId, out _);
+        }
+
         var allStreams = subscriptions
             .SelectMany(kvp =>
             {

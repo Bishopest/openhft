@@ -80,7 +80,7 @@ public class FeedMonitor : BaseMarketDataConsumer
                 {
                     if (data.Timestamp != lastSequence.ts)
                     {
-                        if (data.PrevSequence != lastSequence.seq)
+                        if (data.PrevSequence <= lastSequence.seq)
                         {
                             _logger.LogWarningWithCaller($"Sequence gap detected for {exchange}/{productType}/{instrument.Symbol}: expected {lastSequence.seq}, received {data.PrevSequence}");
                             stats.RecordSequenceGap();

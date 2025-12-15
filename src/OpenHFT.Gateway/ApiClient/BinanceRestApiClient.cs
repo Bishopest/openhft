@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -119,13 +120,27 @@ public class BinanceRestApiClient : BaseRestApiClient
     public BinanceRestApiClient(ILogger<BinanceRestApiClient> logger, IInstrumentRepository instrumentRepository, HttpClient httpClient, ProductType productType, ExecutionMode mode)
         : base(logger, instrumentRepository, httpClient, productType, mode) { }
 
-    public async Task<BinanceDepthSnapshot> GetDepthSnapshotAsync(string symbol, int limit = 20, CancellationToken cancellationToken = default)
+    public async Task<BinanceDepthSnapshot> GetDepthSnapshotAsync(int instrumentId, int limit = 20, CancellationToken cancellationToken = default)
     {
-        var endpoint = $"/fapi/v1/depth?symbol={symbol.ToUpper()}&limit={limit}";
+        var instrument = _instrumentRepository.GetById(instrumentId);
+        if (instrument == null)
+        {
+            var msg = $"Invalid instrument id for depth snapshot request: {instrumentId}";
+            _logger.LogWarningWithCaller(msg);
+            throw new NoNullAllowedException(msg);
+        }
+
+        var endPointVer = ProdType switch
+        {
+            ProductType.PerpetualFuture => "/fapi/v1/depth",
+            ProductType.Spot => "/api/v3/depth",
+            _ => "/fapi/v3/depth"
+        };
+        var endpoint = $"{endPointVer}?symbol={instrument.Symbol.ToUpper()}&limit={limit}";
         var result = await SendRequestAsync<BinanceDepthSnapshot>(HttpMethod.Get, endpoint, cancellationToken: cancellationToken);
         if (!result.IsSuccess)
         {
-            _logger.LogWarningWithCaller($"Failed to get depth snapshot for {symbol}: {result.Error.Message}");
+            _logger.LogWarningWithCaller($"Failed to get depth snapshot for {instrument.Symbol}: {result.Error.Message}");
             throw result.Error;
         }
 
