@@ -67,6 +67,16 @@ public partial class Home : ComponentBase, IDisposable
     {
         if (_isDisposed) return;
         _activeInstances = OrderCache.GetAllActiveInstances().ToList();
+        if (_quotingController != null && _selectedInstance != null)
+        {
+            var selectedInstance = _activeInstances.FirstOrDefault(i => i.InstrumentId == _selectedInstance.InstrumentId && i.OmsIdentifier == _selectedInstance.OmsIdentifier);
+            if (selectedInstance != null)
+            {
+                var serverConfig = Configuration.GetSection("oms").Get<List<OmsServerConfig>>()?
+                                                .FirstOrDefault(s => s.OmsIdentifier == selectedInstance.OmsIdentifier);
+                await _quotingController.UpdateParametersAsync(selectedInstance.Parameters, serverConfig);
+            }
+        }
         await InvokeAsync(StateHasChanged);
     }
 
