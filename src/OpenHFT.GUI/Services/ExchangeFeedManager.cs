@@ -8,6 +8,7 @@ using OpenHFT.Core.Utils;
 using OpenHFT.Feed.Adapters;
 using OpenHFT.Feed.Interfaces;
 using OpenHFT.Feed.Models;
+using OpenHFT.Gateway.ApiClient;
 
 namespace OpenHFT.GUI.Services;
 
@@ -91,7 +92,13 @@ public class ExchangeFeedManager : IExchangeFeedManager, IAsyncDisposable
                     _serviceProvider.GetRequiredService<ILogger<BinanceAdapter>>(),
                     productType,
                     _instrumentRepository,
-                    config.ExecutionMode
+                    config.ExecutionMode,
+                    new BinanceRestApiClient(
+                        _serviceProvider.GetRequiredService<ILogger<BinanceRestApiClient>>(),
+                        _instrumentRepository,
+                        _serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BinanceRestApiClient)),
+                        productType,
+                        config.ExecutionMode)
                 ),
                 ExchangeEnum.BITMEX => new BitmexAdapter(
                     _serviceProvider.GetRequiredService<ILogger<BitmexAdapter>>(),
