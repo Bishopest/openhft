@@ -181,7 +181,7 @@ public class Program
                         switch (exchange)
                         {
                             case ExchangeEnum.BINANCE:
-                                services.AddSingleton<BaseRestApiClient, BinanceRestApiClient>(provider => new BinanceRestApiClient(
+                                services.AddSingleton<BinanceRestApiClient>(provider => new BinanceRestApiClient(
                                     provider.GetRequiredService<ILogger<BinanceRestApiClient>>(),
                                     provider.GetRequiredService<IInstrumentRepository>(),
                                     provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BinanceRestApiClient)),
