@@ -312,55 +312,66 @@ public sealed class LayeredQuoteManager : IDisposable
     /// </summary>
     private async Task ReplaceOrderAndUpdateStateAsync(IOrder orderToReplace, Price newPrice, CancellationToken cancellationToken)
     {
-        Price oldPrice = orderToReplace.Price;
-
-        // Check for price duplication before sending the request.
+        // --- Phase 1: Pre-flight checks and state capture ---
+        Price oldPrice;
         lock (_stateLock)
         {
+            var entry = _activeOrders.FirstOrDefault(kvp => ReferenceEquals(kvp.Value, orderToReplace));
+            if (entry.Value is null)
+            {
+                _logger.LogWarningWithCaller($"({_side}) Order {orderToReplace.ClientOrderId} to be replaced no longer exists in the active list. Aborting replace.");
+                return;
+            }
+            oldPrice = entry.Key;
+
             if (_activeOrders.ContainsKey(newPrice))
             {
-                _logger.LogWarningWithCaller($"({_side}) Cannot replace order to price {newPrice} because an order already exists at that level. Cancelling the moving order instead.");
-                // If the target price is already occupied, the simplest recovery is to cancel the moving order.
-                _ = orderToReplace.CancelAsync(cancellationToken);
+                _logger.LogWarningWithCaller($"({_side}) Cannot replace to price {newPrice} as an order already exists. Cancelling moving order {orderToReplace.ClientOrderId}.");
+                _ = orderToReplace.CancelAsync(cancellationToken); // Fire-and-forget cancel
                 return;
             }
         }
 
+        // --- Phase 2: API Call ---
         try
         {
-            // The API call is made outside the lock.
             await orderToReplace.ReplaceAsync(newPrice, OrderType.Limit, cancellationToken);
 
-            if (orderToReplace.Price != newPrice)
-            {
-                return;
-            }
-
-            // After the API call succeeds, update the internal state.
+            // --- Phase 3: State Update (only on success) ---
             lock (_stateLock)
             {
-                // 1. Remove the old price entry from both collections.
+                if (!_activeOrders.ContainsKey(oldPrice) || !ReferenceEquals(_activeOrders[oldPrice], orderToReplace))
+                {
+                    _logger.LogWarningWithCaller($"({_side}) Order {orderToReplace.ClientOrderId} was removed from active list during a replace operation. State update aborted.");
+                    return;
+                }
+
+                // 1. Remove the old price entry.
                 _activeOrders.Remove(oldPrice);
                 _sortedPrices.Remove(oldPrice);
 
                 // 2. Add the new price entry.
-                _activeOrders[newPrice] = orderToReplace;
-                _sortedPrices.Add(newPrice);
+                // in case of not replaced order, clarify actual price of the order supposing that it received rest api response.
+                var validNewPrice = orderToReplace.Price;
+                _activeOrders[validNewPrice] = orderToReplace;
+                _sortedPrices.Add(validNewPrice);
 
-                // 3. Re-sort the price list to maintain the inner-to-outer order.
+                // 3. Re-sort the price list.
                 _sortedPrices.Sort(_side == Side.Buy ? (p1, p2) => p2.CompareTo(p1) : (p1, p2) => p1.CompareTo(p2));
 
-                _logger.LogDebug("({Side}) Successfully replaced order from {OldPrice} to {NewPrice}.",
-                    _side, oldPrice, newPrice);
+                _logger.LogDebug("({Side}) Internal state updated for replace from {OldPrice} to {NewPrice}.",
+                    _side, oldPrice, validNewPrice);
             }
         }
         catch (OperationCanceledException)
         {
-            _logger.LogWarningWithCaller($"({_side}) Replace order request from {oldPrice} to {newPrice} was superseded.");
+            _logger.LogWarningWithCaller($"({_side}) Replace request from {oldPrice} to {newPrice} was superseded by throttling gateway. No state change needed.");
+            // The Order object's state will be reverted internally. Our collections were not changed, so we are consistent.
         }
         catch (Exception ex)
         {
-            _logger.LogErrorWithCaller(ex, $"({_side}) Failed to replace order from {oldPrice} to {newPrice}. The order state might be inconsistent.");
+            _logger.LogErrorWithCaller(ex, $"({_side}) API call to replace order from {oldPrice} to {newPrice} failed.");
+            // The Order object's state will be reverted internally. Our collections were not changed, so we are consistent.
         }
     }
 
@@ -395,14 +406,33 @@ public sealed class LayeredQuoteManager : IDisposable
     {
         lock (_stateLock)
         {
-            var order = _activeOrders.Values.FirstOrDefault(o => o.ClientOrderId == finalReport.ClientOrderId);
-            if (order == null) return;
+            var entryToRemove = _activeOrders
+                .FirstOrDefault(kvp => kvp.Value.ClientOrderId == finalReport.ClientOrderId);
 
-            if (_activeOrders.Remove(order.Price) && _sortedPrices.Remove(order.Price))
+            // If the KeyValuePair's key is null (i.e., not found), it means the order is not in our dictionary.
+            // This is equivalent to `default(KeyValuePair<...>)` for structs.
+            if (entryToRemove.Value is null)
             {
-                _logger.LogInformationWithCaller($"({_side}) Order {finalReport.ClientOrderId} at {order.Price} reached terminal state {finalReport.Status}. Clearing.");
-                order.RemoveStatusChangedHandler(OnOrderStatusChanged);
-                order.RemoveFillHandler(OnOrderFilled);
+                _logger.LogWarningWithCaller($"({_side}) Received a terminal report for Order {finalReport.ClientOrderId}, but it was not found in the active list. It might have been cleared already.");
+                return;
+            }
+
+            Price keyPrice = entryToRemove.Key;
+            IOrder orderObject = entryToRemove.Value;
+
+            if (_activeOrders.Remove(keyPrice))
+            {
+                _sortedPrices.Remove(keyPrice);
+                _logger.LogInformationWithCaller($"({_side}) Order {orderObject.ClientOrderId} at key-price {keyPrice} reached terminal state {finalReport.Status}. Clearing from manager.");
+                orderObject.RemoveStatusChangedHandler(OnOrderStatusChanged);
+                orderObject.RemoveFillHandler(OnOrderFilled);
+            }
+            else
+            {
+                // This case should be extremely rare, as we just found the key.
+                // It could only happen if another thread removed the item between the Find and Remove calls,
+                // but the lock prevents this. This log is for sanity checking.
+                _logger.LogWarningWithCaller($"({_side}) CRITICAL ERROR: Found order {orderObject.ClientOrderId} with key {keyPrice} but failed to remove it from the dictionary. Concurrency issue suspected despite lock.");
             }
         }
     }
