@@ -113,7 +113,7 @@ public class Program
                 services.AddSingleton<IOrderUpdateHandler, OrderUpdateDistributor>();
                 services.AddSingleton(provider =>
                 {
-                    var disruptor = new Disruptor<MarketDataEventWrapper>(() => new MarketDataEventWrapper(), 1024);
+                    var disruptor = new Disruptor<MarketDataEventWrapper>(() => new MarketDataEventWrapper(), 65536);
                     disruptor.HandleEventsWith(provider.GetRequiredService<MarketDataDistributor>());
                     return disruptor;
                 });
