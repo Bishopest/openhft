@@ -79,21 +79,15 @@ public class FeedHandler : IFeedHandler
     {
         try
         {
-            if (_ringBuffer.TryNext(out long sequence))
+            long sequence = _ringBuffer.Next();
+            try
             {
-                try
-                {
-                    var wrapper = _ringBuffer[sequence];
-                    wrapper.SetData(marketDataEvent);
-                }
-                finally
-                {
-                    _ringBuffer.Publish(sequence);
-                }
+                var wrapper = _ringBuffer[sequence];
+                wrapper.SetData(marketDataEvent);
             }
-            else
+            finally
             {
-                _logger.LogWarningWithCaller($"Disruptor ring buffer is full. Dropping market data for SymbolId {marketDataEvent.InstrumentId}. This indicates the consumer is too slow or has stalled.");
+                _ringBuffer.Publish(sequence);
             }
         }
         catch (Exception ex)
