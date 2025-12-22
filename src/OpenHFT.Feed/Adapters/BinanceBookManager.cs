@@ -18,12 +18,14 @@ public class BinanceBookManager
 {
     private readonly ILogger _logger;
     private readonly BinanceRestApiClient _apiClient;
+    private readonly bool _isDerivatives = false;
     private readonly int _instrumentId;
     private readonly Action<MarketDataEvent> _eventDispatcher;
     private readonly ConcurrentQueue<JsonElement> _eventBuffer = new();
     private readonly object _syncLock = new();
     private long _lastUpdateId = -1;
     private volatile bool _isSnapshotLoaded = false;
+    private volatile bool _isFirstEventProcessed = false;
 
     public BinanceBookManager(ILogger logger, BinanceRestApiClient apiClient, int instrumentId, Action<MarketDataEvent> eventDispatcher)
     {
@@ -31,6 +33,7 @@ public class BinanceBookManager
         _apiClient = apiClient;
         _instrumentId = instrumentId;
         _eventDispatcher = eventDispatcher;
+        _isDerivatives = apiClient.ProdType != ProductType.Spot;
     }
 
     /// <summary>
@@ -40,6 +43,7 @@ public class BinanceBookManager
     {
         _logger.LogInformationWithCaller($"Starting order book sync for {_instrumentId}...");
         _isSnapshotLoaded = false;
+        _isFirstEventProcessed = false;
         _lastUpdateId = -1;
         while (!_eventBuffer.IsEmpty) _eventBuffer.TryDequeue(out _);
 
@@ -70,48 +74,67 @@ public class BinanceBookManager
             var snapshotUpdateId = snapshot.LastUpdateId;
             _logger.LogDebug($"Fetched snapshot for {_instrumentId} with lastUpdateId: {snapshotUpdateId}");
 
-            // --- MODIFICATION: Entire validation and initial processing is now under a lock ---
             lock (_syncLock)
             {
-                // Discard any buffered events that are older than our new snapshot.
-                while (_eventBuffer.TryPeek(out var bufferedEvent) && bufferedEvent.GetProperty("u").GetInt64() <= snapshotUpdateId)
+                if (_isDerivatives)
                 {
-                    _eventBuffer.TryDequeue(out _);
-                }
-
-                // Now, check the first event in the (cleaned) buffer.
-                if (_eventBuffer.TryPeek(out var firstEvent))
-                {
-                    var U = firstEvent.GetProperty("U").GetInt64();
-                    if (U > snapshotUpdateId + 1)
+                    // [Derivatives] u < lastUpdateId 인 이벤트는 모두 버림
+                    while (_eventBuffer.TryPeek(out var bEvent) && bEvent.GetProperty("u").GetInt64() < snapshotUpdateId)
                     {
-                        // Gap detected. Snapshot is stale. We need to refetch.
-                        // We do this by simply returning. The background task will try again.
-                        _logger.LogWarningWithCaller($"Gap detected between snapshot ({snapshotUpdateId}) and first buffered event ({U}). Aborting this sync attempt to refetch.");
-                        // Start a new fetch task in the background without awaiting
-                        _ = Task.Run(() => FetchAndApplySnapshotAsync(cancellationToken), cancellationToken);
-                        return; // Exit this attempt
+                        _eventBuffer.TryDequeue(out _);
+                    }
+
+                    // [Derivatives] 첫 이벤트 조건: U <= lastUpdateId AND u >= lastUpdateId
+                    if (_eventBuffer.TryPeek(out var firstEvent))
+                    {
+                        var U = firstEvent.GetProperty("U").GetInt64();
+                        var u = firstEvent.GetProperty("u").GetInt64();
+
+                        if (!(U <= snapshotUpdateId && u >= snapshotUpdateId))
+                        {
+                            _logger.LogWarningWithCaller($"[Derivatives] Gap detected. Snapshot ID {snapshotUpdateId} not covered by first event [U:{U}, u:{u}]. Refetching...");
+                            _ = Task.Run(() => StartSyncAsync(cancellationToken));
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogDebug("Event buffer empty after filtering. Waiting for more events.");
+                        _ = Task.Run(() => StartSyncAsync(cancellationToken));
+                        return;
+                    }
+                }
+                else
+                {
+                    // [Spot] u <= lastUpdateId 인 이벤트는 모두 버림
+                    while (_eventBuffer.TryPeek(out var bEvent) && bEvent.GetProperty("u").GetInt64() <= snapshotUpdateId)
+                    {
+                        _eventBuffer.TryDequeue(out _);
+                    }
+
+                    if (_eventBuffer.TryPeek(out var firstEvent))
+                    {
+                        var U = firstEvent.GetProperty("U").GetInt64();
+                        if (U > snapshotUpdateId + 1)
+                        {
+                            _logger.LogWarningWithCaller($"[Spot] Gap detected. Snapshot: {snapshotUpdateId}, First Event U: {U}. Refetching...");
+                            _ = Task.Run(() => StartSyncAsync(cancellationToken));
+                            return;
+                        }
                     }
                 }
 
-                // If we are here, the snapshot is valid against the current buffer.
-
-                // 1. Dispatch the snapshot.
+                // 스냅샷 적용
                 DispatchSnapshot(snapshot);
                 _lastUpdateId = snapshotUpdateId;
 
-                // 2. Process all valid buffered events immediately.
-                _logger.LogInformationWithCaller($"Snapshot for {_instrumentId} applied. Processing {_eventBuffer.Count} buffered events.");
                 while (_eventBuffer.TryDequeue(out var bufferedEvent))
                 {
-                    // Here we directly dispatch, assuming they are now valid.
-                    // A stricter check could be added inside the loop too.
-                    DispatchUpdate(bufferedEvent);
+                    ValidateAndDispatchUpdate(bufferedEvent);
                 }
 
-                // 3. ONLY NOW, after snapshot and buffer are cleared, we declare sync complete.
                 _isSnapshotLoaded = true;
-                _logger.LogInformationWithCaller($"Sync for {_instrumentId} complete. Live processing will now resume.");
+                _logger.LogInformationWithCaller($"Sync for {_instrumentId} complete.");
             }
             // --- End of lock ---
         }
@@ -126,16 +149,41 @@ public class BinanceBookManager
         long u = data.GetProperty("u").GetInt64();
         long U = data.GetProperty("U").GetInt64();
 
-        if (u <= _lastUpdateId)
-        {
-            return; // Ignore old event
-        }
+        // 1. 이미 처리된 이전 데이터는 무시
+        if (u <= _lastUpdateId) return;
 
-        if (U > _lastUpdateId + 1)
+        // 2. Gap Detection
+        if (_isDerivatives)
         {
-            _logger.LogWarningWithCaller($"GAP DETECTED during live processing for {_instrumentId}. Triggering resync.");
-            _ = StartSyncAsync(CancellationToken.None);
-            return;
+            // [Derivatives] pu(Previous Update ID) 필드 확인
+            if (data.TryGetProperty("pu", out var puElement))
+            {
+                long pu = puElement.GetInt64();
+
+                if (!_isFirstEventProcessed)
+                {
+                    _isFirstEventProcessed = true;
+                }
+                else
+                {
+                    if (pu != _lastUpdateId)
+                    {
+                        _logger.LogWarningWithCaller($"[Derivatives] GAP: pu({pu}) != lastUpdateId({_lastUpdateId}) for {_instrumentId}. Resyncing...");
+                        _ = StartSyncAsync(CancellationToken.None);
+                        return;
+                    }
+                }
+            }
+        }
+        else
+        {
+            // [Spot] U == lastUpdateId + 1 확인
+            if (U > _lastUpdateId + 1)
+            {
+                _logger.LogWarningWithCaller($"[Spot] GAP: U({U}) > lastUpdateId({_lastUpdateId}) + 1 for {_instrumentId}. Resyncing...");
+                _ = StartSyncAsync(CancellationToken.None);
+                return;
+            }
         }
 
         DispatchUpdate(data);
@@ -160,6 +208,7 @@ public class BinanceBookManager
         // Process all levels in chunks of 40 (the size of PriceLevelEntryArray).
         for (int chunkStart = 0; chunkStart < allLevels.Count; chunkStart += 40)
         {
+            bool isLastChunk = (chunkStart + 40) >= allLevels.Count;
             var updatesArray = new PriceLevelEntryArray();
 
             // Determine the size of the current chunk.
@@ -182,7 +231,8 @@ public class BinanceBookManager
                 0, // Snapshots don't have a PrevSequence
                 BinanceTopic.DepthUpdate.TopicId,
                 chunkSize,
-                updatesArray
+                updatesArray,
+                isLastChunk
             );
 
             _eventDispatcher(marketEvent);
@@ -234,6 +284,8 @@ public class BinanceBookManager
                 updatesArray[i] = allUpdates[chunkStart + i];
             }
 
+            bool isLastChunk = (chunkStart + 40) >= allUpdates.Count;
+
             // Create a MarketDataEvent for the current chunk.
             // All chunks from a single WebSocket message share the same sequence info (U and u).
             var marketEvent = new MarketDataEvent(
@@ -245,7 +297,8 @@ public class BinanceBookManager
                 U,           // PrevSequence is 'U' (the first update ID of the whole message)
                 BinanceTopic.DepthUpdate.TopicId,
                 chunkSize,
-                updatesArray
+                updatesArray,
+                isLastChunk
             );
 
             _eventDispatcher(marketEvent);
