@@ -67,19 +67,22 @@ public class OrderBookConsumer : BaseMarketDataConsumer
         // Apply the event to our internal order book.
         _orderBook.ApplyEvent(data);
         // Notify all subscribers (strategies) that the book has changed.
-        if (!_subscribers.IsEmpty)
+        if (data.IsLastInBatch)
         {
-            foreach (var subscriber in _subscribers.Values)
+            if (!_subscribers.IsEmpty)
             {
-                try
+                foreach (var subscriber in _subscribers.Values)
                 {
-                    // Invoke the callback. We pass 'this' as sender and the updated book as args.
-                    subscriber.Invoke(this, _orderBook);
-                }
-                catch (Exception ex)
-                {
-                    // A single subscriber's error should not stop others.
-                    _logger.LogErrorWithCaller(ex, $"An error occurred in a subscriber callback for {_instrument.Symbol}.");
+                    try
+                    {
+                        // Invoke the callback. We pass 'this' as sender and the updated book as args.
+                        subscriber.Invoke(this, _orderBook);
+                    }
+                    catch (Exception ex)
+                    {
+                        // A single subscriber's error should not stop others.
+                        _logger.LogErrorWithCaller(ex, $"An error occurred in a subscriber callback for {_instrument.Symbol}.");
+                    }
                 }
             }
         }

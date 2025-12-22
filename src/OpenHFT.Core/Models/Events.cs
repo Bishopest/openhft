@@ -48,10 +48,12 @@ public readonly struct MarketDataEvent
     public readonly ExchangeEnum SourceExchange;
     public readonly int TopicId;        // Identifier for the source topic (e.g., AggTrade, DepthUpdate)
     public readonly int UpdateCount;
+    // A flag to indicate if this is the last event in a logical batch.
+    public readonly bool IsLastInBatch;
     public readonly PriceLevelEntryArray Updates;
 
     public MarketDataEvent(long sequence, long timestamp, EventKind kind, int instrumentId, ExchangeEnum exchange,
-                          long prevSequence = 0, int topicId = 0, int updateCount = 0, PriceLevelEntryArray updates = default)
+                          long prevSequence = 0, int topicId = 0, int updateCount = 0, PriceLevelEntryArray updates = default, bool isLastInBatch = true)
     {
         Sequence = sequence;
         Timestamp = timestamp;
@@ -61,6 +63,7 @@ public readonly struct MarketDataEvent
         PrevSequence = prevSequence;
         TopicId = topicId;
         UpdateCount = updateCount;
+        IsLastInBatch = isLastInBatch;
         Updates = updates;
     }
 
