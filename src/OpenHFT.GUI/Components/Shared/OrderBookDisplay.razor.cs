@@ -20,6 +20,8 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
     // --- Dependencies ---
     // Services are injected here using the [Inject] attribute.
     [Inject]
+    private IFxRateService FxRateService { get; set; } = default!;
+    [Inject]
     private IOrderBookManager OrderBookManager { get; set; } = default!;
     [Inject]
     private IJSRuntime JSRuntime { get; set; } = default!;
@@ -68,8 +70,10 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
             {
                 var ask = _myCurrentQuote.Value.Ask.Value;
                 // Formula: Price * Size * Multiplier
-                var value = ask.Price.ToDecimal() * ask.Size.ToDecimal() * future.Multiplier;
-                return ((long)value).ToString("N0"); // Format as a whole number with commas
+                // var value = ask.Price.ToDecimal() * ask.Size.ToDecimal() * future.Multiplier;
+                var valueAmount = DisplayInstrument.ValueInDenominationCurrency(ask.Price, ask.Size);
+                var usdtAmount = FxRateService.Convert(valueAmount, Currency.USDT) ?? valueAmount;
+                return ((long)usdtAmount.Amount).ToString("N0"); // Format as a whole number with commas
             }
 
             return null; // Not a future, so no value to display
@@ -90,8 +94,9 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
             if (DisplayInstrument is CryptoPerpetual future)
             {
                 var bid = _myCurrentQuote.Value.Bid.Value;
-                var value = bid.Price.ToDecimal() * bid.Size.ToDecimal() * future.Multiplier;
-                return ((long)value).ToString("N0");
+                var valueAmount = DisplayInstrument.ValueInDenominationCurrency(bid.Price, bid.Size);
+                var usdtAmount = FxRateService.Convert(valueAmount, Currency.USDT) ?? valueAmount;
+                return ((long)usdtAmount.Amount).ToString("N0");
             }
 
             return null;

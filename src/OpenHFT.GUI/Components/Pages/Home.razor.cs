@@ -143,6 +143,28 @@ public partial class Home : ComponentBase, IDisposable
         if (_subscribedInstrumentIds.Add(_selectedInstance.InstrumentId))
         {
             await FeedManager.SubscribeToInstrumentAsync(_selectedInstance.InstrumentId);
+            var feedInst = InstrumentRepository.GetById(_selectedInstance.InstrumentId);
+            if (feedInst is not null && feedInst.DenominationCurrency == Currency.BTC)
+            {
+                Logger.LogInformationWithCaller($"Instrument {feedInst.Symbol} requires BTC/USDT rate. Ensuring reference feed is subscribed");
+
+                // Find the reference instrument used by FxRateManager.
+                var referenceInstrument = InstrumentRepository.GetAll().FirstOrDefault(i =>
+                    i.SourceExchange == GuiFxRateManager.ReferenceExchange &&
+                    i.ProductType == GuiFxRateManager.ReferenceProductType &&
+                    i.BaseCurrency == Currency.BTC &&
+                    i.QuoteCurrency == Currency.USDT);
+
+                if (referenceInstrument == null)
+                {
+                    Logger.LogWarningWithCaller("Could not find the reference BTC/USDT instrument for FX rate conversion.");
+                }
+
+                if (_subscribedInstrumentIds.Add(referenceInstrument.InstrumentId))
+                {
+                    await FeedManager.SubscribeToInstrumentAsync(referenceInstrument.InstrumentId);
+                }
+            }
         }
 
         if (_quotingController != null)

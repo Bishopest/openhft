@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using OpenHFT.Core.Configuration;
 using Microsoft.Extensions.Options;
+using OpenHFT.Feed;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +27,7 @@ builder.Services.AddSingleton(jsonOptions);
 builder.Services.AddSingleton<IOrderCacheService, OrderCacheService>();
 builder.Services.AddSingleton<IBookCacheService, BookCacheService>();
 builder.Services.AddSingleton<IHedgingCacheService, HedgingCacheService>();
+builder.Services.AddSingleton<IFxRateService, GuiFxRateManager>();
 builder.Services.AddSingleton<IExchangeFeedManager, ExchangeFeedManager>();
 builder.Services.AddSingleton<IOrderBookManager, OrderBookManager>();
 builder.Services.AddSingleton<IOmsConnectorService, OmsConnectorService>();
