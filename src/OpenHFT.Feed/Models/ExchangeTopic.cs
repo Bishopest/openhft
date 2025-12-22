@@ -117,7 +117,7 @@ public class BinanceTopic : ExchangeTopic
     /// </summary>
     public static IEnumerable<BinanceTopic> GetAllMarketTopics()
     {
-        return _allTopics.Value.Where(t => t.IsSymbolSpecific);
+        return _allTopics.Value.Where(t => t.IsSymbolSpecific && t != AggTrade);
     }
 
     /// <summary>
@@ -171,7 +171,7 @@ public class BitmexTopic : ExchangeTopic
     /// </summary>
     public static IEnumerable<BitmexTopic> GetAllMarketTopics()
     {
-        return _allTopics.Value.Where(t => t.IsSymbolSpecific && t != OrderBookL2_25);
+        return _allTopics.Value.Where(t => t.IsSymbolSpecific && t != OrderBookL2_25 && t != Trade);
     }
 
     public static IEnumerable<BitmexTopic> GetAllTopics()
