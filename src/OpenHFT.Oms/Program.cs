@@ -181,52 +181,63 @@ public class Program
                         switch (exchange)
                         {
                             case ExchangeEnum.BINANCE:
-                                services.AddSingleton<BinanceRestApiClient>(provider => new BinanceRestApiClient(
+                                services.AddSingleton<BaseRestApiClient>(provider => new BinanceRestApiClient(
                                     provider.GetRequiredService<ILogger<BinanceRestApiClient>>(),
                                     provider.GetRequiredService<IInstrumentRepository>(),
-                                    provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BinanceRestApiClient)),
+                                    provider.GetRequiredService<IHttpClientFactory>().CreateClient($"{nameof(BinanceRestApiClient)}-{productType}-{executionConfig.Api}"),
                                     productType,
                                     executionConfig.Api));
-                                services.AddSingleton<IFeedAdapter>(provider => new BinanceAdapter(
-                                    provider.GetRequiredService<ILogger<BinanceAdapter>>(),
-                                    productType,
-                                    provider.GetRequiredService<IInstrumentRepository>(),
-                                    executionConfig.Feed,
-                                    provider.GetRequiredService<BinanceRestApiClient>()
-                                ));
+                                services.AddSingleton<IFeedAdapter>(provider =>
+                                    {
+                                        // We need to find the correct RestApiClient instance.
+                                        var apiClients = provider.GetRequiredService<IEnumerable<BaseRestApiClient>>();
+                                        var specificApiClient = apiClients.OfType<BinanceRestApiClient>()
+                                            .FirstOrDefault(c => c.ProdType == productType && c.ExecutionMode == executionConfig.Api);
+
+                                        if (specificApiClient == null)
+                                        {
+                                            throw new InvalidOperationException($"BinanceRestApiClient for {productType}/{executionConfig.Api} not found.");
+                                        }
+
+                                        return new BinanceAdapter(
+                                            provider.GetRequiredService<ILogger<BinanceAdapter>>(),
+                                            productType,
+                                            provider.GetRequiredService<IInstrumentRepository>(),
+                                            executionConfig.Feed,
+                                            specificApiClient);
+                                    });
                                 break;
                             case ExchangeEnum.BITMEX:
-                                services.AddSingleton<BitmexRestApiClient>(provider => new BitmexRestApiClient(
+                                services.AddSingleton<BaseRestApiClient>(provider => new BitmexRestApiClient(
                                     provider.GetRequiredService<ILogger<BitmexRestApiClient>>(),
                                     provider.GetRequiredService<IInstrumentRepository>(),
-                                    provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BitmexRestApiClient)),
+                                    provider.GetRequiredService<IHttpClientFactory>().CreateClient($"{nameof(BitmexRestApiClient)}-{productType}-{executionConfig.Api}"),
                                     productType,
-                                    executionConfig.Api, apiSecret, apiKey));
+                                    executionConfig.Api, apiSecret, apiKey
+                                ));
                                 // 1. Register the REAL gateway as its concrete type.
                                 // This instance is intended for internal use by the decorator.
-                                services.AddSingleton<BitmexOrderGateway>(provider => new BitmexOrderGateway(
-                                    provider.GetRequiredService<ILogger<BitmexOrderGateway>>(),
-                                    provider.GetRequiredService<BitmexRestApiClient>(),
-                                    provider.GetRequiredService<IInstrumentRepository>(),
-                                    productType));
-
-                                // 2. Register the IOrderGateway interface to resolve to the DECORATOR.
-                                // This is the instance that the rest of the application will use.
                                 services.AddSingleton<IOrderGateway>(provider =>
                                 {
-                                    // Get the real gateway instance that we just registered.
-                                    var realGateway = provider.GetRequiredService<BitmexOrderGateway>();
-                                    var logger = provider.GetRequiredService<ILogger<ThrottlingGatewayDecorator>>();
+                                    var apiClients = provider.GetRequiredService<IEnumerable<BaseRestApiClient>>();
+                                    var specificApiClient = apiClients.OfType<BitmexRestApiClient>()
+                                        .FirstOrDefault(c => c.ProdType == productType && c.ExecutionMode == executionConfig.Api);
+                                    if (specificApiClient == null) throw new InvalidOperationException($"BitmexRestApiClient for {productType} not found.");
 
-                                    // Define BitMEX rate limits from configuration or hardcode them.
-                                    // It's better to move these to config.json in the long run.
+                                    var realGateway = new BitmexOrderGateway(
+                                        provider.GetRequiredService<ILogger<BitmexOrderGateway>>(),
+                                        specificApiClient,
+                                        provider.GetRequiredService<IInstrumentRepository>(),
+                                        productType);
+
+                                    var logger = provider.GetRequiredService<ILogger<ThrottlingGatewayDecorator>>();
                                     var perSecondConfig = new RateLimiterConfig(Limit: 140, Window: TimeSpan.FromSeconds(1));
                                     var perMinuteConfig = new RateLimiterConfig(Limit: 1400, Window: TimeSpan.FromMinutes(1));
-
                                     return new ThrottlingGatewayDecorator(realGateway, logger, perSecondConfig, perMinuteConfig);
                                 });
                                 services.AddSingleton<IFeedAdapter>(provider => new BitmexAdapter(
-                                    provider.GetRequiredService<ILogger<BitmexAdapter>>(), productType,
+                                    provider.GetRequiredService<ILogger<BitmexAdapter>>(),
+                                    productType,
                                     provider.GetRequiredService<IInstrumentRepository>(),
                                     executionConfig.Feed
                                 ));

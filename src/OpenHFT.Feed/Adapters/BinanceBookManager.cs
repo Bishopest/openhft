@@ -70,7 +70,8 @@ public class BinanceBookManager
     {
         try
         {
-            var snapshot = await _apiClient.GetDepthSnapshotAsync(_instrumentId, 1000, cancellationToken);
+            var limit = _isDerivatives ? 1000 : 5000;
+            var snapshot = await _apiClient.GetDepthSnapshotAsync(_instrumentId, limit, cancellationToken);
             var snapshotUpdateId = snapshot.LastUpdateId;
             _logger.LogDebug($"Fetched snapshot for {_instrumentId} with lastUpdateId: {snapshotUpdateId}");
 
