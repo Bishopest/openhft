@@ -189,7 +189,7 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
                     }
                     else
                     {
-                        _logger.LogWarning("Instrument not found for {Exchange}/{ProductType}/{Symbol} during re-subscription", group.Exchange, group.ProductType, symbolName);
+                        _logger.LogWarningWithCaller($"Instrument not found for {group.Exchange}/{group.ProductType}/{symbolName} during re-subscription");
                     }
                 }
             }

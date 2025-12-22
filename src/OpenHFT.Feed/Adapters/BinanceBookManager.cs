@@ -97,12 +97,6 @@ public class BinanceBookManager
                             return;
                         }
                     }
-                    else
-                    {
-                        _logger.LogDebug("Event buffer empty after filtering. Waiting for more events.");
-                        _ = Task.Run(() => StartSyncAsync(cancellationToken));
-                        return;
-                    }
                 }
                 else
                 {
