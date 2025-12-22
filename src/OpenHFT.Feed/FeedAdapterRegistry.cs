@@ -21,13 +21,14 @@ public class FeedAdapterRegistry : IFeedAdapterRegistry
         _logger.LogInformationWithCaller($"Registered {_adapters.Count} feed adapters.");
     }
 
-    public IFeedAdapter GetAdapter(ExchangeEnum exchange, ProductType productType)
+    public IFeedAdapter? GetAdapter(ExchangeEnum exchange, ProductType productType)
     {
         if (_adapters.TryGetValue((exchange, productType), out var adapter))
         {
             return adapter;
         }
-        throw new KeyNotFoundException($"Adapter for {exchange}/{productType} not found.");
+        _logger.LogWarningWithCaller($"Adapter for {exchange}/{productType} not found.");
+        return null;
     }
 
     public IEnumerable<IFeedAdapter> GetAllAdapters()
