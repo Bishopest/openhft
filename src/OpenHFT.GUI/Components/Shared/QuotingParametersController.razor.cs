@@ -91,7 +91,8 @@ public partial class QuotingParametersController
         public decimal SkewBp { get; set; } = 0.5m;
         public decimal Size { get; set; } = 0.01m;
         public int Depth { get; set; } = 5;
-        public QuoterType Type { get; set; }
+        public QuoterType AskQuoterType { get; set; }
+        public QuoterType BidQuoterType { get; set; }
         public bool PostOnly { get; set; }
         public decimal MaxCumAskFills { get; set; } = 10000m;
         public decimal MaxCumBidFills { get; set; } = 10000m;
@@ -148,7 +149,8 @@ public partial class QuotingParametersController
         _model.SkewBp = newParameters.SkewBp;
         _model.Size = newParameters.Size.ToDecimal();
         _model.Depth = newParameters.Depth;
-        _model.Type = newParameters.Type;
+        _model.AskQuoterType = newParameters.AskQuoterType;
+        _model.BidQuoterType = newParameters.BidQuoterType;
         _model.PostOnly = newParameters.PostOnly;
         _model.MaxCumAskFills = newParameters.MaxCumAskFills.ToDecimal();
         _model.MaxCumBidFills = newParameters.MaxCumBidFills.ToDecimal();
@@ -226,7 +228,8 @@ public partial class QuotingParametersController
             _model.SkewBp,
             Quantity.FromDecimal(_model.Size), // Convert decimal to Quantity
             _model.Depth,
-            _model.Type,
+            _model.AskQuoterType,
+            _model.BidQuoterType,
             _model.PostOnly,
             Quantity.FromDecimal(_model.MaxCumBidFills),
             Quantity.FromDecimal(_model.MaxCumAskFills),

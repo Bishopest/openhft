@@ -130,6 +130,7 @@ public class QuotingEngineTests
             Quantity.FromDecimal(100),
             1,
             QuoterType.Log,
+            QuoterType.Log,
             true,
             Quantity.FromDecimal(300),
             Quantity.FromDecimal(300),
@@ -326,7 +327,7 @@ public class QuotingEngineTests
         // Arrange
         var parameters = new QuotingParameters(
             _xbtusd.InstrumentId, "test", FairValueModel.Midp, _btcusdt.InstrumentId,
-            10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true,
+            10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, QuoterType.Log, true,
             Quantity.FromDecimal(200), Quantity.FromDecimal(200), HittingLogic.AllowAll // MaxCumBidFills = 200
         );
         _engine.UpdateParameters(parameters);
@@ -358,7 +359,7 @@ public class QuotingEngineTests
         // Arrange
         var parameters = new QuotingParameters(
             _xbtusd.InstrumentId, "test", FairValueModel.Midp, _btcusdt.InstrumentId,
-            10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, true,
+            10m, -10m, 0.5m, Quantity.FromDecimal(100), 1, QuoterType.Log, QuoterType.Log, true,
             Quantity.FromDecimal(150), Quantity.FromDecimal(150), HittingLogic.AllowAll // MaxCumAskFills = 150
         );
         _engine.UpdateParameters(parameters);
@@ -390,7 +391,10 @@ public class QuotingEngineTests
             bidSpreadBp: -10m, // 초기 Bid Spread
             skewBp: 2m,        // 체결 시 2bp씩 skew
             size: Quantity.FromDecimal(100), // 주문 사이즈 100
-            depth: 1, type: QuoterType.Log, postOnly: true,
+            depth: 1,
+            askQuoterType: QuoterType.Log,
+            bidQuoterType: QuoterType.Log,
+            postOnly: true,
             maxCumBidFills: Quantity.FromDecimal(1000),
             maxCumAskFills: Quantity.FromDecimal(1000),
             hittingLogic: HittingLogic.AllowAll
@@ -445,7 +449,10 @@ public class QuotingEngineTests
             bidSpreadBp: -10m,
             skewBp: 2m,
             size: Quantity.FromDecimal(100),
-            depth: 1, type: QuoterType.Log, postOnly: true,
+            depth: 1,
+            askQuoterType: QuoterType.Log,
+            bidQuoterType: QuoterType.Log,
+            postOnly: true,
             maxCumBidFills: Quantity.FromDecimal(1000),
             maxCumAskFills: Quantity.FromDecimal(1000),
             HittingLogic.AllowAll
@@ -480,7 +487,10 @@ public class QuotingEngineTests
             bidSpreadBp: -10m,
             skewBp: 2m,
             size: Quantity.FromDecimal(100),
-            depth: 1, type: QuoterType.Log, postOnly: true,
+            depth: 1,
+            askQuoterType: QuoterType.Log,
+            bidQuoterType: QuoterType.Log,
+            postOnly: true,
             maxCumBidFills: Quantity.FromDecimal(1000),
             maxCumAskFills: Quantity.FromDecimal(1000),
             HittingLogic.AllowAll
@@ -530,7 +540,10 @@ public class QuotingEngineTests
             bidSpreadBp: -10m, // -10bp
             skewBp: 0m,
             size: Quantity.FromDecimal(100),
-            depth: 1, type: QuoterType.Log, postOnly: true,
+            depth: 1,
+            askQuoterType: QuoterType.Log,
+            bidQuoterType: QuoterType.Log,
+            postOnly: true,
             maxCumBidFills: Quantity.FromDecimal(1000),
             maxCumAskFills: Quantity.FromDecimal(1000),
             hittingLogic: HittingLogic.AllowAll,
@@ -607,6 +620,7 @@ public class QuotingEngineTests
             FairValueModel.Midp,
             _btcusdt.InstrumentId,
             10m, -10m, 0.5m, Quantity.FromDecimal(100), 1,
+            QuoterType.Single,
             QuoterType.Single, // IMPORTANT: Use the real quoter
             true,
             Quantity.FromDecimal(1000), Quantity.FromDecimal(1000), HittingLogic.AllowAll

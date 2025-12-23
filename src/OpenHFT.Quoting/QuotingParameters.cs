@@ -58,7 +58,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     /// <summary>
     /// Specifies the type of quoter to be used for this instance.
     /// </summary>
-    public readonly QuoterType Type { get; }
+    public readonly QuoterType AskQuoterType { get; }
+    public readonly QuoterType BidQuoterType { get; }
     public readonly HittingLogic HittingLogic { get; }
 
     public readonly decimal GroupingBp { get; }
@@ -74,7 +75,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     /// <param name="skewBp">The skew in basis points.</param>
     /// <param name="size">The quantity for each quote level.</param>
     /// <param name="depth">The number of quote levels on each side.</param>
-    /// <param name="type">The type of quoter to be used.</param>
+    /// <param name="askQuoterType">The type of ask quoter to be used.</param>
+    /// <param name="bidQuoterType">The type of bid quoter to be used.</param>
     /// <param name="postOnly">If true, all limit orders will be submitted as Post-Only.</param>
     /// <param name="hittingLogic">The logic of hitting in IQuoter</param>
     /// <param name="groupingBp"> The minimum quote change ratio </param>
@@ -89,7 +91,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         decimal skewBp,
         Quantity size,
         int depth,
-        QuoterType type,
+        QuoterType askQuoterType,
+        QuoterType bidQuoterType,
         bool postOnly,
         Quantity maxCumBidFills,
         Quantity maxCumAskFills,
@@ -117,7 +120,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         SkewBp = skewBp;
         Size = size;
         Depth = depth;
-        Type = type;
+        AskQuoterType = askQuoterType;
+        BidQuoterType = bidQuoterType;
         PostOnly = postOnly;
         MaxCumBidFills = maxCumBidFills;
         MaxCumAskFills = maxCumAskFills;
@@ -137,7 +141,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
                $"\"SkewBp\": {SkewBp}, " +
                $"\"Size\": {Size.ToDecimal()}, " +
                $"\"Depth\": {Depth}" +
-               $"\"Type\": {Type}" +
+               $"\"AskQuoterType\": {AskQuoterType}" +
+               $"\"BidQuoterType\": {BidQuoterType}" +
                $"\"PostOnly\": {PostOnly}" +
                $"\"MaxCumBidFills\": {MaxCumBidFills.ToDecimal()}, " +
                $"\"MaxCumAskFills\": {MaxCumAskFills.ToDecimal()}, " +
@@ -154,7 +159,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
     {
         return FvModel != other.FvModel ||
                FairValueSourceInstrumentId != other.FairValueSourceInstrumentId ||
-               Type != other.Type ||
+               AskQuoterType != other.AskQuoterType ||
+               BidQuoterType != other.BidQuoterType ||
                BookName != other.BookName;
     }
 
@@ -170,7 +176,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
                Size == other.Size &&
                Depth == other.Depth &&
                PostOnly == other.PostOnly &&
-               Type == other.Type &&
+               AskQuoterType == other.AskQuoterType &&
+               BidQuoterType == other.BidQuoterType &&
                MaxCumBidFills == other.MaxCumBidFills &&
                MaxCumAskFills == other.MaxCumAskFills &&
                HittingLogic == other.HittingLogic &&
@@ -194,7 +201,8 @@ public readonly struct QuotingParameters : IEquatable<QuotingParameters>
         hash.Add(SkewBp);
         hash.Add(Size);
         hash.Add(Depth);
-        hash.Add(Type);
+        hash.Add(AskQuoterType);
+        hash.Add(BidQuoterType);
         hash.Add(PostOnly);
         hash.Add(MaxCumBidFills);
         hash.Add(MaxCumAskFills);

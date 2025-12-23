@@ -36,16 +36,21 @@
                 }
             </MudSelect>
             <MudGrid>
-                <MudItem xs="12" sm="7">
-                    <MudSelect @bind-Value="_model.Type" Label="Quote Type" Variant="Variant.Outlined" Required="true">
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="_model.AskQuoterType" Label="Ask Q Type" Variant="Variant.Outlined" Required="true">
                         @foreach (QuoterType type in Enum.GetValues(typeof(QuoterType)))
                         {
                             <MudSelectItem Value="type">@type.ToString()</MudSelectItem>
                         }
                     </MudSelect>
                 </MudItem>
-                <MudItem xs="12" sm="5">
-                    <MudNumericField @bind-Value="_model.GroupingBp" Label="Grouping (bp)" Variant="Variant.Outlined" Required="true" />
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="_model.BidQuoterType" Label="Bid Q Type" Variant="Variant.Outlined" Required="true">
+                        @foreach (QuoterType type in Enum.GetValues(typeof(QuoterType)))
+                        {
+                            <MudSelectItem Value="type">@type.ToString()</MudSelectItem>
+                        }
+                    </MudSelect>
                 </MudItem>
             </MudGrid>
             <MudGrid>
@@ -58,7 +63,14 @@
                         Required="true" Validation="@(new Func<decimal, string>(BidSpreadValidation))" />
                 </MudItem>
             </MudGrid>
-            <MudNumericField @bind-Value="_model.SkewBp" Label="Skew (bp)" Variant="Variant.Outlined" Required="true" />
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="_model.SkewBp" Label="Skew (bp)" Variant="Variant.Outlined" Required="true" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="_model.GroupingBp" Label="Grouping (bp)" Variant="Variant.Outlined" Required="true" />
+                </MudItem>
+            </MudGrid>
             <MudGrid>
                 <MudItem xs="12" sm="6">
                     <MudNumericField Format="N0" @bind-Value="_model.MaxCumBidFills" Label="Max Cum Bid Fills" Variant="Variant.Outlined" Required="true" Min="0" />

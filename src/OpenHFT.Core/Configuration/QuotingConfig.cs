@@ -48,11 +48,15 @@ public class QuotingConfig
 
     [JsonProperty("productType")]
     public string ProductType { get; set; } = string.Empty;
+
     [JsonProperty("bookName")]
     public string BookName { get; set; } = string.Empty;
 
-    [JsonProperty("quoterType")]
-    public string QuoterType { get; set; } = string.Empty;
+    [JsonProperty("askQuoterType")]
+    public string AskQuoterType { get; set; } = string.Empty;
+
+    [JsonProperty("bidQuoterType")]
+    public string BidQuoterType { get; set; } = string.Empty;
 
     [JsonProperty("symbol")]
     public string Symbol { get; set; } = string.Empty;
@@ -74,14 +78,19 @@ public class QuotingConfig
 
     [JsonProperty("depth")]
     public int Depth { get; set; }
+
     [JsonProperty("postOnly")]
     public bool PostOnly { get; set; }
+
     [JsonProperty("maxCumAskFills")]
     public decimal MaxCumAskFills { get; set; }
+
     [JsonProperty("maxCumBidFills")]
     public decimal MaxCumBidFills { get; set; }
+
     [JsonProperty("groupingBp")]
     public decimal GroupingBp { get; set; }
+
     [JsonProperty("hittingLogic")]
     public HittingLogic HittingLogic { get; set; }
 }

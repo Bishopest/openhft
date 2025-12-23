@@ -24,7 +24,8 @@
     "productType": "perpetualfuture",
     "bookName": "DMM:LTC",
     "symbol": "LTCUSDT",
-    "quoterType": "log",
+    "askQuoterType": "log",
+    "bidQuoterType": "log",
     "fairValue": {
       "model": "bestMidp",
       "params": {

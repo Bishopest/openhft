@@ -34,8 +34,9 @@ public class QuoterFactory : IQuoterFactory
             throw new ArgumentNullException("instrument not found when creating quoter");
         }
 
-        _loggerFactory.CreateLogger<QuoterFactory>().LogInformationWithCaller($"Creating quoter of type {parameters.Type} for instrument {instrument.Symbol} on side {side}.");
-        switch (parameters.Type)
+        _loggerFactory.CreateLogger<QuoterFactory>().LogInformationWithCaller($"Creating quoter of type {parameters.AskQuoterType} for instrument {instrument.Symbol} on side {side}.");
+        var sidedQuoterType = side == Side.Sell ? parameters.AskQuoterType : parameters.BidQuoterType;
+        switch (sidedQuoterType)
         {
             case QuoterType.Log:
                 return new LogQuoter(_loggerFactory.CreateLogger<LogQuoter>());
@@ -53,7 +54,7 @@ public class QuoterFactory : IQuoterFactory
                 if (gatewayForLayered == null) throw new ArgumentNullException("gateway");
                 return new LayeredQuoter(_loggerFactory.CreateLogger<LayeredQuoter>(), side, instrument, _orderFactory, gatewayForLayered, parameters.BookName, _marketDataManager, parameters);
             default:
-                throw new ArgumentException($"Unsupported quoter type: {parameters.Type}");
+                throw new ArgumentException($"Unsupported quoter type: {parameters.AskQuoterType}");
         }
     }
 }

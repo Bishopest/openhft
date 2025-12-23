@@ -346,10 +346,22 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
         {
             // 기존 파라미터를 기반으로 새로운 파라미터 객체를 생성
             newParams = new QuotingParameters(
-                _parameters.InstrumentId, _parameters.BookName, _parameters.FvModel, _parameters.FairValueSourceInstrumentId,
-                newAskSpreadBp, newBidSpreadBp, // <-- 변경된 스프레드
-                _parameters.SkewBp, _parameters.Size, _parameters.Depth, _parameters.Type, _parameters.PostOnly,
-                _parameters.MaxCumBidFills, _parameters.MaxCumAskFills, _parameters.HittingLogic, _parameters.GroupingBp
+                _parameters.InstrumentId,
+                _parameters.BookName,
+                _parameters.FvModel,
+                _parameters.FairValueSourceInstrumentId,
+                newAskSpreadBp,
+                newBidSpreadBp,
+                _parameters.SkewBp,
+                _parameters.Size,
+                _parameters.Depth,
+                _parameters.AskQuoterType,
+                _parameters.BidQuoterType,
+                _parameters.PostOnly,
+                _parameters.MaxCumBidFills,
+                _parameters.MaxCumAskFills,
+                _parameters.HittingLogic,
+                _parameters.GroupingBp
             );
             _parameters = newParams;
         }

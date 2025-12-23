@@ -21,7 +21,6 @@ public sealed class MarketMaker
     private readonly IQuoteValidator _quoteValidator;
     private readonly object _statusLock = new();
 
-
     private IQuotingStateProvider? _quotingStateProvider;
     private TwoSidedQuoteStatus _quoteStatus;
     private readonly object _targetLock = new();
