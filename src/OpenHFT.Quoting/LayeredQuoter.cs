@@ -77,7 +77,7 @@ public class LayeredQuoter : IQuoter, IDisposable
                 : new Quote(effectivePrice, newQuote.Size);
 
             _latestTargetQuote = effectiveQuote;
-            await _orderManager.UpdateAsync(newQuote, isPostOnly, cancellationToken);
+            await _orderManager.UpdateAsync(effectiveQuote, isPostOnly, cancellationToken);
         }
         catch (Exception ex)
         {
