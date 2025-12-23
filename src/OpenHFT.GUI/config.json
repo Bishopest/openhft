@@ -42,7 +42,7 @@
     },
     {
       "omsIdentifier": "OH02",
-      "url": "ws://52.199.125.91:5001"
+      "url": "ws://3.115.47.226:5001"
     }
   ],
   "dataFolder": "/Users/jskim/workspace/openhft/data"
