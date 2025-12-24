@@ -20,5 +20,10 @@ public enum QuoterType
     /// <summary>
     /// A quoter that submits multiple orders by layeredQuoteManager structur./
     /// </summary>
-    Layered
+    Layered,
+
+    /// <summary>
+    /// A quoter that make trend-following quote by making reverse quote
+    /// </summary>
+    Trend,
 }
