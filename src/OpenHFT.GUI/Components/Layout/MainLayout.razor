@@ -24,13 +24,12 @@
         <NavMenu />
     </MudDrawer>
 
-    <MudMainContent Class="d-flex flex-column" Style="padding-top: 64px;"> @* Use padding instead of margin *@
-        <div class="flex-grow-1 pa-4" style="overflow-y: auto;">
+    <MudMainContent Style="height: 100vh; display: flex; flex-direction: column;">
+        <div class="flex-grow-1" style="overflow: hidden; display: flex; flex-direction: column;">
             @Body
         </div>
-
         <Footer />
-    </MudMainContent>
+    </MudMainContent> 
 </MudLayout>
 
 @code {

@@ -1,137 +1,139 @@
 ﻿@using OpenHFT.Core;
-
 @namespace OpenHFT.GUI.Components.Shared
 
-<MudPaper Class="pa-0 d-flex flex-column" Elevation="3" Style="height:102vh; font-family: monospace;">
-    @* Added a dedicated header div with its own padding to keep the title looking good. *@
-    <div class="px-2 pt-2">
-        <MudText Typo="Typo.h6" Align="Align.Center" GutterBottom="true">@(DisplayInstrument is not null ? DisplayInstrument.Symbol : "Selected Instrument")</MudText>
+@* 1. 전체 폰트 크기를 0.75rem(약 12px)로 조정 *@
+<MudPaper Class="pa-0 d-flex flex-column" Elevation="3" Style="height: 100%; font-family: 'Roboto Mono', monospace; font-size: 0.75rem; overflow: hidden;">
+    
+    @* 상단 헤더 영역 (폰트 Typo 조정) *@
+    <div class="px-2 pt-1 flex-none">
+        <MudText Typo="Typo.subtitle2" Align="Align.Center" Style="font-weight: bold;">
+            @(DisplayInstrument is not null ? DisplayInstrument.Symbol : "Selected Instrument")
+        </MudText>
     </div>
 
     @if (_myCurrentQuote is not null)
     {
-        <MudPaper Outlined="true" Class="mx-2 my-1 pa-1 d-flex justify-space-between">
+        @* Quote 정보창도 더 컴팩트하게 조정 *@
+        <MudPaper Outlined="true" Class="mx-2 my-1 pa-1 d-flex justify-space-between flex-none" Style="background-color: var(--mud-palette-background-grey);">
             <div>
-                <MudText Typo="Typo.body2">
-                    <span class="mud-theme-error-text">Expected Ask:</span>
+                <MudText Style="font-size: 0.7rem;">
+                    <span class="mud-theme-error-text">Ask:</span>
                     <span class="mud-theme-error-text" style="font-weight: bold;">@(_myCurrentQuote.Value.Ask?.Price.ToDecimal().ToString(_priceFormat) ?? "-")</span>
+                    <span class="mud-text-secondary ml-1">(@ExpectedAskValue)</span>
                 </MudText>
-                @if (ExpectedAskValue is not null)
-                    {
-                        <MudText Typo="Typo.caption">
-                            <span class="mud-text-secondary">Value:</span>
-                            <span class="mud-text-primary">@ExpectedAskValue</span>
-                        </MudText>
-                    }
             </div>
             <div style="text-align: right;">
-                <MudText Typo="Typo.body2">
-                    <span class="mud-theme-success-text">Expected Bid:</span>
+                <MudText Style="font-size: 0.7rem;">
+                    <span class="mud-theme-success-text">Bid:</span>
                     <span class="mud-theme-success-text" style="font-weight: bold;">@(_myCurrentQuote.Value.Bid?.Price.ToDecimal().ToString(_priceFormat) ?? "-")</span>
+                    <span class="mud-text-secondary ml-1">(@ExpectedBidValue)</span>
                 </MudText>
-                @if (ExpectedBidValue is not null)
-                    {
-                        <MudText Typo="Typo.caption">
-                            <span class="mud-text-secondary">Value:</span>
-                            <span class="mud-text-primary">@ExpectedBidValue</span>
-                        </MudText>
-                    }
             </div>
         </MudPaper>
     }
 
-    <div class="px-4 pb-2">
-    
-        <MudText Typo="Typo.caption">Grouping: @PriceGrouping.ToString(_priceFormat)</MudText>
-        <MudSlider @bind-Value="SelectedMultiplierIndex" 
-                   Min="0" 
-                   Max="@(_groupingMultipliers.Length - 1)" 
-                   Step="1">
-            TickSize x @_groupingMultipliers[SelectedMultiplierIndex]
+    @* 슬라이더 영역 여백 축소 *@
+    <div class="px-4 flex-none" style="margin-top: -5px;">
+        <MudSlider @bind-Value="SelectedMultiplierIndex" Min="0" Max="@(_groupingMultipliers.Length - 1)" Step="1" Size="Size.Small">
+            <span style="font-size: 0.65rem;">TickSize x @_groupingMultipliers[SelectedMultiplierIndex]</span>
         </MudSlider>
     </div> 
-    @if (ActiveInstance is null)
-    {
-        @* CHANGE 3: If no instrument is selected, show a clear message in the main area *@
-        <div class="d-flex flex-column justify-center align-center fill-height">
-            <MudIcon Icon="@Icons.Material.Filled.Info" Class="mb-2" />
-            <MudText Typo="Typo.h6">No Instrument Selected</MudText>
-            <MudText Typo="Typo.body2">Select a strategy from the list to view its order book.</MudText>
-        </div>
-    }
-    else if (_displayLevels.Any())
-    {
-        
-        <div class="table-container" id="@_scrollContainerId">
-            <MudSimpleTable Dense="true" Hover="true" Class="price-ladder">
+
+    @* 2. 테이블 영역: 전용 CSS 클래스 'compact-ladder' 적용 *@
+    <div class="flex-grow-1" style="overflow-y: auto; min-height: 0;">
+        @if (ActiveInstance is null)
+        {
+            <div class="d-flex flex-column justify-center align-center fill-height">
+                <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
+                <MudText Typo="Typo.caption">No Instrument Selected</MudText>
+            </div>
+        }
+        else if (_displayLevels.Any())
+        {
+            <MudSimpleTable Dense="true" Hover="true" FixedHeader="true" 
+                            Class="compact-ladder" Style="table-layout: fixed; width: 100%;">
                 <thead>
                     <tr>
-                        <th style="width: 15%;">My Bid</th>
-                        <th style="width: 25%; text-align: right;">Ask Size</th>
-                        <th style="width: 20%; text-align: center;">Price</th>
-                        <th style="width: 25%; text-align: left;">Bid Size</th>
-                        <th style="width: 15%;">My Ask</th>
+                        @* 각 헤더에 고정 퍼센트 너비 할당 (합계 100%) *@
+                        <th style="width: 12%;">My B</th>
+                        <th style="width: 26%; text-align: right;">Ask Size</th>
+                        <th style="width: 24%; text-align: center;">Price</th>
+                        <th style="width: 26%; text-align: left;">Bid Size</th>
+                        <th style="width: 12%;">My A</th>
                     </tr>
                 </thead>
                 <tbody>
                     @if(_currentOrderBook is not null) {
-                        
                         var (bestBid, _) = _currentOrderBook.GetBestBid();
                         var (bestAsk, _) = _currentOrderBook.GetBestAsk();
                         @foreach (var level in _displayLevels)
                         {
-
-                            // Highlight the best bid and ask rows for clarity
                             string rowStyle = "";
-                            if (level.Price == bestBid) rowStyle = "background-color: rgba(0, 128, 0, 0.15);";
-                            if (level.Price == bestAsk) rowStyle = "background-color: rgba(255, 0, 0, 0.15);";
+                            if (level.Price == bestBid) rowStyle = "background-color: rgba(0, 128, 0, 0.1);";
+                            if (level.Price == bestAsk) rowStyle = "background-color: rgba(255, 0, 0, 0.1);";
+                            if (level.Price < bestAsk && level.Price > bestBid) rowStyle = "background-color: rgba(245, 245, 220, 0.3);";
                             
-                            // Highlight the spread area
-                            if (level.Price < bestAsk && level.Price > bestBid) rowStyle = "background-color: rgba(245, 245, 220, 0.5);";
                             string priceCellStyle = "font-weight: bold; text-align: center; border-left: 1px solid var(--mud-palette-divider); border-right: 1px solid var(--mud-palette-divider);";
-                            if (level.IsMyQuoteAsk)
-                            {
-                                // If it's our theoretical Ask, add a solid red border on the LEFT.
-                                priceCellStyle += " border-left: 3px solid var(--mud-palette-error);";
-                            }
-                            if (level.IsMyQuoteBid)
-                            {
-                                // If it's our theoretical Bid, add a solid green border on the RIGHT.
-                                priceCellStyle += " border-right: 3px solid var(--mud-palette-success);";
-                            }
+                            if (level.IsMyQuoteAsk) priceCellStyle += " border-left: 3px solid var(--mud-palette-error);";
+                            if (level.IsMyQuoteBid) priceCellStyle += " border-right: 3px solid var(--mud-palette-success);";
+                            
                             <tr style="@rowStyle">
-                                <!-- Column 1: My Quote (Bid) - Empty for now -->
                                 <td></td>
-
-                                <!-- Column 2: Ask Size -->
-                                <td style="text-align: right; color: #E57373;">
-                                    @(level.AskQuantity?.ToDecimal().ToString(_quantityFormat))
-                                </td>
-
-                                <!-- Column 3: Price (Center) -->
-                                <td style="@priceCellStyle">
-                                    @level.Price.ToDecimal().ToString(_priceFormat)
-                                </td>
-
-                                <!-- Column 4: Bid Size -->
-                                <td style="text-align: left; color: #81C784;">
-                                    @(level.BidQuantity?.ToDecimal().ToString(_quantityFormat))
-                                </td>
-
-                                <!-- Column 5: My Quote (Ask) - Empty for now -->
+                                <td class="ask-size">@(level.AskQuantity?.ToDecimal().ToString(_quantityFormat))</td>
+                                <td style="@priceCellStyle">@level.Price.ToDecimal().ToString(_priceFormat)</td>
+                                <td class="bid-size">@(level.BidQuantity?.ToDecimal().ToString(_quantityFormat))</td>
                                 <td></td>
                             </tr>
                         }
                     }
                 </tbody>
             </MudSimpleTable>
-        </div>
-    }
-    else
-    {
-        <div class="d-flex flex-column justify-center align-center" style="height: 100%;">
-            <MudText>Awaiting data for @DisplayInstrument.Symbol...</MudText>
-            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
-        </div>
-    }
+        }
+    </div>
 </MudPaper>
+
+<style>
+    .compact-ladder table {
+        /* 핵심: 테이블 레이아웃 고정 */
+        table-layout: fixed !important;
+        width: 100% !important;
+        border-collapse: collapse;
+    }
+
+    .compact-ladder th, .compact-ladder td {
+        /* 숫자가 길어질 경우 생략하거나 숨겨서 너비 유지 */
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: clip; 
+        
+        /* 폰트 숫자 간격을 일정하게 유지 (흔들림 방지 핵심) */
+        font-variant-numeric: tabular-nums; 
+        letter-spacing: -0.5px;
+    }
+
+    .compact-ladder td {
+        font-size: 0.75rem !important;
+        padding: 0px 4px !important;
+        height: 18px !important;
+        border-bottom: 1px solid rgba(0,0,0,0.03) !important;
+    }
+
+    .compact-ladder .ask-size {
+        text-align: right;
+        color: #E57373;
+    }
+
+    .compact-ladder .bid-size {
+        text-align: left;
+        color: #81C784;
+    }
+
+    /* 스크롤바가 너무 두껍지 않게 조정 */
+    .flex-grow-1::-webkit-scrollbar {
+        width: 6px;
+    }
+    .flex-grow-1::-webkit-scrollbar-thumb {
+        background-color: rgba(0,0,0,0.1);
+        border-radius: 3px;
+    }
+</style>

@@ -1,39 +1,33 @@
 ﻿@using OpenHFT.Oms.Api.WebSocket
 @namespace OpenHFT.GUI.Components.Shared
 
-<MudPaper Class="pa-2 d-flex flex-column" Style="height: 100%;">
-    <div class="flex-grow-1" style="overflow-y: auto; min-height: 0;">
-        <MudText Typo="Typo.h6" GutterBottom="true">Active Instances</MudText>
-        <MudTable Items="@Instances" T="InstanceStatusPayload" Dense="true" Hover="true" SortLabel="Sort By"
-            SelectedItem="SelectedInstance" SelectedItemChanged="OnRowClicked">
+<MudPaper Class="pa-2 d-flex flex-column" Style="height: 100%; overflow: hidden;">
+    <MudText Typo="Typo.h6" GutterBottom="true">Active Instances</MudText>
+    @* 고정 헤더와 스크롤을 위해 FixedHeader="true"와 Height="100%"를 설정하고 PagerContent를 제거합니다 *@
+    <div class="flex-grow-1" style="overflow-y: hidden; min-height: 0;">
+        <MudTable Items="@Instances" T="InstanceStatusPayload" Dense="true" Hover="true" 
+                  FixedHeader="true" Height="100%" Elevation="0"
+                  SelectedItem="SelectedInstance" SelectedItemChanged="OnRowClicked">
             <HeaderContent>
                 <MudTh Style="width: 40px;"></MudTh>
                 <MudTh>
-                    <MudTableSortLabel SortBy="new Func<InstanceStatusPayload, object>(x => GetExchange(x))">Exchange
-                    </MudTableSortLabel>
+                    <MudTableSortLabel SortBy="new Func<InstanceStatusPayload, object>(x => GetExchange(x))">Exchange</MudTableSortLabel>
                 </MudTh>
                 <MudTh>
-                    <MudTableSortLabel SortBy="new Func<InstanceStatusPayload, object>(x => GetSymbol(x))">Symbol
-                    </MudTableSortLabel>
+                    <MudTableSortLabel SortBy="new Func<InstanceStatusPayload, object>(x => GetSymbol(x))">Symbol</MudTableSortLabel>
                 </MudTh>
                 <MudTh>
-                    <MudTableSortLabel SortBy="new Func<InstanceStatusPayload, object>(x => GetOmsIdentifier(x))">Oms
-                    </MudTableSortLabel>
+                    <MudTableSortLabel SortBy="new Func<InstanceStatusPayload, object>(x => GetOmsIdentifier(x))">Oms</MudTableSortLabel>
                 </MudTh>
                 <MudTh>
-                    <MudTableSortLabel SortBy="new Func<InstanceStatusPayload, object>(x => x.IsActive)">Status
-                    </MudTableSortLabel>
+                    <MudTableSortLabel SortBy="new Func<InstanceStatusPayload, object>(x => x.IsActive)">Status</MudTableSortLabel>
                 </MudTh>
                 <MudTh>
-                    <MudTableSortLabel
-                        SortBy="new Func<InstanceStatusPayload, object>(x => (x.Parameters.AskSpreadBp - x.Parameters.BidSpreadBp))">
-                        Spread
-                    </MudTableSortLabel>
+                    <MudTableSortLabel SortBy="new Func<InstanceStatusPayload, object>(x => (x.Parameters.AskSpreadBp - x.Parameters.BidSpreadBp))">Spread</MudTableSortLabel>
                 </MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Selected">
-                    @* This icon will only appear on the currently selected row. *@
                     @if (SelectedInstance is not null && SelectedInstance.InstrumentId == context.InstrumentId && SelectedInstance.OmsIdentifier == context.OmsIdentifier)
                     {
                         <MudIcon Icon="@Icons.Material.Filled.ArrowRight" Color="Color.Primary" />
@@ -41,7 +35,7 @@
                 </MudTd>
                 <MudTd DataLabel="Exchange">@GetExchange(context)</MudTd>
                 <MudTd DataLabel="Symbol">@GetSymbol(context)</MudTd>
-                <MudTd DataLabel="Symbol">@GetOmsIdentifier(context)</MudTd>
+                <MudTd DataLabel="Oms">@GetOmsIdentifier(context)</MudTd>
                 <MudTd DataLabel="Status">
                     <MudChip T='string' Color="@(context.IsActive? Color.Success: Color.Warning)" Size="Size.Small">
                         @(context.IsActive ? "Active" : "Inactive")
@@ -49,9 +43,7 @@
                 </MudTd>
                 <MudTd DataLabel="Spread">@(context.Parameters.AskSpreadBp - context.Parameters.BidSpreadBp) bp</MudTd>
             </RowTemplate>
-            <PagerContent>
-                <MudTablePager />
-            </PagerContent>
+            @* PagerContent를 제거하여 페이지 네이션을 없애고 전체 리스트가 스크롤되게 합니다 *@
         </MudTable>
     </div>
 </MudPaper>

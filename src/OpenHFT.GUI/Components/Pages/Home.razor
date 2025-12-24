@@ -11,56 +11,57 @@
 
 <PageTitle>Home</PageTitle>
 
-@*
-    CHANGE 1: This MudContainer becomes a full-height, column-oriented flex container.
-    - 'd-flex flex-column': Turns it into a flex container.
-    - 'flex-grow-1': This is the KEY. It makes the container expand to fill all
-      available vertical space within the MainLayout.
-*@
-<MudPaper Class="pa-2" Elevation="2">
-    <MudStack Spacing="4">
-        <MudGrid Spacing="2">
-            @* --- Instance List (Left Side) --- *@
-            <MudItem xs="12" md="3">
-                <FillsView />
-            </MudItem>
-            <MudItem xs="12" md="3">
-                <MudStack Spacing="2" Style="height: 100%;">
-                    <div style="height: 40%;">
-                        <InstanceListView Instances="_activeInstances" SelectedInstance="_selectedInstance"
-                            OnInstanceSelected="HandleInstanceSelection" />
-                    </div>
-                    <div style="height: 40%;">
-                        <HedgingParametersController @ref="_hedgingController"
-                                                     QuotingInstrument="@(_selectedInstance != null ? InstrumentRepository.GetById(_selectedInstance.InstrumentId) : null)"
-                                                     IsHedgerActive="@(_hedgingStatus?.IsActive ?? false)"
-                                                     OnStart="HandleStartHedging"
-                                                     OnStop="HandleStopHedging" />
-                    </div>
-                    <div style="height: 20%;">
-                        <ActiveOrdersView OmsIdentifier="@_selectedInstance?.OmsIdentifier"
-                            InstrumentId="@_selectedInstance?.InstrumentId" />
-                    </div>
-                </MudStack>
-            </MudItem>
+@* 부모 높이를 꽉 채우기 위해 height: 100%와 flex 설정을 추가합니다 *@
+<MudPaper Class="pa-2 flex-grow-1" Elevation="0" Style="height: calc(100vh - 80px); overflow: hidden;">
+    <MudGrid Spacing="2" Style="height: 100%;">
+        
+        @* --- Left Side (Fills + Instances + Hedger + Orders) --- *@
+        <MudItem xs="12" md="6" Style="height: 100%; display: flex; flex-direction: column;">
+            <MudStack Spacing="2" Style="height: 100%; overflow: hidden;">
+                
+                @* FillsView도 높이를 지정해주는 것이 좋습니다 (예: 25%) *@
+                <div style="height: 30%; overflow: hidden;">
+                    <FillsView />
+                </div>
 
-            @*
-            CHANGE 2: This MudGrid also becomes a growing flex item.
-            It will now fill all the space NOT taken by the h1 and MudText above it.
-            'AlignItems.Stretch' ensures the MudItems inside it also stretch vertically.
-            *@
-            @* --- Main Content (Right Side) --- *@
-            <MudItem xs="12" md="6">
-                <MudGrid Spacing="2">
-                    <MudItem xs="12" md="8">
+                @* InstanceList (25%) *@
+                <div style="height: 35%; overflow: hidden;">
+                    <InstanceListView Instances="_activeInstances" SelectedInstance="_selectedInstance"
+                        OnInstanceSelected="HandleInstanceSelection" />
+                </div>
+                @* ActiveOrders (25%) - 이제 부모가 높이를 잡고 있으므로 밀려나지 않습니다 *@
+                <div style="height: 35%; overflow: hidden;">
+                    <ActiveOrdersView OmsIdentifier="@_selectedInstance?.OmsIdentifier"
+                        InstrumentId="@_selectedInstance?.InstrumentId" />
+                </div>
+            </MudStack>
+        </MudItem>
+
+        @* --- Main Content (Right Side) --- *@
+        <MudItem xs="12" md="6" Style="height: 100%;">
+            <MudGrid Spacing="2" Style="height: 100%;">
+                <MudItem xs="12" md="8" Style="height: 100%;">
+                    <div style="height: 70%; overflow: hidden;">
                         <OrderBookDisplay ActiveInstance="_selectedInstance" />
-                    </MudItem>
-                    <MudItem xs="12" md="4">
-                        <QuotingParametersController @ref="_quotingController" OnSubmit="HandleSubmitParameters"
-                            OnCancel="HandleCancelParameters" />
-                    </MudItem>
-                </MudGrid>
-            </MudItem>
-        </MudGrid>
-    </MudStack>
+                    </div>
+                    <div style="height: 30%; overflow: hidden;">
+                        @* HedgingController (25%) *@
+                        <HedgingParametersController @ref="_hedgingController"
+                                                 QuotingInstrument="@(_selectedInstance != null ? InstrumentRepository.GetById(_selectedInstance.InstrumentId) : null)"
+                                                 IsHedgerActive="@(_hedgingStatus?.IsActive ?? false)"
+                                                 OnStart="HandleStartHedging"
+                                                 OnStop="HandleStopHedging" />
+                    </div>
+                </MudItem>
+                <MudItem xs="12" md="4" Style="height: 100%; display: flex; flex-direction: column;">
+                    @* 컨테이너 높이를 100%로 잡고, 내용이 많으면 스크롤바가 생기도록 합니다 *@
+                    <div style="flex-grow: 1; overflow-y: auto; padding-right: 8px;">
+                        <QuotingParametersController @ref="_quotingController" 
+                                                    OnSubmit="HandleSubmitParameters"
+                                                    OnCancel="HandleCancelParameters" />
+                    </div>
+                </MudItem>
+            </MudGrid>
+        </MudItem>
+    </MudGrid>
 </MudPaper>

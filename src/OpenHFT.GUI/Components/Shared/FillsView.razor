@@ -5,20 +5,25 @@
 @inject IInstrumentRepository InstrumentRepository
 
 @namespace OpenHFT.GUI.Components.Shared
-
 @implements IDisposable
 
-<MudPaper Class="pa-2 d-flex flex-column" Style="height: calc(107vh - 55px)">
-    <MudText Typo="Typo.h6" GutterBottom="true">Fills</MudText>
+<MudPaper Class="pa-2 d-flex flex-column" Style="height: 100%;">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
+        <MudText Typo="Typo.h6">Fills</MudText>
+        <MudTextField @bind-Value="_searchString" Placeholder="Filter by Symbol or Book..." Adornment="Adornment.Start" 
+                      AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0" Clearable="true" />
+    </MudStack>
+    
     <div class="flex-grow-1" style="overflow-y: auto; min-height: 0;">
-        <MudTable Items="@OrderCache.GetAllFills()" T="Fill" Dense="true" Hover="true" FixedHeader="true">
+        <MudTable Items="@OrderCache.GetAllFills()" T="Fill" Dense="true" Hover="true" FixedHeader="true" 
+                  Filter="new Func<Fill, bool>(FilterFunc)" Height="100%" SortLabel="Sort By">
             <HeaderContent>
-                <MudTh>Time</MudTh>
-                <MudTh>Symbol</MudTh>
-                <MudTh>Side</MudTh>
-                <MudTh>Price</MudTh>
-                <MudTh>Qty</MudTh>
-                <MudTh>BookName</MudTh>
+                <MudTh><MudTableSortLabel InitialDirection="SortDirection.Descending" SortBy="new Func<Fill, object>(x => x.Timestamp)">Time</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<Fill, object>(x => GetSymbol(x.InstrumentId))">Symbol</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<Fill, object>(x => x.Side)">Side</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<Fill, object>(x => x.Price.ToDecimal())">Price</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<Fill, object>(x => x.Quantity.ToDecimal())">Qty</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<Fill, object>(x => x.BookName)">BookName</MudTableSortLabel></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Time">
@@ -37,12 +42,21 @@
 </MudPaper>
 
 @code {
+    private string _searchString = "";
+
     protected override void OnInitialized() => OrderCache.OnFillReceived += OnUpdateFills;
 
-    private async void OnUpdateFills((string OmsIdentifier, Fill fill)args)
+    private async void OnUpdateFills((string OmsIdentifier, Fill fill) args) => await InvokeAsync(StateHasChanged);
+
+    private bool FilterFunc(Fill fill)
     {
-        await InvokeAsync(StateHasChanged);
+        if (string.IsNullOrWhiteSpace(_searchString)) return true;
+        if (GetSymbol(fill.InstrumentId).Contains(_searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (fill.BookName.Contains(_searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        if (fill.Side.ToString().Contains(_searchString, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
     }
+
     protected string GetSymbol(int instrumentId)
     {
         var instrument = InstrumentRepository.GetById(instrumentId);

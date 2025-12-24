@@ -1,7 +1,7 @@
 ﻿@namespace OpenHFT.GUI.Components.Shared
 @using OpenHFT.Core.Models
 @using OpenHFT.Core.Instruments
-<MudPaper Class="pa-4" Style="height: 100%;">
+<MudPaper Class="pa-4" Elevation="2" Style="min-height: 100%; height: auto;">
     <MudForm @ref="_form">
         <MudStack Spacing="3">
             <MudSelect T="string" @bind-Value="SelectedOmsIdentifier" Label="Target OMS" Variant="Variant.Outlined" Required="true"

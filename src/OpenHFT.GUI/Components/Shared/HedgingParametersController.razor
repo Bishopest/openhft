@@ -2,44 +2,59 @@
 @using OpenHFT.Core.Instruments
 @using OpenHFT.Hedging
 
-<MudPaper Class="pa-4" Style="height: 100%;">
-    <MudText Typo="Typo.h6" GutterBottom="true">
-        Hedger @(QuotingInstrument is null ? "" : $"for {QuotingInstrument.Symbol}")
-    </MudText>
+<MudPaper Class="pa-2 d-flex flex-column" Style="height: 100%; overflow: hidden;">
+    @* 제목과 상태 칩을 한 줄에 배치하여 높이 절약 *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-1">
+        <MudText Typo="Typo.subtitle1" Style="font-weight: bold;">
+            Hedger @(QuotingInstrument is null ? "" : $"[{QuotingInstrument.Symbol}]")
+        </MudText>
+        @if (QuotingInstrument is not null)
+        {
+            <MudChip T='string' Color="@(IsHedgerActive ? Color.Success : Color.Default)" 
+                     Size="Size.Small" Variant="Variant.Text" Class="ma-0">
+                @(IsHedgerActive ? "Active" : "Inactive")
+            </MudChip>
+        }
+    </MudStack>
+
     @if (QuotingInstrument is null)
     {
-        <MudText>Select an active instance first.</MudText>
+        <MudText Typo="Typo.body2" Class="pa-2">Select an active instance first.</MudText>
     }
     else
     {
-        <MudChip T='string' Color="@(IsHedgerActive ? Color.Success : Color.Default)" Size="Size.Small">
-            Status: @(IsHedgerActive ? "Active" : "Inactive")
-        </MudChip>
-        
-        <MudForm @ref="_form" Class="mt-4">
-            <MudStack Spacing="3">
+        @* Margin="Margin.Dense"를 적용하여 모든 입력 필드의 높이를 대폭 줄임 *@
+        <MudForm @ref="_form" Class="flex-grow-1">
+            <MudStack Spacing="1"> @* 간격을 3에서 1로 조정 *@
                 <MudAutocomplete T="Instrument" Label="Hedge Instrument" @bind-Value="_selectedHedgeInstrument"
                                  SearchFunc="SearchInstruments" ToStringFunc="ConvertInstrumentToString"
-                                 Variant="Variant.Outlined" Required="true" CoerceText="false">
-                    <ItemTemplate Context="instrument">@instrument.Symbol (@instrument.SourceExchange)
-                        (@instrument.ProductType)</ItemTemplate>
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" CoerceText="false">
+                    <ItemTemplate Context="instrument">
+                        <MudText Typo="Typo.body2">@instrument.Symbol (@instrument.SourceExchange)</MudText>
+                    </ItemTemplate>
                 </MudAutocomplete>
+
                 <MudSelect T="HedgeOrderType" @bind-Value="_model.OrderType" Label="Hedge Order Type"
-                           Variant="Variant.Outlined" Required="true">
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Required="true">
                     @foreach (HedgeOrderType ot in Enum.GetValues(typeof(HedgeOrderType)))
                     {
                         <MudSelectItem Value="ot">@ot.ToString()</MudSelectItem>
                     }
                 </MudSelect>
 
-                <MudNumericField @bind-Value="_model.Size" Label="Hedge Size" Variant="Variant.Outlined" Required="true" Min="0" />
+                <MudNumericField @bind-Value="_model.Size" Label="Hedge Size" 
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" Min="0" />
 
-                <MudGrid Class="mt-4">
+                @* 버튼 레이아웃 압축 *@
+                <MudGrid Spacing="1" Class="mt-1">
                     <MudItem xs="6">
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleStartClick" FullWidth="true">Start</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" 
+                                   OnClick="HandleStartClick" FullWidth="true" Size="Size.Small">Start</MudButton>
                     </MudItem>
                     <MudItem xs="6">
-                        <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="HandleStopClick" FullWidth="true" Disabled="!IsHedgerActive">Stop</MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" 
+                                   OnClick="HandleStopClick" FullWidth="true" 
+                                   Disabled="!IsHedgerActive" Size="Size.Small">Stop</MudButton>
                     </MudItem>
                 </MudGrid>
             </MudStack>
