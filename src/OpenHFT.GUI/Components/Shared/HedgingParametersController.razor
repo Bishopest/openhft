@@ -30,7 +30,7 @@
                                  SearchFunc="SearchInstruments" ToStringFunc="ConvertInstrumentToString"
                                  Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" CoerceText="false">
                     <ItemTemplate Context="instrument">
-                        <MudText Typo="Typo.body2">@instrument.Symbol (@instrument.SourceExchange)</MudText>
+                        <MudText Typo="Typo.body2">@instrument.Symbol (@instrument.SourceExchange) (@instrument.ProductType)</MudText>
                     </ItemTemplate>
                 </MudAutocomplete>
 
