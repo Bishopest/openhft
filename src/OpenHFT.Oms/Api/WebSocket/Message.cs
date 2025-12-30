@@ -129,3 +129,26 @@ public record ErrorPayload(
     [property: JsonPropertyName("omsIdentifier")] string OmsIdentifier,
     [property: JsonPropertyName("message")] string Message
 );
+
+public record ManualOrderCommand(
+    [property: JsonPropertyName("payload")] ManualOrderPayload Payload
+) : WebSocketMessage("MANUAL_ORDER");
+
+public record ManualOrderPayload(
+    [property: JsonPropertyName("instrumentId")] int InstrumentId,
+    [property: JsonPropertyName("bookName")] string BookName,
+    [property: JsonPropertyName("orderPrice")] Price Price, // Use Price struct
+    [property: JsonPropertyName("size")] Quantity Size,     // Use Quantity struct
+    [property: JsonPropertyName("isBuy")] bool IsBuy,
+    [property: JsonPropertyName("postOnly")] bool PostOnly
+);
+
+public record ManualOrderCancelCommand(
+    [property: JsonPropertyName("payload")] ManualOrderCancelPayload Payload
+) : WebSocketMessage("MANUAL_ORDER_CANCEL");
+
+public record ManualOrderCancelPayload(
+    // The ID can be either a ClientOrderId (long) or an ExchangeOrderId (string, Guid).
+    // We'll accept it as a string and try to parse it.
+    [property: JsonPropertyName("orderId")] string OrderId
+);

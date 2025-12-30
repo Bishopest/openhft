@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.Orders;
 using OpenHFT.Oms.Api.WebSocket;
 
 namespace OpenHFT.GUI.Services;
@@ -24,6 +25,7 @@ public class OrderCacheService : IOrderCacheService, IDisposable
     private const int MaxFillsToStore = 200;
 
     public event Action<(string OmsIdentifier, OrderStatusReport Report)>? OnOrderUpdated;
+    public event Action<(string OmsIdentifier, OrderStatusReport Report)>? OnManualOrderUpdated;
     public event Action<(string OmsIdentifier, Fill Fill)>? OnFillReceived;
 
     public OrderCacheService(IOmsConnectorService connector, JsonSerializerOptions jsonOptions)
@@ -104,11 +106,15 @@ public class OrderCacheService : IOrderCacheService, IDisposable
             {
                 instrumentOrders.Remove(report.ClientOrderId, out var osr);
             }
-        }
-        // Notify for each updated order
-        foreach (var report in payload.Reports)
-        {
-            OnOrderUpdated?.Invoke((payload.OmsIdentifier, report));
+
+            if (ClientIdGenerator.IsManualOrder(report.ClientOrderId))
+            {
+                OnManualOrderUpdated?.Invoke((payload.OmsIdentifier, report));
+            }
+            else
+            {
+                OnOrderUpdated?.Invoke((payload.OmsIdentifier, report));
+            }
         }
     }
 
@@ -154,7 +160,6 @@ public class OrderCacheService : IOrderCacheService, IDisposable
         }
     }
 
-
     public IEnumerable<OrderStatusReport> GetActiveOrders(string omsIdentifier, int instrumentId)
     {
         if (_activeOrdersByOms.TryGetValue(omsIdentifier, out var omsOrders) &&
@@ -163,6 +168,54 @@ public class OrderCacheService : IOrderCacheService, IDisposable
             return instrumentOrders.Values.OrderByDescending(o => o.Timestamp);
         }
         return Enumerable.Empty<OrderStatusReport>();
+    }
+
+    public IEnumerable<OrderStatusReport> GetActiveStrategyOrders(string omsIdentifier, int instrumentId)
+    {
+        if (_activeOrdersByOms.TryGetValue(omsIdentifier, out var omsOrders) &&
+            omsOrders.TryGetValue(instrumentId, out var instrumentOrders))
+        {
+            // Filter out manual orders using the ClientIdGenerator.
+            return instrumentOrders.Values
+                .Where(report => !ClientIdGenerator.IsManualOrder(report.ClientOrderId))
+                .OrderByDescending(o => o.Timestamp);
+        }
+        return Enumerable.Empty<OrderStatusReport>();
+    }
+
+    public IEnumerable<OrderStatusReport> GetManualOrders(string omsIdentifier)
+    {
+        if (_activeOrdersByOms.TryGetValue(omsIdentifier, out var omsOrders))
+        {
+            return omsOrders.Values.SelectMany(instrumentDict => instrumentDict.Values)
+                .Where(report => ClientIdGenerator.IsManualOrder(report.ClientOrderId))
+                .OrderByDescending(o => o.Timestamp);
+        }
+        return Enumerable.Empty<OrderStatusReport>();
+    }
+
+    public IEnumerable<(string OmsIdentifier, OrderStatusReport Report)> GetAllManualOrders()
+    {
+        var allOrders = new List<(string, OrderStatusReport)>();
+
+        // Iterate through each OMS in the cache.
+        foreach (var omsEntry in _activeOrdersByOms)
+        {
+            var omsIdentifier = omsEntry.Key;
+            var instrumentDict = omsEntry.Value;
+
+            // Flatten the orders from all instruments within this OMS
+            var manualOrdersForOms = instrumentDict.Values
+                .SelectMany(orderDict => orderDict.Values)
+                .Where(report => ClientIdGenerator.IsManualOrder(report.ClientOrderId));
+
+            foreach (var report in manualOrdersForOms)
+            {
+                allOrders.Add((omsIdentifier, report));
+            }
+        }
+
+        return allOrders;
     }
 
     public string? GetOmsIdentifierForOrder(string exchangeOrderId)
@@ -200,5 +253,4 @@ public class OrderCacheService : IOrderCacheService, IDisposable
     {
         _connector.OnMessageReceived -= HandleRawMessage;
     }
-
 }

@@ -9,6 +9,7 @@ using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.GUI.Services;
+using OpenHFT.Oms.Api.WebSocket;
 using Serilog;
 
 namespace OpenHFT.GUI.Components.Shared;
@@ -25,7 +26,6 @@ public class ManualOrderModel
 public class ManualOrderDisplayItem
 {
     public string OmsIdentifier { get; set; } = string.Empty;
-    public string BookName { get; set; } = string.Empty;
     public OrderStatusReport Report { get; set; }
 }
 
@@ -55,6 +55,8 @@ public partial class ManualOrderController : ComponentBase, IDisposable
     [Parameter] public Instrument? SelectedInstrument { get; set; }
     [Parameter] public string? SelectedBookName { get; set; }
 
+    private bool _isDisposed = false;
+
     /// <summary>
     /// This property is bound to the Price MudNumericField.
     /// It gets/sets the value from/to the _model, converting between decimal and Price.
@@ -76,8 +78,8 @@ public partial class ManualOrderController : ComponentBase, IDisposable
     }
 
     // --- Active Manual Orders Table ---
-    // 구조: OmsIdentifier (string) -> BookName (string) -> ExchangeOrderId (string) -> Order객체
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, ConcurrentDictionary<string, ManualOrderDisplayItem>>> _activeManualOrdersByOms = new();
+    // 구조: OmsIdentifier (string) -> ExchangeOrderId (string) -> Order객체
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, ManualOrderDisplayItem>> _activeManualOrdersByOms = new();
 
     protected override void OnInitialized()
     {
@@ -86,7 +88,7 @@ public partial class ManualOrderController : ComponentBase, IDisposable
         _availableInstruments = InstrumentRepository.GetAll().ToList();
         // Subscribe to events
         // TO-DO=> make OrderCache handle orders in instances vs manual
-        // OrderCache.OnManualOrderUpdated += HandleManualOrderUpdate;
+        OrderCache.OnManualOrderUpdated += HandleManualOrderUpdate;
     }
 
     protected override void OnParametersSet()
@@ -95,12 +97,10 @@ public partial class ManualOrderController : ComponentBase, IDisposable
         if (!string.IsNullOrEmpty(SelectedOmsIdentifier))
         {
             _availableBookNames = BookCache.GetBookNames(SelectedOmsIdentifier).ToList();
-            // _manualOrders = OrderCache.GetManualOrders(SelectedOmsIdentifier);
         }
         else
         {
             _availableBookNames.Clear();
-            // _manualOrders = Enumerable.Empty<OrderStatusReport>();
         }
     }
 
@@ -154,102 +154,125 @@ public partial class ManualOrderController : ComponentBase, IDisposable
 
     private void TogglePostOnly(bool value) => _model.PostOnly = value;
 
-    private async Task HandleSubmit()
+    private async Task HandleSubmit(bool isBuy)
     {
         await _form.Validate();
         if (!_form.IsValid) return;
 
-        var parameters = new DialogParameters<OrderConfirmationDialog> // Use generic version
+        var price = Price.FromDecimal(OrderPriceDecimal ?? 0);
+        var size = Quantity.FromDecimal(OrderSizeDecimal ?? 0);
+        var sideString = isBuy ? "BUY" : "SELL";
+
+        var parameters = new DialogParameters<OrderConfirmationDialog>
         {
-            // Pass parameters via properties
-            { x => x.Oms, SelectedOmsIdentifier },
-            { x => x.Instrument, SelectedInstrument?.Symbol },
-            { x => x.Book, SelectedBookName },
-            { x => x.OrderPrice, _model.OrderPrice },
-            { x => x.Size, _model.Size },
-            { x => x.PostOnly, _model.PostOnly }
+            ["Title"] = $"Confirm Manual {sideString} Order",
+            ["Color"] = isBuy ? Color.Success : Color.Error,
+            ["SubmitText"] = sideString,
+            ["Oms"] = SelectedOmsIdentifier,
+            ["Instrument"] = SelectedInstrument?.Symbol,
+            ["Book"] = SelectedBookName,
+            ["Price"] = price,
+            ["Size"] = size,
+            ["PostOnly"] = _model.PostOnly
         };
-
-        // --- MODIFICATION ---
-        // Use ShowAsync instead of Show.
-        // ShowAsync returns the dialog reference directly.
-        var dialog = await DialogService.ShowAsync<OrderConfirmationDialog>("Confirm Manual Order", parameters);
-
-        // ShowAsync can theoretically return null if it fails to create the dialog,
-        // so a null check is good practice.
+        var dialog = await DialogService.ShowAsync<OrderConfirmationDialog>($"Confirm {sideString}", parameters);
         if (dialog is null) return;
 
         var result = await dialog.Result;
-        // --- END MODIFICATION ---
-
-        // The rest of the logic is the same.
         if (!result.Canceled)
         {
-            await SendOrderCommand();
+            await SendOrderCommand(price, size, isBuy);
         }
     }
 
-    private async Task SendOrderCommand()
+    private async Task SendOrderCommand(Price price, Quantity size, bool isBuy)
     {
-        var connectedServers = OmsConnector.GetConnectedServers().FirstOrDefault(s => s.OmsIdentifier == SelectedOmsIdentifier);
-        if (connectedServers is null || SelectedInstrument is null || SelectedBookName is null)
+        var targetServer = _availableOmsServers.FirstOrDefault(s => s.OmsIdentifier == SelectedOmsIdentifier);
+        if (targetServer is null || SelectedInstrument is null || SelectedBookName is null)
         {
-            var errorMessage = new MarkupString(
-                "Invalid order parameters:<br />" +
-                $"- Instrument: {SelectedInstrument?.Symbol ?? "Missing"}<br />" +
-                $"- Book: {SelectedBookName ?? "Missing"}<br />" +
-                $"- OMS: {connectedServers?.OmsIdentifier ?? "Not Connected"}"
-            );
-
-            Snackbar.Add(errorMessage, Severity.Error);
+            Snackbar.Add("Invalid order parameters.", Severity.Error);
             return;
         }
 
-        // var command = new ManualOrderCommand(
-        //     InstrumentId: SelectedInstrument.InstrumentId,
-        //     BookName: SelectedBookName,
-        //     Size: _model.Size,
-        //     PostOnly: _model.PostOnly
-        // );
+        var payload = new ManualOrderPayload(
+            InstrumentId: SelectedInstrument.InstrumentId,
+            BookName: SelectedBookName,
+            Price: price,
+            Size: size,
+            IsBuy: isBuy, // <-- Pass the side flag
+            PostOnly: _model.PostOnly
+        );
+        var command = new ManualOrderCommand(payload);
 
-        // await OmsConnector.SendCommandAsync(targetServer, command);
-        Snackbar.Add($"Manual order command sent to {SelectedOmsIdentifier}.", Severity.Info);
-
-        // Reset the form after submission
-        _model = new ManualOrderModel();
-        await _form.ResetAsync();
+        await OmsConnector.SendCommandAsync(targetServer, command);
+        Snackbar.Add($"Manual {(isBuy ? "BUY" : "SELL")} order command sent.", Severity.Info);
+        _form.ResetValidation();
     }
 
-    private void HandleCancel()
+    private async Task HandleCancelOrderInTable(ManualOrderDisplayItem item)
     {
-        StateHasChanged();
+        if (item.Report.ExchangeOrderId is null)
+        {
+            return;
+        }
+        var orderIdToCancel = item.Report.ExchangeOrderId;
+
+        var parameters = new DialogParameters<OrderConfirmationDialog>
+        {
+            ["Title"] = "Confirm Order Cancellation",
+            ["Content"] = new RenderFragment(builder => builder.AddContent(0, $"Are you sure you want to cancel order '{orderIdToCancel}'?")),
+            ["SubmitText"] = "Cancel Order",
+            ["Color"] = Color.Error
+        };
+
+        var dialog = await DialogService.ShowAsync<OrderConfirmationDialog>("Confirm Cancellation", parameters);
+        if (dialog is null) return;
+
+        var result = await dialog.Result;
+        if (!result.Canceled)
+        {
+            await SendCancelCommand(item.OmsIdentifier, orderIdToCancel);
+        }
+    }
+
+    private async Task SendCancelCommand(string omsIdentifier, string orderId)
+    {
+        var targetServer = _availableOmsServers.FirstOrDefault(s => s.OmsIdentifier == omsIdentifier);
+        if (targetServer is null)
+        {
+            Snackbar.Add($"Cannot cancel order, not connected to OMS: {omsIdentifier}", Severity.Error);
+            return;
+        }
+
+        var command = new ManualOrderCancelCommand(new ManualOrderCancelPayload(orderId));
+        await OmsConnector.SendCommandAsync(targetServer, command);
+        Snackbar.Add($"Cancel command sent for order {orderId}.", Severity.Warning);
     }
 
     private IEnumerable<ManualOrderDisplayItem> GetDisplayOrders()
     {
-        if (string.IsNullOrEmpty(SelectedOmsIdentifier))
-            return Enumerable.Empty<ManualOrderDisplayItem>();
+        // Get all manual orders from all connected OMS servers from the cache.
+        var allManualOrders = OrderCache.GetAllManualOrders();
 
-        if (_activeManualOrdersByOms.TryGetValue(SelectedOmsIdentifier, out var omsDict))
-        {
-            // 중첩된 딕셔너리의 모든 래퍼 객체들을 하나의 리스트로 합침
-            return omsDict.Values
-                          .SelectMany(bookDict => bookDict.Values)
-                          .OrderByDescending(o => o.Report.Timestamp);
-        }
-        return Enumerable.Empty<ManualOrderDisplayItem>();
+        // Transform the reports into the display item model.
+        return allManualOrders
+            .Select(item => new ManualOrderDisplayItem
+            {
+                OmsIdentifier = item.OmsIdentifier,
+                Report = item.Report
+            })
+            .OrderByDescending(o => o.Report.Timestamp);
     }
 
-    private async void HandleManualOrderUpdate((string OmsIdentifier, string BookName, OrderStatusReport Report) args)
+    private async void HandleManualOrderUpdate((string OmsIdentifier, OrderStatusReport Report) args)
     {
+        if (_isDisposed) return;
+
         string exchangeOrderId = args.Report.ExchangeOrderId;
         if (string.IsNullOrEmpty(exchangeOrderId)) return;
 
         // 계층별 딕셔너리 확보
         var omsDict = _activeManualOrdersByOms.GetOrAdd(args.OmsIdentifier,
-            _ => new ConcurrentDictionary<string, ConcurrentDictionary<string, ManualOrderDisplayItem>>());
-
-        var bookDict = omsDict.GetOrAdd(args.BookName,
             _ => new ConcurrentDictionary<string, ManualOrderDisplayItem>());
 
         if (IsActiveOrder(args.Report))
@@ -258,21 +281,17 @@ public partial class ManualOrderController : ComponentBase, IDisposable
             var displayItem = new ManualOrderDisplayItem
             {
                 OmsIdentifier = args.OmsIdentifier,
-                BookName = args.BookName,
                 Report = args.Report
             };
-            bookDict[exchangeOrderId] = displayItem;
+            omsDict[exchangeOrderId] = displayItem;
         }
         else
         {
             // 종료된 주문은 제거
-            bookDict.TryRemove(exchangeOrderId, out _);
+            omsDict.TryRemove(exchangeOrderId, out _);
         }
 
-        if (args.OmsIdentifier == SelectedOmsIdentifier)
-        {
-            await InvokeAsync(StateHasChanged);
-        }
+        await InvokeAsync(StateHasChanged);
     }
 
     private void HandleTableRowClick(TableRowClickEventArgs<ManualOrderDisplayItem> args)
@@ -280,11 +299,12 @@ public partial class ManualOrderController : ComponentBase, IDisposable
         var item = args.Item;
         var report = item.Report;
 
+        // because report does not contain book info
+        SelectedBookName = null;
         SelectedOmsIdentifier = item.OmsIdentifier;
-        SelectedBookName = item.BookName;
         SelectedInstrument = InstrumentRepository.GetById(report.InstrumentId);
 
-        // 모델 업데이트
+        // model update
         _model.OrderId = report.ExchangeOrderId ?? report.ClientOrderId.ToString();
         _model.OrderPrice = report.Price;
         _model.Size = report.Quantity;
@@ -304,6 +324,9 @@ public partial class ManualOrderController : ComponentBase, IDisposable
 
     public void Dispose()
     {
-        // OrderCache.OnManualOrderUpdated -= HandleManualOrderUpdate;
+        if (_isDisposed) return;
+
+        OrderCache.OnManualOrderUpdated -= HandleManualOrderUpdate;
+        _isDisposed = true;
     }
 }

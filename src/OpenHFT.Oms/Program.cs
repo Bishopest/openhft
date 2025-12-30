@@ -163,6 +163,8 @@ public class Program
                 services.AddSingleton<IWebSocketCommandRouter, WebSocketCommandRouter>();
                 services.AddSingleton<IWebSocketCommandHandler, UpdateHedgingParametersCommandHandler>();
                 services.AddSingleton<IWebSocketCommandHandler, StopHedgingCommandHandler>();
+                services.AddSingleton<IWebSocketCommandHandler, ManualOrderCommandHandler>();
+                services.AddSingleton<IWebSocketCommandHandler, ManualOrderCancelCommandHandler>();
                 services.AddSingleton<IFillRepository, SqliteFillRepository>();
                 services.AddSingleton<IBookRepository, SqliteBookRepository>();
                 services.AddSingleton<IFxRateService, FxRateManager>();

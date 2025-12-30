@@ -79,7 +79,7 @@
     private void UpdateOrders()
     {
         _orders = (OmsIdentifier != null && InstrumentId.HasValue)
-            ? OrderCache.GetActiveOrders(OmsIdentifier, InstrumentId.Value)
+            ? OrderCache.GetActiveStrategyOrders(OmsIdentifier, InstrumentId.Value)
             : Enumerable.Empty<OrderStatusReport>();
     }
 

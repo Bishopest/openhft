@@ -1,53 +1,59 @@
-﻿@* File: Components/Shared/ConfirmationDialog.razor *@
+﻿@using MudBlazor
 @using OpenHFT.Core.Models
-@using MudBlazor
 
 <MudDialog>
     <TitleContent>
-        <MudText Typo="Typo.h6">Confirm Order Submission</MudText>
+        <MudText Typo="Typo.h6">@Title</MudText>
     </TitleContent>
     <DialogContent>
-        <MudList T="int">
-            <MudListItem Icon="@Icons.Material.Filled.Dns">
-                <b>OMS:</b> @Oms
-            </MudListItem>
-            <MudListItem Icon="@Icons.Material.Filled.Book">
-                <b>Book:</b> @Book
-            </MudListItem>
-            <MudListItem Icon="@Icons.Material.Filled.ShowChart">
-                <b>Instrument:</b> @Instrument
-            </MudListItem>
-            <MudListItem Icon="@Icons.Material.Filled.Layers">
-                <b>Price:</b> @OrderPrice.ToDecimal()
-            </MudListItem>
-            <MudListItem Icon="@Icons.Material.Filled.Layers">
-                <b>Size:</b> @Size.ToDecimal()
-            </MudListItem>
-             <MudListItem Icon="@Icons.Material.Filled.Flag">
-                <b>PostOnly:</b> @PostOnly
-            </MudListItem>
-        </MudList>
-        <MudText Typo="Typo.body2" Class="mt-4">Are you sure you want to submit this manual order?</MudText>
+        @if (Content is not null)
+        {
+            @Content
+        }
+        else
+        {
+            <MudList T="string" Dense="true">
+                <MudListItem Icon="@Icons.Material.Filled.Dns"><b>OMS:</b> @Oms</MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Book"><b>Book:</b> @Book</MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.ShowChart"><b>Instrument:</b> @Instrument</MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.AttachMoney"><b>Price:</b> @Price.ToDecimal()</MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Layers"><b>Size:</b> @Size.ToDecimal()</MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Flag"><b>PostOnly:</b> @PostOnly</MudListItem>
+            </MudList>
+            <MudText Typo="Typo.body2" Class="mt-4">Are you sure?</MudText>
+        }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" OnClick="Submit">Submit</MudButton>
+        @* MudDialog.Cancel() 메서드를 직접 호출합니다 *@
+        <MudButton OnClick="PerformCancel">Back</MudButton>
+        <MudButton Color="@Color" Variant="Variant.Filled" OnClick="PerformSubmit">@SubmitText</MudButton>
     </DialogActions>
 </MudDialog>
 
 @code {
-    // --- MODIFICATION for MudBlazor v7+ ---
-    // Use IDialogReference instead of MudDialogInstance.
-    [CascadingParameter] public IDialogReference Dialog { get; set; } = default!;
+    [CascadingParameter] 
+    private IMudDialogInstance MudDialog { get; set; } = default!;
 
+    [Parameter] public string Title { get; set; } = "Confirmation";
+    [Parameter] public RenderFragment? Content { get; set; }
+    [Parameter] public string SubmitText { get; set; } = "Submit";
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+    
     [Parameter] public string? Oms { get; set; }
     [Parameter] public string? Instrument { get; set; }
     [Parameter] public string? Book { get; set; }
-    [Parameter] public Price OrderPrice { get; set; }
+    [Parameter] public Price Price { get; set; }
     [Parameter] public Quantity Size { get; set; }
     [Parameter] public bool PostOnly { get; set; }
 
-    // The logic for closing the dialog remains the same, but uses the new property name 'Dialog'.
-    void Submit() => Dialog.Close(DialogResult.Ok(true));
-    void Cancel() => Dialog.Close(DialogResult.Cancel());
+    private void PerformSubmit()
+    {
+        // NullReferenceException 방지를 위해 안전 연산자(?.) 사용 및 올바른 변수명 참조
+        MudDialog?.Close(DialogResult.Ok(true));
+    }
+
+    private void PerformCancel()
+    {
+        MudDialog?.Cancel();
+    }
 }

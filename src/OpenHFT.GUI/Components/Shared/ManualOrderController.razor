@@ -32,10 +32,10 @@
                              Variant="Variant.Outlined" Required="true" RequiredError="Price is required." Min="0m" />
             <MudNumericField T="decimal?" @bind-Value="OrderSizeDecimal" Label="Size (Quantity)" For="@(() => OrderSizeDecimal)"
                              Variant="Variant.Outlined" Required="true" RequiredError="Size is required." Min="0m" />
-            <MudSwitch T = "bool" @bind-Checked="_model.PostOnly" Label="PostOnly" Color="Color.Success" />
+            <MudSwitch T="bool" Value="@_model.PostOnly" ValueChanged="TogglePostOnly" Label="PostOnly" Color="Color.Success" />
             <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-4">
-                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleSubmit" Class="flex-grow-1">Submit</MudButton>
-                 <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="HandleCancel" Class="flex-grow-1">Cancel</MudButton>
+                 <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="@(() => HandleSubmit(true))" Class="flex-grow-1">BUY</MudButton>
+                 <MudButton Variant="Variant.Filled" Color="Color.Error" OnClick="@(() => HandleSubmit(false))" Class="flex-grow-1">SELL</MudButton>
             </MudStack>
         </MudStack>
     </MudForm>
@@ -48,8 +48,8 @@
         @* Items를 GetDisplayOrders() 메서드로 연결 *@
         <MudTable Items="@GetDisplayOrders()" T="ManualOrderDisplayItem" Dense="true" Hover="true" OnRowClick="HandleTableRowClick">
             <HeaderContent>
+                <MudTh Style="text-align: center;">Actions</MudTh>
                 <MudTh>OMS</MudTh>
-                <MudTh>Book</MudTh>
                 <MudTh>Symbol</MudTh>
                 <MudTh>Side</MudTh>
                 <MudTh>Price</MudTh>
@@ -57,8 +57,11 @@
                 <MudTh>Status</MudTh>
             </HeaderContent>
             <RowTemplate>
+                <MudTd DataLabel="Actions" Style="text-align: center;">
+                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@((e) => HandleCancelOrderInTable(context))" OnClickStopPropagation="true" />
+                </MudTd>
                 <MudTd DataLabel="OMS">@context.OmsIdentifier</MudTd>
-                <MudTd DataLabel="Book">@context.BookName</MudTd>
                 <MudTd DataLabel="Symbol">@InstrumentRepository.GetById(context.Report.InstrumentId)?.Symbol</MudTd>
                 <MudTd DataLabel="Side" Style="@(context.Report.Side == Side.Buy ? "color: var(--mud-palette-success);" : "color: var(--mud-palette-error);")">
                     @context.Report.Side
