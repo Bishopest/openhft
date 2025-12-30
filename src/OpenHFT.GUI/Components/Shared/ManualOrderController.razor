@@ -16,10 +16,11 @@
                     <MudSelectItem Value="@server.OmsIdentifier">@server.OmsIdentifier</MudSelectItem>
                 }
             </MudSelect>
-            <MudTextField @bind-Value="_model.OrderId" Label="Order ID" Variant="Variant.Outlined" ReadOnly="true" />
-            <MudAutocomplete T="Instrument" Label="Instrument" @bind-Value="SelectedInstrument" For="@(() => SelectedInstrument)"
-                             SearchFunc="@SearchInstruments" ToStringFunc="@ConvertInstrumentToString"
-                             Variant="Variant.Outlined" Required="true" ResetValueOnEmptyText="true" CoerceText="true">
+            <MudAutocomplete T="Instrument" Label="Instrument" SearchFunc="@SearchInstruments"
+                ToStringFunc="@ConvertInstrumentToString" @bind-Value="SelectedInstrument" Variant="Variant.Outlined"
+                Required="true" ResetValueOnEmptyText="true" CoerceText="true" CoerceValue="true">
+                <ItemTemplate Context="instrument">@instrument.Symbol (@instrument.SourceExchange)
+                    (@instrument.ProductType)</ItemTemplate>
             </MudAutocomplete>
             <MudSelect T="string" @bind-Value="SelectedBookName" Label="Book Name" For="@(() => SelectedBookName)"
                        Variant="Variant.Outlined" Required="true" RequiredError="Book Name is required.">
@@ -46,7 +47,7 @@
     <MudText Typo="Typo.subtitle1" GutterBottom="true">Active Manual Orders</MudText>
     <div class="flex-grow-1" style="overflow-y: auto;">
         @* Items를 GetDisplayOrders() 메서드로 연결 *@
-        <MudTable Items="@GetDisplayOrders()" T="ManualOrderDisplayItem" Dense="true" Hover="true" OnRowClick="HandleTableRowClick">
+        <MudTable Items="@GetDisplayOrders()" T="ManualOrderDisplayItem" Dense="true" Hover="true">
             <HeaderContent>
                 <MudTh Style="text-align: center;">Actions</MudTh>
                 <MudTh>OMS</MudTh>

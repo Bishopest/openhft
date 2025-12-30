@@ -17,7 +17,6 @@ namespace OpenHFT.GUI.Components.Shared;
 // A simple model to bind the form data
 public class ManualOrderModel
 {
-    public string? OrderId { get; set; }
     public Price OrderPrice { get; set; } = Price.FromDecimal(0m);
     public Quantity Size { get; set; } = Quantity.FromDecimal(0m);
     public bool PostOnly { get; set; } = true; // Default to true
@@ -51,9 +50,33 @@ public partial class ManualOrderController : ComponentBase, IDisposable
     private List<Instrument> _availableInstruments = new();
 
     // --- Form Bound Values ---
-    [Parameter] public string? SelectedOmsIdentifier { get; set; }
-    [Parameter] public Instrument? SelectedInstrument { get; set; }
-    [Parameter] public string? SelectedBookName { get; set; }
+    private Instrument? SelectedInstrument { get; set; }
+
+    private string? _selectedOmsIdentifier;
+    private string? SelectedOmsIdentifier
+    {
+        get => _selectedOmsIdentifier;
+        set
+        {
+            if (_selectedOmsIdentifier != value)
+            {
+                _selectedOmsIdentifier = value;
+                _ = UpdateAvailableBooks();
+                ValidateBookSelection();
+            }
+        }
+    }
+
+    private string? _selectedBookName;
+    private string? SelectedBookName
+    {
+        get => _selectedBookName;
+        set
+        {
+            _selectedBookName = value ?? string.Empty;
+            ValidateBookSelection();
+        }
+    }
 
     private bool _isDisposed = false;
 
@@ -87,21 +110,7 @@ public partial class ManualOrderController : ComponentBase, IDisposable
         _availableOmsServers = Configuration.GetSection("oms").Get<List<OmsServerConfig>>() ?? new List<OmsServerConfig>();
         _availableInstruments = InstrumentRepository.GetAll().ToList();
         // Subscribe to events
-        // TO-DO=> make OrderCache handle orders in instances vs manual
         OrderCache.OnManualOrderUpdated += HandleManualOrderUpdate;
-    }
-
-    protected override void OnParametersSet()
-    {
-        // When OMS selection changes, update the list of available book names
-        if (!string.IsNullOrEmpty(SelectedOmsIdentifier))
-        {
-            _availableBookNames = BookCache.GetBookNames(SelectedOmsIdentifier).ToList();
-        }
-        else
-        {
-            _availableBookNames.Clear();
-        }
     }
 
     /// <summary>
@@ -124,6 +133,32 @@ public partial class ManualOrderController : ComponentBase, IDisposable
         // Reset the model when details are pre-filled
         _model = new ManualOrderModel();
         StateHasChanged();
+    }
+
+    /// <summary>
+    /// Updates the list of available books based on the selected OMS.
+    /// </summary>
+    private async Task UpdateAvailableBooks()
+    {
+        _availableBookNames = BookCache.GetBookNames(SelectedOmsIdentifier).ToList();
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Checks if the currently selected book is valid for the selected OMS.
+    /// </summary>
+    private bool ValidateBookSelection()
+    {
+        if (string.IsNullOrEmpty(SelectedBookName)) return false;
+        if (string.IsNullOrEmpty(SelectedOmsIdentifier)) return false;
+
+        if (!_availableBookNames.Contains(SelectedBookName))
+        {
+            Snackbar.Add($"Warning: Book '{SelectedBookName}' is not available on OMS '{SelectedOmsIdentifier}'.", Severity.Warning);
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -199,7 +234,7 @@ public partial class ManualOrderController : ComponentBase, IDisposable
             BookName: SelectedBookName,
             Price: price,
             Size: size,
-            IsBuy: isBuy, // <-- Pass the side flag
+            IsBuy: isBuy,
             PostOnly: _model.PostOnly
         );
         var command = new ManualOrderCommand(payload);
@@ -294,23 +329,6 @@ public partial class ManualOrderController : ComponentBase, IDisposable
         await InvokeAsync(StateHasChanged);
     }
 
-    private void HandleTableRowClick(TableRowClickEventArgs<ManualOrderDisplayItem> args)
-    {
-        var item = args.Item;
-        var report = item.Report;
-
-        // because report does not contain book info
-        SelectedBookName = null;
-        SelectedOmsIdentifier = item.OmsIdentifier;
-        SelectedInstrument = InstrumentRepository.GetById(report.InstrumentId);
-
-        // model update
-        _model.OrderId = report.ExchangeOrderId ?? report.ClientOrderId.ToString();
-        _model.OrderPrice = report.Price;
-        _model.Size = report.Quantity;
-
-        StateHasChanged();
-    }
     private bool IsActiveOrder(OrderStatusReport report)
     {
         return report.Status switch
