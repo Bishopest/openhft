@@ -2,81 +2,89 @@
 @namespace OpenHFT.GUI.Components.Pages
 @using OpenHFT.Core.Books
 @using OpenHFT.Core.Models
+@using OpenHFT.GUI.Components.Shared
 
 <PageTitle>Book</PageTitle>
 
-<MudPaper Class="pa-4 d-flex flex-column flex-grow-1" Elevation="2" Style="height: 90vh;">
-    <MudText Typo="Typo.h4" GutterBottom="true">Books</MudText>
-    
-    <div class="flex-grow-1" style="overflow-y: auto; min-height: 0;">
-        <MudTable Items="@_bookNames" T="string" Hover="true" OnRowClick="OnRowClick">
-            <HeaderContent>
-                <MudTh>Book Name</MudTh>
-                <MudTh>Net Value (USDT)</MudTh>
-                <MudTh>Total Realized PnL</MudTh>
-                <MudTh>Total Volume (USDT)</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Book Name">
-                <MudIcon Icon="@(_expandedBooks.Contains(context) ? Icons.Material.Filled.KeyboardArrowDown : Icons.Material.Filled.KeyboardArrowRight)" 
-                             Class="mr-3" Size="Size.Small"/>
-                    @context
-                </MudTd>
-                <MudTd DataLabel="Net Value (USDT)">
-                </MudTd>
-                <MudTd DataLabel="Total Realized PnL">
-                    @* Calculate total PnL for the book *@
-                    @{
-                        var pnl = BookCache.GetElementsByBookName(context).Sum(e => e.RealizedPnL.Amount);
-                    }
-                    <span class="@(pnl >= 0 ? "mud-theme-success-text" : "mud-theme-error-text")">@pnl.ToString("N2")</span>
-                </MudTd>
-                <MudTd DataLabel="Total Volume (USDT)">
-                    @BookCache.GetElementsByBookName(context).Sum(e => e.Volume.Amount).ToString("N0")
-                </MudTd>
-            </RowTemplate>
+<MudGrid Spacing="4" Style="height: 90vh;">
+    <MudItem xs="12" md="9">
+        <MudPaper Class="pa-4 d-flex flex-column flex-grow-1" Elevation="2" Style="height: 90vh;">
+            <MudText Typo="Typo.h4" GutterBottom="true">Books</MudText>
             
-            @* --- THIS IS THE EXPANDABLE ROW TEMPLATE --- *@
-            <ChildRowContent>
-                @if (_expandedBooks.Contains(context))
-                {
-                <MudTr>
-                    <td colspan="4">
-                        <MudCard Outlined="true">
-                            <MudCardContent>
-                                <MudSimpleTable Dense="true" Hover="true">
-                                    <thead>
-                                        <tr>
-                                            <th>Instrument</th>
-                                            <th>Size</th>
-                                            <th>Value(USDT)</th>
-                                            <th>Avg. Entry Price</th>
-                                            <th>Realized PnL</th>
-                                            <th>Unrealized PnL</th>
-                                            <th>Volume (USDT)</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach (var element in BookCache.GetElementsByBookName(context).OrderBy(e => GetSymbolFromId(e.InstrumentId)))
-                                        {
-                                            <tr>
-                                                <td>@GetSymbolFromId(element.InstrumentId)</td>
-                                                <td>@element.Size.ToDecimal().ToString("N0")</td>
-                                                <td></td>
-                                                <td>@element.AvgPrice.ToDecimal().ToString("N2")</td>
-                                                <td>@element.RealizedPnL.Amount.ToString("N2")</td>
-                                                <td></td>
-                                                <td>@element.Volume.Amount.ToString("N0")</td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </MudSimpleTable>
-                            </MudCardContent>
-                        </MudCard>
-                    </td>
-                </MudTr>
-                }
-            </ChildRowContent>
-        </MudTable>
-    </div>
-</MudPaper>
+            <div class="flex-grow-1" style="overflow-y: auto; min-height: 0;">
+                <MudTable Items="@_bookNames" T="string" Hover="true" OnRowClick="OnBookRowClick">
+                    <HeaderContent>
+                        <MudTh>Book Name</MudTh>
+                        <MudTh>Net Value (USDT)</MudTh>
+                        <MudTh>Total Realized PnL</MudTh>
+                        <MudTh>Total Volume (USDT)</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Book Name">
+                        <MudIcon Icon="@(_expandedBooks.Contains(context) ? Icons.Material.Filled.KeyboardArrowDown : Icons.Material.Filled.KeyboardArrowRight)" 
+                                    Class="mr-3" Size="Size.Small"/>
+                            @context
+                        </MudTd>
+                        <MudTd DataLabel="Net Value (USDT)">
+                        </MudTd>
+                        <MudTd DataLabel="Total Realized PnL">
+                            @* Calculate total PnL for the book *@
+                            @{
+                                var pnl = BookCache.GetElementsByBookName(context).Sum(e => e.RealizedPnL.Amount);
+                            }
+                            <span class="@(pnl >= 0 ? "mud-theme-success-text" : "mud-theme-error-text")">@pnl.ToString("N2")</span>
+                        </MudTd>
+                        <MudTd DataLabel="Total Volume (USDT)">
+                            @BookCache.GetElementsByBookName(context).Sum(e => e.Volume.Amount).ToString("N0")
+                        </MudTd>
+                    </RowTemplate>
+                    
+                    @* --- THIS IS THE EXPANDABLE ROW TEMPLATE --- *@
+                    <ChildRowContent>
+                        @if (_expandedBooks.Contains(context))
+                        {
+                        <MudTr>
+                            <td colspan="4">
+                                <MudCard Outlined="true">
+                                    <MudCardContent>
+                                        <MudSimpleTable Dense="true" Hover="true">
+                                            <thead>
+                                                <tr>
+                                                    <th>Instrument</th>
+                                                    <th>Size</th>
+                                                    <th>Value(USDT)</th>
+                                                    <th>Avg. Entry Price</th>
+                                                    <th>Realized PnL</th>
+                                                    <th>Unrealized PnL</th>
+                                                    <th>Volume (USDT)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var element in BookCache.GetElementsByBookName(context).OrderBy(e => GetSymbolFromId(e.InstrumentId)))
+                                                {
+                                                    <tr @onclick="() => OnBookElementRowClick(element)" style="cursor: pointer;">
+                                                        <td>@GetSymbolFromId(element.InstrumentId)</td>
+                                                        <td>@element.Size.ToDecimal().ToString("N0")</td>
+                                                        <td></td>
+                                                        <td>@element.AvgPrice.ToDecimal().ToString("N2")</td>
+                                                        <td>@element.RealizedPnL.Amount.ToString("N2")</td>
+                                                        <td></td>
+                                                        <td>@element.Volume.Amount.ToString("N0")</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </MudSimpleTable>
+                                    </MudCardContent>
+                                </MudCard>
+                            </td>
+                        </MudTr>
+                        }
+                    </ChildRowContent>
+                </MudTable>
+            </div>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="3" Style="height: 100%;">
+        <ManualOrderController @ref="_manualOrderController" />
+    </MudItem>
+</MudGrid>

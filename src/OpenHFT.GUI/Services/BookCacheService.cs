@@ -107,6 +107,20 @@ public class BookCacheService : IBookCacheService, IDisposable
             : Enumerable.Empty<BookElement>();
     }
 
+    public string? GetOmsIdentifierByBookName(string bookName)
+    {
+        if (string.IsNullOrEmpty(bookName)) return null;
+
+        foreach (var pair in _booksByOms)
+        {
+            if (pair.Value.ContainsKey(bookName))
+            {
+                return pair.Key;
+            }
+        }
+        return null;
+    }
+
     public void ClearCacheForOms(string omsIdentifier)
     {
         _logger.LogInformationWithCaller($"Clearing book cache for disconnected OMS: {omsIdentifier}");
@@ -135,4 +149,5 @@ public class BookCacheService : IBookCacheService, IDisposable
         _connector.OnMessageReceived -= HandleRawMessage;
         _connector.OnConnectionStatusChanged -= HandleConnectionStatusChange;
     }
+
 }

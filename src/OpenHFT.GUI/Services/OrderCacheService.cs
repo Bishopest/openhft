@@ -12,7 +12,6 @@ public class OrderCacheService : IOrderCacheService, IDisposable
     private readonly IOmsConnectorService _connector;
     private readonly JsonSerializerOptions _jsonOptions;
 
-    // --- KEY CHANGE: Outer key is OmsIdentifier, inner key is InstrumentId ---
     // { "OMS_A": { 1001: { ...orders... } } }
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, ConcurrentDictionary<long, OrderStatusReport>>> _activeOrdersByOms = new();
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, InstanceStatusPayload>> _activeInstancesByOms = new();
@@ -164,6 +163,17 @@ public class OrderCacheService : IOrderCacheService, IDisposable
             return instrumentOrders.Values.OrderByDescending(o => o.Timestamp);
         }
         return Enumerable.Empty<OrderStatusReport>();
+    }
+
+    public string? GetOmsIdentifierForOrder(string exchangeOrderId)
+    {
+        if (string.IsNullOrEmpty(exchangeOrderId)) return null;
+
+        return _activeOrdersByOms
+            .FirstOrDefault(oms => oms.Value.Values
+                .Any(inst => inst.Values
+                    .Any(order => order.ExchangeOrderId == exchangeOrderId)))
+            .Key;
     }
 
     public IEnumerable<Fill> GetAllFills()

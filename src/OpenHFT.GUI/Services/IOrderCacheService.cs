@@ -22,6 +22,7 @@ public interface IOrderCacheService
     /// Gets all active orders for a specific instrument on a specific OMS.
     /// </summary>
     IEnumerable<OrderStatusReport> GetActiveOrders(string omsIdentifier, int instrumentId);
+    public string? GetOmsIdentifierForOrder(string exchangeOrderId);
     /// <summary>
     /// Gets all recent fills from all connected OMS servers.
     /// </summary>

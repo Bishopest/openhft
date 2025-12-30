@@ -1,7 +1,9 @@
 using System;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
+using OpenHFT.Core.Books;
 using OpenHFT.Core.Interfaces;
+using OpenHFT.GUI.Components.Shared;
 using OpenHFT.GUI.Services;
 
 namespace OpenHFT.GUI.Components.Pages;
@@ -13,6 +15,9 @@ public partial class BookPage : ComponentBase, IDisposable
     [Inject]
     private IInstrumentRepository InstrumentRepository { get; set; } = default!;
 
+    // --- Child Component References ---
+    private ManualOrderController? _manualOrderController;
+
     private IEnumerable<string> _bookNames = Enumerable.Empty<string>();
     private HashSet<string> _expandedBooks = new();
 
@@ -21,7 +26,7 @@ public partial class BookPage : ComponentBase, IDisposable
         _bookNames = BookCache.GetBookNames();
         BookCache.OnBookUpdated += OnBookCacheUpdated;
     }
-    private void OnRowClick(TableRowClickEventArgs<string> args)
+    private void OnBookRowClick(TableRowClickEventArgs<string> args)
     {
         if (_expandedBooks.Contains(args.Item))
         {
@@ -31,6 +36,11 @@ public partial class BookPage : ComponentBase, IDisposable
         {
             _expandedBooks.Add(args.Item);
         }
+    }
+
+    private void OnBookElementRowClick(BookElement element)
+    {
+        _manualOrderController?.SetOrderDetailsFromBookElement(element);
     }
 
     private async void OnBookCacheUpdated()

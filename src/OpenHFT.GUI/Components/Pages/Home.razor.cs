@@ -46,7 +46,6 @@ public partial class Home : ComponentBase, IDisposable
     {
         _activeInstances = OrderCache.GetAllActiveInstances().ToList();
 
-        var connectedOmsConfig = OmsConnector.GetConnectedServers();
         OmsConnector.OnConnectionStatusChanged += HandleStatusChange;
         OrderCache.OnInstancesUpdated += HandleInstancesUpdated;
         HedgingCache.OnHedgingStatusUpdated += HandleHedgingStatusUpdate;
