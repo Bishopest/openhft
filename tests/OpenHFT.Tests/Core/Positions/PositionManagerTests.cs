@@ -65,6 +65,7 @@ public class PositionManagerTests
         services.AddSingleton(mockGatewayRegistry.Object);
 
         services.AddSingleton<IOrderFactory, OrderFactory>();
+        services.AddSingleton<IClientIdGenerator, ClientIdGenerator>();
 
         // Persistence 계층 등록
         services.AddSingleton<IFillRepository, SqliteFillRepository>();
@@ -106,7 +107,7 @@ public class PositionManagerTests
         var initialManager = _serviceProvider.GetRequiredService<PositionManager>();
 
         // Order 객체 생성 (자동으로 OrderRouter에 등록됨)
-        var order = _orderFactory.Create(instrument.InstrumentId, Side.Buy, "test");
+        var order = _orderFactory.Create(instrument.InstrumentId, Side.Buy, "test", OrderSource.NonManual);
 
         // 가짜 체결 리포트 2개 생성
         var fillReport1 = new OrderStatusReport(

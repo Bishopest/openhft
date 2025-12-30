@@ -435,7 +435,7 @@ public class OrdersOnGroup
 
     private async Task PlaceNewOrderAsync(Price price, Quantity quantity, bool isPostOnly, CancellationToken token)
     {
-        var orderBuilder = new OrderBuilder(_orderFactory, _instrument.InstrumentId, _side, _bookName);
+        var orderBuilder = new OrderBuilder(_orderFactory, _instrument.InstrumentId, _side, _bookName, OrderSource.NonManual);
         var order = orderBuilder
             .WithPrice(price)
             .WithQuantity(quantity)

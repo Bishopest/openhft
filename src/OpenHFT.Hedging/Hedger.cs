@@ -357,7 +357,7 @@ public class Hedger
 
     private async Task StartNewHedgeAsync(SideQuote target)
     {
-        var orderBuilder = new OrderBuilder(_orderFactory, _hedgeInstrument.InstrumentId, target.Side, _bookName);
+        var orderBuilder = new OrderBuilder(_orderFactory, _hedgeInstrument.InstrumentId, target.Side, _bookName, OrderSource.NonManual);
         var newOrder = orderBuilder
             .WithPrice(target.Price)
             .WithQuantity(target.Size)

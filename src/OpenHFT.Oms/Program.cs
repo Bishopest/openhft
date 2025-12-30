@@ -144,6 +144,7 @@ public class Program
                 services.AddSingleton<IHedgerManager, HedgerManager>();
                 services.AddSingleton<IOrderGatewayRegistry, OrderGatewayRegistry>();
                 services.AddSingleton<IOrderFactory, OrderFactory>();
+                services.AddSingleton<IClientIdGenerator, ClientIdGenerator>();
                 services.AddSingleton<QuoteDebugger>();
                 services.AddSingleton<BookManager>();
                 services.AddSingleton<BookManager>();

@@ -249,7 +249,7 @@ public class SingleOrderQuoter : IQuoter
     {
         // Use the factory and builder to create a new order object.
         // The builder logic is now encapsulated elsewhere.
-        var orderBuilder = new OrderBuilder(_orderFactory, _instrument.InstrumentId, _side, _bookName);
+        var orderBuilder = new OrderBuilder(_orderFactory, _instrument.InstrumentId, _side, _bookName, OrderSource.NonManual);
         var newOrder = orderBuilder
             .WithPrice(quote.Price)
             .WithQuantity(quote.Size)

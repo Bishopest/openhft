@@ -19,11 +19,11 @@ public class OrderBuilder : IOrderBuilder
     /// <param name="instrumentId">The ID of the instrument for the order.</param>
     /// <param name="side">The side (Buy/Sell) for the order.</param>
     /// <param name="bookName">The name of the Book fills belongs to</param> 
-    public OrderBuilder(IOrderFactory orderFactory, int instrumentId, Side side, string bookName)
+    public OrderBuilder(IOrderFactory orderFactory, int instrumentId, Side side, string bookName, OrderSource orderSource)
     {
         if (orderFactory == null) throw new ArgumentNullException(nameof(orderFactory));
 
-        IOrder baseOrder = orderFactory.Create(instrumentId, side, bookName);
+        IOrder baseOrder = orderFactory.Create(instrumentId, side, bookName, orderSource);
         _order = baseOrder;
     }
 

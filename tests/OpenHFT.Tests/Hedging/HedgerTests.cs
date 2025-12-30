@@ -8,6 +8,7 @@ using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Hedging;
 using OpenHFT.Core.Utils;
+using OpenHFT.Core.Orders;
 
 namespace OpenHFT.Tests.Hedging;
 
@@ -36,7 +37,7 @@ public class HedgerTests
         _mockOrder = new Mock<IOrder>();
 
         // OrderFactory가 Mock Order를 반환하도록 설정
-        _mockOrderFactory.Setup(f => f.Create(It.IsAny<int>(), It.IsAny<Side>(), It.IsAny<string>()))
+        _mockOrderFactory.Setup(f => f.Create(It.IsAny<int>(), It.IsAny<Side>(), It.IsAny<string>(), It.IsAny<OrderSource>()))
                          .Returns(_mockOrder.Object);
 
         // Capture subscriptions

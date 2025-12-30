@@ -13,6 +13,7 @@ public class OrderBuilderTests
     private Mock<IOrderFactory> _mockOrderFactory;
     private Mock<IOrderRouter> _mockOrderRouter;
     private Mock<IOrderGateway> _mockOrderGateway;
+    private IClientIdGenerator _idGenerator;
     private ILogger<Order> _logger;
 
     private const int InstrumentId = 1;
@@ -24,12 +25,14 @@ public class OrderBuilderTests
         _mockOrderFactory = new Mock<IOrderFactory>();
         _mockOrderRouter = new Mock<IOrderRouter>();
         _mockOrderGateway = new Mock<IOrderGateway>();
+        _idGenerator = new ClientIdGenerator();
         _logger = new NullLogger<Order>();
     }
 
     private Order CreateOrderShell()
     {
-        return new Order(InstrumentId, TestSide, "test", _mockOrderRouter.Object, _mockOrderGateway.Object, _logger);
+        var clientOrderId = _idGenerator.NextId(OrderSource.NonManual);
+        return new Order(clientOrderId, InstrumentId, TestSide, "test", _mockOrderRouter.Object, _mockOrderGateway.Object, _logger);
     }
 
     [Test]
@@ -42,9 +45,9 @@ public class OrderBuilderTests
 
         // The factory will return a real, but basic, Order object.
         var orderShell = CreateOrderShell();
-        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test")).Returns(orderShell);
+        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test", OrderSource.NonManual)).Returns(orderShell);
 
-        var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide, "test");
+        var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide, "test", OrderSource.NonManual);
 
         // Act
         var finalOrder = builder
@@ -72,8 +75,8 @@ public class OrderBuilderTests
     {
         // Arrange
         var orderShell = CreateOrderShell();
-        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test")).Returns(orderShell);
-        var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide, "test");
+        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test", OrderSource.NonManual)).Returns(orderShell);
+        var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide, "test", OrderSource.NonManual);
 
         // Act & Assert
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -88,8 +91,8 @@ public class OrderBuilderTests
     {
         // Arrange
         var orderShell = CreateOrderShell();
-        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test")).Returns(orderShell);
-        var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide, "test");
+        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test", OrderSource.NonManual)).Returns(orderShell);
+        var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide, "test", OrderSource.NonManual);
 
         // Act & Assert
         var ex = Assert.Throws<InvalidOperationException>(() =>

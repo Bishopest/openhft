@@ -82,6 +82,7 @@ public class QuotingEngineTests
         services.AddSingleton<IMarketDataManager, MarketDataManager>();
         services.AddSingleton<IOrderRouter, OrderRouter>();
         services.AddSingleton<IOrderUpdateHandler, OrderUpdateDistributor>();
+        services.AddSingleton<IClientIdGenerator, ClientIdGenerator>();
         var mockGateway = new Mock<IOrderGateway>();
         var mockGatewayRegistry = new Mock<IOrderGatewayRegistry>();
         mockGatewayRegistry.Setup(r => r.GetGatewayForInstrument(It.IsAny<int>())).Returns(mockGateway.Object);
@@ -731,15 +732,16 @@ public class QuotingEngineTests
         var orderFactory = new OrderFactory(
             testRouter, // <--- Inject the local router instance here
             _serviceProvider.GetRequiredService<IOrderGatewayRegistry>(),
-            _serviceProvider.GetRequiredService<ILogger<Order>>()
+            _serviceProvider.GetRequiredService<ILogger<Order>>(),
+            _serviceProvider.GetRequiredService<IClientIdGenerator>()
         );
 
         // 2. Create 4 orders (buffer size + 1) using the new factory.
         // Now, these orders will hold a reference to 'testRouter'.
-        var order1 = orderFactory.Create(_xbtusd.InstrumentId, Side.Buy, "test-lazy");
-        var order2 = orderFactory.Create(_xbtusd.InstrumentId, Side.Buy, "test-lazy");
-        var order3 = orderFactory.Create(_xbtusd.InstrumentId, Side.Buy, "test-lazy");
-        var order4 = orderFactory.Create(_xbtusd.InstrumentId, Side.Buy, "test-lazy");
+        var order1 = orderFactory.Create(_xbtusd.InstrumentId, Side.Buy, "test-lazy", OrderSource.NonManual);
+        var order2 = orderFactory.Create(_xbtusd.InstrumentId, Side.Buy, "test-lazy", OrderSource.NonManual);
+        var order3 = orderFactory.Create(_xbtusd.InstrumentId, Side.Buy, "test-lazy", OrderSource.NonManual);
+        var order4 = orderFactory.Create(_xbtusd.InstrumentId, Side.Buy, "test-lazy", OrderSource.NonManual);
 
         // The rest of the registration logic is correct.
         testRouter.RegisterOrder(order1);

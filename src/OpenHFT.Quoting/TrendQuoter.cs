@@ -178,7 +178,7 @@ public class TrendQuoter : IQuoter
 
             if (_activeOrder == null)
             {
-                var orderBuilder = new OrderBuilder(_orderFactory, _instrument.InstrumentId, orderSide, _bookName);
+                var orderBuilder = new OrderBuilder(_orderFactory, _instrument.InstrumentId, orderSide, _bookName, OrderSource.NonManual);
                 newOrder = orderBuilder
                     .WithPrice(orderQuote.Price)
                     .WithQuantity(orderQuote.Size)

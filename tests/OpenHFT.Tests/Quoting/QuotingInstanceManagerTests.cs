@@ -61,6 +61,7 @@ public class QuotingInstanceManagerTests_Integration
         // MarketDataDistributor는 Disruptor에 의존하므로 Mocking
         services.AddSingleton<MarketDataDistributor>();
         services.AddSingleton<IOrderRouter, OrderRouter>();
+        services.AddSingleton<IClientIdGenerator, ClientIdGenerator>();
         services.AddSingleton<IOrderUpdateHandler, OrderUpdateDistributor>();
         services.AddSingleton<IOrderGateway, NullOrderGateway>();
         services.AddSingleton<IOrderGatewayRegistry, OrderGatewayRegistry>();

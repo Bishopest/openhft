@@ -10,9 +10,6 @@ namespace OpenHFT.Core.Orders;
 // Note how properties are mutable (public set) for the builder to use.
 public class Order : IOrder, IOrderUpdatable
 {
-    // A static counter to ensure ClientOrderId is always unique across all Order instances.
-    private static long _clientOrderIdCounter = DateTimeOffset.UtcNow.Ticks;
-
     private readonly ILogger _logger;
     private readonly IOrderRouter _router;
     private readonly IOrderGateway _gateway;
@@ -57,13 +54,12 @@ public class Order : IOrder, IOrderUpdatable
     /// Initializes a new instance of the <see cref="Order"/> class.
     /// Public for testing and direct instantiation, but in production, creation via IOrderFactory is recommended.
     /// </summary>
-    public Order(int instrumentId, Side side, string bookName, IOrderRouter router, IOrderGateway gateway, ILogger<Order> logger)
+    public Order(long clientOrderId, int instrumentId, Side side, string bookName, IOrderRouter router, IOrderGateway gateway, ILogger<Order> logger)
     {
+        ClientOrderId = clientOrderId;
         InstrumentId = instrumentId;
         Side = side;
         BookName = bookName;
-        // Use the thread-safe increment operation to generate a unique ID.
-        ClientOrderId = Interlocked.Increment(ref _clientOrderIdCounter);
         Status = OrderStatus.Pending;
 
         _router = router;

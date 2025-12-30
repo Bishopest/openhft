@@ -1,5 +1,6 @@
 using System;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.Orders;
 
 namespace OpenHFT.Core.Interfaces;
 
@@ -8,5 +9,5 @@ namespace OpenHFT.Core.Interfaces;
 public interface IOrderFactory
 {
     // The factory needs the basic, immutable properties to create the correct order type.
-    IOrder Create(int instrumentId, Side side, string bookName);
+    IOrder Create(int instrumentId, Side side, string bookName, OrderSource source);
 }
