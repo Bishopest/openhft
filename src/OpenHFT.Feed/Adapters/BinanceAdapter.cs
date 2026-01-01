@@ -270,11 +270,11 @@ public class BinanceAdapter : BaseAuthFeedAdapter
         return baseUrl;
     }
 
-    protected override async Task ProcessMessage(MemoryStream messageStream)
+    protected override async Task ProcessMessage(ReadOnlyMemory<byte> messageBytes)
     {
         try
         {
-            using var document = await JsonDocument.ParseAsync(messageStream);
+            using var document = JsonDocument.Parse(messageBytes);
             var root = document.RootElement;
 
             // Subscription response, ignore it.
@@ -420,7 +420,7 @@ public class BinanceAdapter : BaseAuthFeedAdapter
         return null;
     }
 
-    protected override bool IsPongMessage(MemoryStream messageStream)
+    protected override bool IsPongMessage(ReadOnlySpan<byte> messageSpan)
     {
         // Not used for Binance.
         return false;

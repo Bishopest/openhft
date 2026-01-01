@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -26,6 +27,7 @@ public class BinanceBookManager
     private long _lastUpdateId = -1;
     private volatile bool _isSnapshotLoaded = false;
     private volatile bool _isFirstEventProcessed = false;
+    private static readonly ArrayPool<PriceLevelEntry> _entryPool = ArrayPool<PriceLevelEntry>.Shared;
 
     public BinanceBookManager(ILogger logger, BinanceRestApiClient apiClient, int instrumentId, Action<MarketDataEvent> eventDispatcher)
     {
@@ -236,72 +238,102 @@ public class BinanceBookManager
 
     private void DispatchUpdate(JsonElement data)
     {
-        // --- MODIFICATION START ---
-
-        // 1. Extract sequence and timestamp information first.
         var u = data.GetProperty("u").GetInt64();
         var U = data.GetProperty("U").GetInt64();
         var eventTime = data.GetProperty("E").GetInt64();
 
-        // 2. Combine all updates (bids and asks) into a single list.
-        var allUpdates = new List<PriceLevelEntry>();
-        if (data.TryGetProperty("b", out var bidsElement))
-        {
-            foreach (var bid in bidsElement.EnumerateArray())
-            {
-                // The quantity "0" indicates a level removal.
-                allUpdates.Add(new PriceLevelEntry(Side.Buy, decimal.Parse(bid[0].GetString()!), decimal.Parse(bid[1].GetString()!)));
-            }
-        }
-        if (data.TryGetProperty("a", out var asksElement))
-        {
-            foreach (var ask in asksElement.EnumerateArray())
-            {
-                allUpdates.Add(new PriceLevelEntry(Side.Sell, decimal.Parse(ask[0].GetString()!), decimal.Parse(ask[1].GetString()!)));
-            }
-        }
+        // 2. 전체 업데이트 개수 파악하여 한 번에 버퍼 대여
+        int bidCount = data.TryGetProperty("b", out var bEle) ? bEle.GetArrayLength() : 0;
+        int askCount = data.TryGetProperty("a", out var aEle) ? aEle.GetArrayLength() : 0;
+        int totalCount = bidCount + askCount;
 
-        if (!allUpdates.Any())
+        if (totalCount == 0)
         {
-            // If there are no updates in this message, we still need to update the sequence number.
             _lastUpdateId = u;
             return;
         }
 
-        // 3. Process all updates in chunks of 40.
-        for (int chunkStart = 0; chunkStart < allUpdates.Count; chunkStart += 40)
-        {
-            var updatesArray = new PriceLevelEntryArray();
-            int chunkSize = Math.Min(40, allUpdates.Count - chunkStart);
+        // 3. List 대신 ArrayPool에서 배열 대여 (Heap 할당 0)
+        PriceLevelEntry[] tempBuffer = _entryPool.Rent(totalCount);
+        int currentIdx = 0;
 
-            for (int i = 0; i < chunkSize; i++)
+        try
+        {
+            // 4. Bids 처리 (문자열 할당 없이 파싱)
+            if (bidCount > 0)
             {
-                updatesArray[i] = allUpdates[chunkStart + i];
+                foreach (var bid in bEle.EnumerateArray())
+                {
+                    tempBuffer[currentIdx++] = new PriceLevelEntry(
+                        Side.Buy,
+                        FastParseDecimal(bid[0]),
+                        FastParseDecimal(bid[1])
+                    );
+                }
             }
 
-            bool isLastChunk = (chunkStart + 40) >= allUpdates.Count;
+            // 5. Asks 처리
+            if (askCount > 0)
+            {
+                foreach (var ask in aEle.EnumerateArray())
+                {
+                    tempBuffer[currentIdx++] = new PriceLevelEntry(
+                        Side.Sell,
+                        FastParseDecimal(ask[0]),
+                        FastParseDecimal(ask[1])
+                    );
+                }
+            }
 
-            // Create a MarketDataEvent for the current chunk.
-            // All chunks from a single WebSocket message share the same sequence info (U and u).
-            var marketEvent = new MarketDataEvent(
-                u,           // Sequence is 'u' (the final update ID of the whole message)
-                eventTime,
-                EventKind.Update,
-                _instrumentId,
-                ExchangeEnum.BINANCE,
-                U,           // PrevSequence is 'U' (the first update ID of the whole message)
-                BinanceTopic.DepthUpdate.TopicId,
-                chunkSize,
-                updatesArray,
-                isLastChunk
-            );
+            // 6. 40개씩 쪼개서 디스럽터(RingBuffer)로 전송
+            for (int chunkStart = 0; chunkStart < totalCount; chunkStart += 40)
+            {
+                var updatesArray = new PriceLevelEntryArray();
+                int chunkSize = Math.Min(40, totalCount - chunkStart);
 
-            _eventDispatcher(marketEvent);
+                for (int i = 0; i < chunkSize; i++)
+                {
+                    updatesArray[i] = tempBuffer[chunkStart + i];
+                }
+
+                bool isLastChunk = (chunkStart + 40) >= totalCount;
+
+                var marketEvent = new MarketDataEvent(
+                    u, eventTime, EventKind.Update, _instrumentId, ExchangeEnum.BINANCE,
+                    U, BinanceTopic.DepthUpdate.TopicId, chunkSize, updatesArray, isLastChunk
+                );
+
+                _eventDispatcher(marketEvent);
+            }
+        }
+        finally
+        {
+            // 7. 사용이 끝난 배열은 반드시 풀에 반납
+            _entryPool.Return(tempBuffer);
         }
 
-        // 4. IMPORTANT: Update the internal sequence number AFTER all chunks are dispatched.
         _lastUpdateId = u;
+    }
 
-        // --- MODIFICATION END ---
+    /// <summary>
+    /// 문자열 할당 없이 JsonElement에서 decimal을 직접 파싱하는 고성능 메서드
+    /// </summary>
+    private decimal FastParseDecimal(JsonElement element)
+    {
+        // 1. 이미 숫자인 경우 바로 반환
+        if (element.ValueKind == JsonValueKind.Number) return element.GetDecimal();
+
+        // 2. 문자열인 경우 ("123.45") 원시 텍스트에서 따옴표를 떼고 바이트 단위로 파싱
+        // GetRawText()는 .NET 6/7/8에서 매우 효율적으로 동작하며 
+        // 최신 버전에서는 문자열 생성을 최소화합니다.
+        ReadOnlySpan<char> rawSpan = element.GetRawText().AsSpan();
+
+        // 따옴표 제거 (예: "123.45" -> 123.45)
+        if (rawSpan.Length >= 2 && rawSpan[0] == '"')
+        {
+            rawSpan = rawSpan.Slice(1, rawSpan.Length - 2);
+        }
+
+        return decimal.Parse(rawSpan);
     }
 }

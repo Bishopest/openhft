@@ -661,11 +661,11 @@ public class BitmexAdapter : BaseAuthFeedAdapter
         }
     }
 
-    protected override async Task ProcessMessage(MemoryStream messageStream)
+    protected override async Task ProcessMessage(ReadOnlyMemory<byte> messageBytes)
     {
         try
         {
-            using var document = await JsonDocument.ParseAsync(messageStream);
+            using var document = JsonDocument.Parse(messageBytes);
             var root = document.RootElement;
             if (root.TryGetProperty("error", out var errorElement))
             {
@@ -742,24 +742,24 @@ public class BitmexAdapter : BaseAuthFeedAdapter
         return "ping";
     }
 
-    protected override bool IsPongMessage(MemoryStream messageStream)
+    protected override bool IsPongMessage(ReadOnlySpan<byte> messageSpan)
     {
-        if (messageStream.Length != 4)
+        // 1. 길이 체크 (4바이트가 아니면 "pong"일 리 없음)
+        if (messageSpan.Length != 4)
         {
             return false;
         }
 
-        var originalPosition = messageStream.Position;
-        Span<byte> buffer = stackalloc byte[4];
-        var bytesRead = messageStream.Read(buffer);
-        messageStream.Position = originalPosition; // IMPORTANT: Reset stream position
+        // 2. 바이트 단위 비교 (Zero-allocation)
+        // "pong"u8은 C# 11+의 기능으로, 문자열 생성 없이 
+        // 컴파일 타임에 ReadOnlySpan<byte>로 직접 변환됩니다.
+        return messageSpan.SequenceEqual("pong"u8);
 
-        if (bytesRead < 4)
-        {
-            return false;
-        }
-
-        // Compare byte-by-byte for "pong"
-        return buffer[0] == 'p' && buffer[1] == 'o' && buffer[2] == 'n' && buffer[3] == 'g';
+        /* 만약 C# 11 이전 버전을 사용 중이라면 아래와 같이 비교합니다:
+        return messageSpan[0] == (byte)'p' && 
+               messageSpan[1] == (byte)'o' && 
+               messageSpan[2] == (byte)'n' && 
+               messageSpan[3] == (byte)'g';
+        */
     }
 }

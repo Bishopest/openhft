@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Text;
@@ -330,41 +331,55 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
     private async Task ReceiveLoop(CancellationToken cancellationToken)
     {
-        var buffer = new byte[8192];
+        // 1. 초기 버퍼 대여 (기본 64KB, 바이낸스 대형 depth 대비)
+        int currentBufferSize = 65536;
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(currentBufferSize);
+        int totalBytesRead = 0;
 
         try
         {
             while (!cancellationToken.IsCancellationRequested && _webSocket?.State == WebSocketState.Open)
             {
-                using var ms = new MemoryStream();
-                WebSocketReceiveResult result;
-                do
+                // 웹소켓으로부터 데이터 수신
+                var segment = new ArraySegment<byte>(buffer, totalBytesRead, buffer.Length - totalBytesRead);
+                WebSocketReceiveResult result = await _webSocket.ReceiveAsync(segment, cancellationToken).ConfigureAwait(false);
+
+                if (result.MessageType == WebSocketMessageType.Close)
                 {
-                    var segment = new ArraySegment<byte>(buffer);
-                    result = await _webSocket.ReceiveAsync(segment, cancellationToken).ConfigureAwait(false);
-                    if (result.MessageType == WebSocketMessageType.Close)
-                    {
-                        throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely, $"Connection closed by remote host. Status: {result.CloseStatus}, Description: {result.CloseStatusDescription}");
-                    }
-                    ms.Write(buffer, 0, result.Count);
-                } while (!result.EndOfMessage);
+                    throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely, $"Connection closed by remote host. Status: {result.CloseStatus}, Description: {result.CloseStatusDescription}");
+                }
 
-                ms.Seek(0, SeekOrigin.Begin);
+                totalBytesRead += result.Count;
 
-                if (ms.Length > 0)
+                // 2. 버퍼 부족 시 확장
+                if (!result.EndOfMessage && totalBytesRead == buffer.Length)
                 {
-                    // Any message (data or pong) resets the inactivity timer.
-                    ResetInactivityTimer();
+                    int newSize = buffer.Length * 2;
+                    byte[] newBuffer = ArrayPool<byte>.Shared.Rent(newSize);
+                    Buffer.BlockCopy(buffer, 0, newBuffer, 0, totalBytesRead);
+                    ArrayPool<byte>.Shared.Return(buffer);
+                    buffer = newBuffer;
+                }
 
-                    if (IsPongMessage(ms))
+                // 3. 메시지 한 건이 완성된 경우
+                if (result.EndOfMessage)
+                {
+                    if (totalBytesRead > 0)
                     {
-                        _logger.LogInformationWithCaller($"Pong received from {SourceExchange}.");
-                        _pongTcs?.TrySetResult(true);
-                        continue;
+                        ResetInactivityTimer();
+
+                        // 4. Pong 체크 및 처리 (바이트 단위 비교)
+                        if (IsPongMessage(buffer.AsSpan(0, totalBytesRead)))
+                        {
+                            _pongTcs?.TrySetResult(true);
+                        }
+                        else
+                        {
+                            // 5. 핵심: 할당 없이 바이트 영역만 넘김
+                            await ProcessMessage(new ReadOnlyMemory<byte>(buffer, 0, totalBytesRead)).ConfigureAwait(false);
+                        }
                     }
-
-                    await ProcessMessage(ms).ConfigureAwait(false);
-
+                    totalBytesRead = 0; // 다음 메시지를 위해 인덱스 초기화
                 }
             }
         }
@@ -389,6 +404,10 @@ public abstract class BaseFeedAdapter : IFeedAdapter
 
             _logger.LogErrorWithCaller(ex, $"Unhandled exception in {SourceExchange} ReceiveLoop.");
             OnError(new FeedErrorEventArgs(new FeedReceiveException(SourceExchange, "Unhandled exception in receive loop", ex), null));
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
         }
     }
 
@@ -506,7 +525,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     /// Checks if the received message is a pong response.
     /// Note: The implementation should not dispose the stream and should reset its position if read.
     /// </summary>
-    protected abstract bool IsPongMessage(MemoryStream messageStream);
+    protected abstract bool IsPongMessage(ReadOnlySpan<byte> messageSpan);
 
     /// <summary>
     /// Defines the duration of inactivity before a ping is sent.
@@ -531,7 +550,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     /// <summary>
     /// Processes a raw message received from the WebSocket.
     /// </summary>
-    protected abstract Task ProcessMessage(MemoryStream messageStream);
+    protected abstract Task ProcessMessage(ReadOnlyMemory<byte> messageBytes);
 
     /// <summary>
     /// Sends subscription messages to the WebSocket for new symbols.
