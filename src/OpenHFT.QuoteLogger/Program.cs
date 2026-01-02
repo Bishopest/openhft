@@ -107,6 +107,7 @@ public class Program
                 services.AddSingleton<IQuotingInstanceFactory, QuotingInstanceFactory>();
                 services.AddSingleton<IQuotingInstanceManager, QuotingInstanceManager>();
                 services.AddSingleton<IOrderGatewayRegistry, OrderGatewayRegistry>();
+                services.AddSingleton<IClientIdGenerator, ClientIdGenerator>();
                 services.AddSingleton<IOrderFactory, OrderFactory>();
                 services.AddSingleton<QuoteDebugger>();
 

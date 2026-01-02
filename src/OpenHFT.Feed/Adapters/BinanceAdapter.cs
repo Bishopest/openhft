@@ -40,219 +40,74 @@ public class BinanceAdapter : BaseAuthFeedAdapter
         _logger.LogInformationWithCaller("Successfully obtained listen key from Binance.");
     }
 
-    private void ProcessAggTrade(JsonElement data)
+    private void ProcessAggTradeRaw(ref Utf8JsonReader reader, int instrumentId)
     {
-        var symbol = data.GetProperty("s").GetString();
-        if (symbol == null)
-        {
-            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "Invalid symbol in aggTrade message", null, null, BinanceTopic.AggTrade.TopicId), null));
-            return;
-        }
-        var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
-        if (instrument == null)
-        {
-            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Invalid instrument(symbol: {symbol}) in aggTrade message", null, null, BinanceTopic.AggTrade.TopicId), null));
-            return;
-        }
+        decimal price = 0, qty = 0;
+        long tradeTime = 0;
+        bool isBuyerMaker = false;
 
-        // Price and quantity are sent as strings in the aggTrade stream.
-        if (decimal.TryParse(data.GetProperty("p").GetString(), out var price) &&
-            decimal.TryParse(data.GetProperty("q").GetString(), out var quantity))
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
-            var tradeTime = data.GetProperty("T").GetInt64(); // Milliseconds
-            var isBuyerMaker = data.GetProperty("m").GetBoolean();
-
-            var updatesArray = new PriceLevelEntryArray();
-            var tradeEntry = new PriceLevelEntry(side: isBuyerMaker ? Side.Sell : Side.Buy, priceTicks: price, quantity: quantity);
-            updatesArray[0] = tradeEntry;
-            var marketDataEvent = new MarketDataEvent(
-                sequence: 0, // aggTrade doesn't have a clear sequence like depth updates
-                timestamp: tradeTime,
-                kind: EventKind.Trade,
-                instrumentId: instrument.InstrumentId,
-                exchange: SourceExchange,
-                prevSequence: 0,
-                topicId: BinanceTopic.AggTrade.TopicId,
-                updateCount: 1,
-                updates: updatesArray
-            );
-
-            OnMarketDataReceived(marketDataEvent);
-        }
-        else
-        {
-            _logger.LogWarningWithCaller($"Failed to parse price or quantity for aggTrade on symbol {symbol}");
-            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Failed to parse price or quantity for aggTrade on symbol {symbol}", null, null, BinanceTopic.AggTrade.TopicId), null));
-            return;
-        }
-    }
-
-    private void ProcessBookTicker(JsonElement data)
-    {
-        var symbol = data.GetProperty("s").GetString();
-        if (symbol == null)
-        {
-            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "Invalid symbol in bookticker message", null, null, BinanceTopic.BookTicker.TopicId), null));
-            return;
-        }
-        var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
-        if (instrument == null)
-        {
-            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Invalid instrument(symbol: {symbol}) in bookticker message", null, null, BinanceTopic.BookTicker.TopicId), null));
-            return;
-        }
-
-        long eventTime;
-        if (data.TryGetProperty("E", out var eventTimeElement) && eventTimeElement.TryGetInt64(out long parsedEventTime))
-        {
-            // Use the event time from the message (Perpetual Futures).
-            eventTime = parsedEventTime;
-        }
-        else
-        {
-            // Fallback to current time when 'E' is not available (Spot).
-            eventTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        }
-        var updatesArray = new PriceLevelEntryArray();
-
-        // Process Best Bid
-        if (decimal.TryParse(data.GetProperty("b").GetString(), out var bidPrice) &&
-            decimal.TryParse(data.GetProperty("B").GetString(), out var bidQty) && bidQty > 0)
-        {
-            var tradeEntry = new PriceLevelEntry(side: Side.Buy, priceTicks: bidPrice, quantity: bidQty);
-            updatesArray[0] = tradeEntry;
-        }
-        else
-        {
-            _logger.LogWarningWithCaller($"Failed to parse price or quantity for bid bookticker on symbol {symbol}");
-            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Failed to parse price or quantity for bid bookticker on symbol {symbol}", null, null, BinanceTopic.BookTicker.TopicId), null));
-            return;
-        }
-
-        // Process Best Ask
-        if (decimal.TryParse(data.GetProperty("a").GetString(), out var askPrice) &&
-            decimal.TryParse(data.GetProperty("A").GetString(), out var askQty) && askQty > 0)
-        {
-            var tradeEntry = new PriceLevelEntry(side: Side.Sell, priceTicks: askPrice, quantity: askQty);
-            updatesArray[1] = tradeEntry;
-        }
-        else
-        {
-            _logger.LogWarningWithCaller($"Failed to parse price or quantity for ask bookticker on symbol {symbol}");
-            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Failed to parse price or quantity for ask bookticker on symbol {symbol}", null, null, BinanceTopic.BookTicker.TopicId), null));
-            return;
-        }
-
-        var bookTickerEvent = new MarketDataEvent(
-                sequence: 0,
-                timestamp: eventTime,
-                kind: EventKind.Snapshot,
-                instrumentId: instrument.InstrumentId,
-                exchange: SourceExchange,
-                topicId: BinanceTopic.BookTicker.TopicId,
-                updateCount: 2,
-                updates: updatesArray
-            );
-        OnMarketDataReceived(bookTickerEvent);
-    }
-
-    private void ProcessPartialDepthUpdate(JsonElement data)
-    {
-        var symbol = data.GetProperty("s").GetString();
-        if (symbol == null)
-        {
-            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "Invalid symbol in depth message", null, null, BinanceTopic.DepthUpdate.TopicId), null));
-            return;
-        }
-        var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
-        if (instrument == null)
-        {
-            OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Invalid instrument(symbol: {symbol}) in depth message", null, null, BinanceTopic.DepthUpdate.TopicId), null));
-            return;
-        }
-
-        var timestamp = data.GetProperty("E").GetInt64();
-        var finalUpdateId = data.GetProperty("u").GetInt64();
-        var prevUpdateId = data.GetProperty("pu").GetInt64();
-        var updatesArray = new PriceLevelEntryArray();
-        // Here you should check sequence continuity using 'pu' and 'U'/'u' as per Binance docs.
-        // For simplicity, this example just processes the updates.
-
-        int i = 0;
-        // Process bids
-        if (data.TryGetProperty("b", out var bidsElement))
-        {
-            foreach (var bid in bidsElement.EnumerateArray())
+            if (reader.TokenType == JsonTokenType.PropertyName)
             {
-                if (decimal.TryParse(bid[0].GetString(), out var price) &&
-                    decimal.TryParse(bid[1].GetString(), out var quantity))
-                {
-                    var tradeEntry = new PriceLevelEntry(side: Side.Buy, priceTicks: price, quantity: quantity);
-                    updatesArray[i] = tradeEntry;
-                    i++;
-                }
-                else
-                {
-                    _logger.LogWarningWithCaller($"Failed to parse price or quantity for bid depth on symbol {symbol}");
-                    OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Failed to parse price or quantity for bid depth on symbol {symbol}", null, null, BinanceTopic.DepthUpdate.TopicId), null));
-                    return;
-                }
+                if (reader.ValueTextEquals("p"u8)) { reader.Read(); FastJsonParser.TryParseDecimal(ref reader, out price); }
+                else if (reader.ValueTextEquals("q"u8)) { reader.Read(); FastJsonParser.TryParseDecimal(ref reader, out qty); }
+                else if (reader.ValueTextEquals("T"u8)) { reader.Read(); tradeTime = reader.GetInt64(); }
+                else if (reader.ValueTextEquals("m"u8)) { reader.Read(); isBuyerMaker = reader.GetBoolean(); }
             }
         }
 
-        // Process asks
-        if (data.TryGetProperty("a", out var asksElement))
+        var updatesArray = new PriceLevelEntryArray();
+        updatesArray[0] = new PriceLevelEntry(isBuyerMaker ? Side.Sell : Side.Buy, price, qty);
+
+        OnMarketDataReceived(new MarketDataEvent(0, tradeTime, EventKind.Trade, instrumentId, SourceExchange, 0, BinanceTopic.AggTrade.TopicId, 1, updatesArray));
+    }
+
+    private void ProcessBookTickerRaw(ref Utf8JsonReader reader, int instrumentId)
+    {
+        decimal bPrice = 0, bQty = 0, aPrice = 0, aQty = 0;
+        long eventTime = 0;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
-            foreach (var ask in asksElement.EnumerateArray())
+            if (reader.TokenType == JsonTokenType.PropertyName)
             {
-                if (decimal.TryParse(ask[0].GetString(), out var price) &&
-                    decimal.TryParse(ask[1].GetString(), out var quantity))
-                {
-                    var tradeEntry = new PriceLevelEntry(side: Side.Sell, priceTicks: price, quantity: quantity);
-                    updatesArray[i] = tradeEntry;
-                    i++;
-                }
-                else
-                {
-                    _logger.LogWarningWithCaller($"Failed to parse price or quantity for ask depth on symbol {symbol}");
-                    OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Failed to parse price or quantity for ask depth on symbol {symbol}", null, null, BinanceTopic.DepthUpdate.TopicId), null));
-                    return;
-                }
+                if (reader.ValueTextEquals("b"u8)) { reader.Read(); FastJsonParser.TryParseDecimal(ref reader, out bPrice); }
+                else if (reader.ValueTextEquals("B"u8)) { reader.Read(); FastJsonParser.TryParseDecimal(ref reader, out bQty); }
+                else if (reader.ValueTextEquals("a"u8)) { reader.Read(); FastJsonParser.TryParseDecimal(ref reader, out aPrice); }
+                else if (reader.ValueTextEquals("A"u8)) { reader.Read(); FastJsonParser.TryParseDecimal(ref reader, out aQty); }
+                else if (reader.ValueTextEquals("E"u8)) { reader.Read(); eventTime = reader.GetInt64(); }
             }
         }
 
-        OnMarketDataReceived(new MarketDataEvent(
-                        sequence: finalUpdateId,
-                        timestamp: timestamp,
-                        kind: EventKind.Snapshot,
-                        instrumentId: instrument.InstrumentId,
-                        exchange: SourceExchange,
-                        prevSequence: prevUpdateId,
-                        topicId: BinanceTopic.DepthUpdate.TopicId,
-                        updateCount: i,
-                        updates: updatesArray
-                    ));
+        if (eventTime == 0) eventTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        var updates = new PriceLevelEntryArray();
+        updates[0] = new PriceLevelEntry(Side.Buy, bPrice, bQty);
+        updates[1] = new PriceLevelEntry(Side.Sell, aPrice, aQty);
+
+        OnMarketDataReceived(new MarketDataEvent(0, eventTime, EventKind.Snapshot, instrumentId, SourceExchange, 0, BinanceTopic.BookTicker.TopicId, 2, updates));
     }
 
-    private void ProcessDepthUpdate(JsonElement data)
+    private void ProcessDepthUpdateRaw(ref Utf8JsonReader reader, int instrumentId, ReadOnlyMemory<byte> rawData)
     {
-        var symbol = data.GetProperty("s").GetString();
-        if (string.IsNullOrEmpty(symbol)) return;
-
-        var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
-        if (instrument == null) return;
-
-        // Route the update to the correct book manager.
-        if (_bookManagers.TryGetValue(instrument.InstrumentId, out var bookManager))
+        if (_bookManagers.TryGetValue(instrumentId, out var bookManager))
         {
-            bookManager.ProcessWsUpdate(data);
-        }
-        else
-        {
-            // This can happen if a message arrives before the subscription process is complete.
-            _logger.LogWarningWithCaller($"Received depth update for {symbol} but book manager is not yet ready. Message will be dropped.");
+            // [중요] BookManager가 JsonElement에 의존하지 않도록 rawData 혹은 파싱된 구조체를 넘겨야 합니다.
+            // 여기서는 성능을 위해 이미 파싱 루프가 시작된 reader 대신, 
+            // 데이터 일관성을 위해 전체 ReadOnlyMemory를 넘기는 방식으로 설계합니다.
+            bookManager.ProcessWsUpdate(rawData);
         }
     }
+
+    private async Task HandleSubscriptionResponse()
+    {
+        foreach (var bookManager in _bookManagers.Values)
+        {
+            _ = bookManager.StartSyncAsync(CancellationToken.None);
+        }
+    }
+
     protected override string GetBaseUrl()
     {
         var baseUrl = ProdType switch
@@ -274,54 +129,78 @@ public class BinanceAdapter : BaseAuthFeedAdapter
     {
         try
         {
-            using var document = JsonDocument.Parse(messageBytes);
-            var root = document.RootElement;
+            var reader = new Utf8JsonReader(messageBytes.Span);
 
-            // Subscription response, ignore it.
-            if (root.TryGetProperty("result", out _) || root.TryGetProperty("id", out _))
+            // 1. 초기 토큰 읽기 ({ 시작)
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return;
+
+            int instrumentId = -1;
+            BinanceTopic? topic = null;
+            bool isDataField = false;
+
+            // 2. 스트리밍 파싱 루프
+            while (reader.Read())
             {
-                // Start the sync process in the background for each instrument.
-                foreach (var instrument in _bookManagers.Keys)
+                if (reader.TokenType == JsonTokenType.EndObject) break;
+
+                if (reader.TokenType == JsonTokenType.PropertyName)
                 {
-                    var bookManager = _bookManagers[instrument];
-                    _ = bookManager.StartSyncAsync(CancellationToken.None);
-                }
-                return;
-            }
-
-            // Combined stream format: {"stream":"<streamName>","data":{...}}
-            if (root.TryGetProperty("stream", out var streamElement) &&
-                root.TryGetProperty("data", out var dataElement) &&
-                streamElement.GetString() is { } streamName)
-            {
-                int atIndex = streamName.IndexOf('@');
-                if (atIndex > 0)
-                {
-                    var streamSuffix = streamName.Substring(atIndex);
-
-                    var topic = BinanceTopic.GetAllMarketTopics()
-                        .FirstOrDefault(t => t.GetStreamName("").Equals(streamSuffix, StringComparison.OrdinalIgnoreCase));
-
-                    if (topic != null)
+                    // A. 구독 응답 확인 (result 또는 id 필드가 있으면 무시)
+                    if (reader.ValueTextEquals("result"u8) || reader.ValueTextEquals("id"u8))
                     {
-                        // Now we have the correct topic object.
-                        if (topic == BinanceTopic.AggTrade) ProcessAggTrade(dataElement);
-                        else if (topic == BinanceTopic.BookTicker) ProcessBookTicker(dataElement);
-                        else if (topic == BinanceTopic.DepthUpdate) ProcessDepthUpdate(dataElement);
+                        await HandleSubscriptionResponse();
+                        return;
+                    }
+
+                    // B. Combined Stream 처리 ("stream" 필드에서 정보 추출)
+                    if (reader.ValueTextEquals("stream"u8))
+                    {
+                        reader.Read();
+                        ParseStreamName(ref reader, out instrumentId, out topic);
+                    }
+                    // C. 실제 데이터 처리 ("data" 필드 진입)
+                    else if (reader.ValueTextEquals("data"u8))
+                    {
+                        reader.Read(); // StartObject ({) 로 이동
+
+                        if (topic == BinanceTopic.AggTrade) ProcessAggTradeRaw(ref reader, instrumentId);
+                        else if (topic == BinanceTopic.BookTicker) ProcessBookTickerRaw(ref reader, instrumentId);
+                        else if (topic == BinanceTopic.DepthUpdate) ProcessDepthUpdateRaw(ref reader, instrumentId, messageBytes);
+
+                        break; // 데이터 처리가 끝났으므로 루프 종료
                     }
                 }
             }
         }
-        catch (JsonException jex)
-        {
-            // Handle parsing errors
-            OnError(new FeedErrorEventArgs(new FeedReceiveException(SourceExchange, "JSON parsing failed.", jex), null));
-        }
         catch (Exception ex)
         {
-            // Handle other processing errors
-            OnError(new FeedErrorEventArgs(new FeedReceiveException(SourceExchange, "Failed to process message.", ex), null));
+            OnError(new FeedErrorEventArgs(new FeedReceiveException(SourceExchange, "Zero-alloc parsing failed.", ex), null));
         }
+    }
+
+    private void ParseStreamName(ref Utf8JsonReader reader, out int instId, out BinanceTopic? topic)
+    {
+        instId = -1;
+        topic = null;
+
+        // streamName 예: "btcusdt@aggTrade"
+        ReadOnlySpan<byte> streamSpan = reader.ValueSpan;
+        int atIndex = streamSpan.IndexOf((byte)'@');
+        if (atIndex <= 0) return;
+
+        var symbolSpan = streamSpan.Slice(0, atIndex);
+        var suffixSpan = streamSpan.Slice(atIndex);
+
+        // 1. Symbol로 Instrument 찾기 (할당을 줄이기 위해 여기서만 GetString() 사용 혹은 캐시 사용)
+        // 실제 운영 환경에서는 UTF8 Span을 직접 비교하는 Repository 확장이 가장 좋습니다.
+        string symbol = Encoding.UTF8.GetString(symbolSpan);
+        var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
+        if (instrument != null) instId = instrument.InstrumentId;
+
+        // 2. Suffix로 Topic 찾기 (바이트 비교)
+        if (suffixSpan.SequenceEqual("@aggTrade"u8)) topic = BinanceTopic.AggTrade;
+        else if (suffixSpan.SequenceEqual("@bookTicker"u8)) topic = BinanceTopic.BookTicker;
+        else if (suffixSpan.SequenceEqual("@depth@100ms"u8) || suffixSpan.SequenceEqual("@depth"u8)) topic = BinanceTopic.DepthUpdate;
     }
 
     private string GetRawMessage(MemoryStream ms)

@@ -22,7 +22,7 @@ public class BinanceBookManager
     private readonly bool _isDerivatives = false;
     private readonly int _instrumentId;
     private readonly Action<MarketDataEvent> _eventDispatcher;
-    private readonly ConcurrentQueue<JsonElement> _eventBuffer = new();
+    private readonly ConcurrentQueue<BufferedDepthUpdate> _eventBuffer = new();
     private readonly object _syncLock = new();
     private long _lastUpdateId = -1;
     private volatile bool _isSnapshotLoaded = false;
@@ -44,28 +44,86 @@ public class BinanceBookManager
     public async Task StartSyncAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformationWithCaller($"Starting order book sync for {_instrumentId}...");
-        _isSnapshotLoaded = false;
-        _isFirstEventProcessed = false;
-        _lastUpdateId = -1;
-        while (!_eventBuffer.IsEmpty) _eventBuffer.TryDequeue(out _);
-
+        lock (_syncLock)
+        {
+            _isSnapshotLoaded = false;
+            _isFirstEventProcessed = false;
+            _lastUpdateId = -1;
+            while (_eventBuffer.TryDequeue(out var update))
+            {
+                _entryPool.Return(update.Entries);
+            }
+        }
         await FetchAndApplySnapshotAsync(cancellationToken);
     }
 
-    public void ProcessWsUpdate(JsonElement data)
+    public void ProcessWsUpdate(ReadOnlyMemory<byte> payload)
     {
-        // Use a lock to prevent race condition between this and FetchAndApplySnapshotAsync
+        var reader = new Utf8JsonReader(payload.Span);
+        var update = ParseRawUpdate(ref reader);
+
         lock (_syncLock)
         {
             if (!_isSnapshotLoaded)
             {
-                _eventBuffer.Enqueue(data.Clone());
+                _eventBuffer.Enqueue(update);
                 return;
             }
         }
 
-        // If snapshot is loaded, validation and dispatch can happen outside the lock.
-        ValidateAndDispatchUpdate(data);
+        ValidateAndDispatchUpdate(update);
+    }
+
+    private BufferedDepthUpdate ParseRawUpdate(ref Utf8JsonReader reader)
+    {
+        long u = 0, U = 0, pu = 0, E = 0;
+        var entries = _entryPool.Rent(256);
+        int count = 0;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName) continue;
+            var prop = reader.ValueSpan;
+            reader.Read();
+
+            if (prop.SequenceEqual("u"u8)) u = reader.GetInt64();
+            else if (prop.SequenceEqual("U"u8)) U = reader.GetInt64();
+            else if (prop.SequenceEqual("pu"u8)) pu = reader.GetInt64();
+            else if (prop.SequenceEqual("E"u8)) E = reader.GetInt64();
+            else if (prop.SequenceEqual("b"u8)) ParseEntries(ref reader, ref entries, ref count, Side.Buy);
+            else if (prop.SequenceEqual("a"u8)) ParseEntries(ref reader, ref entries, ref count, Side.Sell);
+        }
+
+        return new BufferedDepthUpdate { u = u, U = U, pu = pu, E = E, Entries = entries, EntryCount = count };
+    }
+
+    private void ParseEntries(ref Utf8JsonReader reader, ref PriceLevelEntry[] buffer, ref int currentIdx, Side side)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) return;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            // 1. 버퍼 크기 체크 및 동적 확장 (핵심 수정 사항)
+            if (currentIdx >= buffer.Length)
+            {
+                var newBuffer = _entryPool.Rent(buffer.Length * 2);
+                Array.Copy(buffer, 0, newBuffer, 0, buffer.Length);
+                _entryPool.Return(buffer); // 기존 작은 버퍼 반납
+                buffer = newBuffer; // 새 버퍼로 교체
+            }
+
+            // 2. 내부 배열 [price, qty] 파싱
+            if (reader.TokenType == JsonTokenType.StartArray)
+            {
+                reader.Read(); // Price 문자열 위치로 이동
+                FastJsonParser.TryParseDecimal(ref reader, out decimal p);
+                reader.Read(); // Qty 문자열 위치로 이동
+                FastJsonParser.TryParseDecimal(ref reader, out decimal q);
+                reader.Read(); // Inner Array 종료 (EndArray)
+
+                buffer[currentIdx++] = new PriceLevelEntry(side, p, q);
+            }
+        }
     }
 
     private async Task FetchAndApplySnapshotAsync(CancellationToken cancellationToken)
@@ -74,116 +132,77 @@ public class BinanceBookManager
         {
             var limit = _isDerivatives ? 1000 : 5000;
             var snapshot = await _apiClient.GetDepthSnapshotAsync(_instrumentId, limit, cancellationToken);
-            var snapshotUpdateId = snapshot.LastUpdateId;
-            _logger.LogDebug($"Fetched snapshot for {_instrumentId} with lastUpdateId: {snapshotUpdateId}");
 
             lock (_syncLock)
             {
-                if (_isDerivatives)
+                // 버퍼 내 이벤트 필터링
+                while (_eventBuffer.TryPeek(out var update))
                 {
-                    // [Derivatives] u < lastUpdateId 인 이벤트는 모두 버림
-                    while (_eventBuffer.TryPeek(out var bEvent) && bEvent.GetProperty("u").GetInt64() < snapshotUpdateId)
+                    bool shouldDrop = _isDerivatives ? update.u < snapshot.LastUpdateId : update.u <= snapshot.LastUpdateId;
+                    if (shouldDrop)
                     {
-                        _eventBuffer.TryDequeue(out _);
+                        _eventBuffer.TryDequeue(out var dropped);
+                        _entryPool.Return(dropped.Entries);
                     }
-
-                    // [Derivatives] 첫 이벤트 조건: U <= lastUpdateId AND u >= lastUpdateId
-                    if (_eventBuffer.TryPeek(out var firstEvent))
-                    {
-                        var U = firstEvent.GetProperty("U").GetInt64();
-                        var u = firstEvent.GetProperty("u").GetInt64();
-
-                        if (!(U <= snapshotUpdateId && u >= snapshotUpdateId))
-                        {
-                            _logger.LogWarningWithCaller($"[Derivatives] Gap detected. Snapshot ID {snapshotUpdateId} not covered by first event [U:{U}, u:{u}]. Refetching...");
-                            _ = Task.Run(() => StartSyncAsync(cancellationToken));
-                            return;
-                        }
-                    }
-                }
-                else
-                {
-                    // [Spot] u <= lastUpdateId 인 이벤트는 모두 버림
-                    while (_eventBuffer.TryPeek(out var bEvent) && bEvent.GetProperty("u").GetInt64() <= snapshotUpdateId)
-                    {
-                        _eventBuffer.TryDequeue(out _);
-                    }
-
-                    if (_eventBuffer.TryPeek(out var firstEvent))
-                    {
-                        var U = firstEvent.GetProperty("U").GetInt64();
-                        if (U > snapshotUpdateId + 1)
-                        {
-                            _logger.LogWarningWithCaller($"[Spot] Gap detected. Snapshot: {snapshotUpdateId}, First Event U: {U}. Refetching...");
-                            _ = Task.Run(() => StartSyncAsync(cancellationToken));
-                            return;
-                        }
-                    }
+                    else break;
                 }
 
-                // 스냅샷 적용
+                // 스냅샷 전송
                 DispatchSnapshot(snapshot);
-                _lastUpdateId = snapshotUpdateId;
+                _lastUpdateId = snapshot.LastUpdateId;
 
+                // 버퍼에 쌓인 데이터 처리
                 while (_eventBuffer.TryDequeue(out var bufferedEvent))
                 {
                     ValidateAndDispatchUpdate(bufferedEvent);
                 }
 
                 _isSnapshotLoaded = true;
-                _logger.LogInformationWithCaller($"Sync for {_instrumentId} complete.");
             }
-            // --- End of lock ---
         }
         catch (Exception ex)
         {
-            _logger.LogErrorWithCaller(ex, $"Failed to fetch or apply snapshot for {_instrumentId}. Will retry on next subscription.");
+            _logger.LogErrorWithCaller(ex, $"Failed sync for {_instrumentId}");
         }
     }
 
-    private void ValidateAndDispatchUpdate(JsonElement data)
+    private void ValidateAndDispatchUpdate(BufferedDepthUpdate update)
     {
-        long u = data.GetProperty("u").GetInt64();
-        long U = data.GetProperty("U").GetInt64();
-
-        // 1. 이미 처리된 이전 데이터는 무시
-        if (u <= _lastUpdateId) return;
-
-        // 2. Gap Detection
-        if (_isDerivatives)
+        try
         {
-            // [Derivatives] pu(Previous Update ID) 필드 확인
-            if (data.TryGetProperty("pu", out var puElement))
-            {
-                long pu = puElement.GetInt64();
+            if (update.u <= _lastUpdateId) return;
 
-                if (!_isFirstEventProcessed)
-                {
-                    _isFirstEventProcessed = true;
-                }
-                else
-                {
-                    if (pu != _lastUpdateId)
-                    {
-                        _logger.LogWarningWithCaller($"[Derivatives] GAP: pu({pu}) != lastUpdateId({_lastUpdateId}) for {_instrumentId}. Resyncing...");
-                        _ = StartSyncAsync(CancellationToken.None);
-                        return;
-                    }
-                }
+            if (_isDerivatives)
+            {
+                if (!_isFirstEventProcessed) _isFirstEventProcessed = true;
+                else if (update.pu != _lastUpdateId) { TriggerResync(); return; }
             }
+            else
+            {
+                if (update.U > _lastUpdateId + 1) { TriggerResync(); return; }
+            }
+
+            // 디스패치 로직 (40개씩 끊어서 전송)
+            for (int i = 0; i < update.EntryCount; i += 40)
+            {
+                var updatesArray = new PriceLevelEntryArray();
+                int chunkSize = Math.Min(40, update.EntryCount - i);
+                for (int j = 0; j < chunkSize; j++) updatesArray[j] = update.Entries[i + j];
+
+                _eventDispatcher(new MarketDataEvent(update.u, update.E, EventKind.Update, _instrumentId, ExchangeEnum.BINANCE, update.U, BinanceTopic.DepthUpdate.TopicId, chunkSize, updatesArray, (i + 40) >= update.EntryCount));
+            }
+            _lastUpdateId = update.u;
         }
-        else
+        finally
         {
-            // [Spot] U == lastUpdateId + 1 확인
-            if (U > _lastUpdateId + 1)
-            {
-                _logger.LogWarningWithCaller($"[Spot] GAP: U({U}) > lastUpdateId({_lastUpdateId}) + 1 for {_instrumentId}. Resyncing...");
-                _ = StartSyncAsync(CancellationToken.None);
-                return;
-            }
+            _entryPool.Return(update.Entries); // 처리가 끝나면 반드시 반납
         }
+    }
 
-        DispatchUpdate(data);
+    private void TriggerResync()
+    {
+        _logger.LogWarningWithCaller($"GAP detected for {_instrumentId}. Resyncing...");
+        _ = Task.Run(() => StartSyncAsync(CancellationToken.None));
     }
 
     // Helper methods to create and dispatch MarketDataEvent
