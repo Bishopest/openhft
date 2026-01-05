@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
@@ -14,11 +15,8 @@ namespace OpenHFT.Feed.Adapters;
 
 public class BitmexAdapter : BaseAuthFeedAdapter
 {
-
     public override ExchangeEnum SourceExchange => ExchangeEnum.BITMEX;
-
     protected override bool IsHeartbeatEnabled => true;
-
     // Field to track the last execution ID per order id 
     private readonly ConcurrentDictionary<string, HashSet<string>> _processedExecIDs = new();
     // BitMEX L2 OrderBook ID to Price mapping cache
@@ -119,545 +117,290 @@ public class BitmexAdapter : BaseAuthFeedAdapter
         return SendMessageAsync(message, cancellationToken);
     }
 
-    private void ProcessExecution(JsonElement data)
+    // --------------------------------------------------------------------------------
+    // Execution (주문 상태 업데이트)
+    // --------------------------------------------------------------------------------
+    private void ProcessExecution_Raw(ref Utf8JsonReader reader)
     {
-        var executions = data.EnumerateArray().ToList();
-        if (!executions.Any())
+        if (reader.TokenType != JsonTokenType.StartArray) return;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
-            return;
-        }
+            string? orderId = null, clOrdId = null, execId = null, symbol = null, ordStatus = null;
+            decimal price = 0, lastPx = 0, orderQty = 0, leavesQty = 0, lastQty = 0;
+            Side side = Side.Buy;
+            long ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            string? execType = null;
 
-        foreach (var exeJson in executions)
-        {
-            // 2. symbol과 instrumentId를 먼저 가져옵니다.
-            var orderId = exeJson.TryGetProperty("orderID", out var oiEl) ? oiEl.GetString() : null;
-            if (string.IsNullOrEmpty(orderId)) continue;
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                var prop = reader.ValueSpan;
+                reader.Read();
 
-            var execId = exeJson.TryGetProperty("execID", out var execIdEl) ? execIdEl.GetString() : null;
-            if (string.IsNullOrEmpty(execId)) continue;
+                if (prop.SequenceEqual("orderID"u8)) orderId = reader.GetString();
+                else if (prop.SequenceEqual("clOrdID"u8)) clOrdId = reader.GetString();
+                else if (prop.SequenceEqual("trdMatchID"u8)) execId = reader.GetString();
+                else if (prop.SequenceEqual("symbol"u8)) symbol = reader.GetString();
+                else if (prop.SequenceEqual("side"u8)) side = reader.ValueTextEquals("Buy"u8) ? Side.Buy : Side.Sell;
+                else if (prop.SequenceEqual("ordStatus"u8)) ordStatus = reader.GetString();
+                else if (prop.SequenceEqual("execType"u8)) execType = reader.GetString();
+                else if (prop.SequenceEqual("price"u8)) FastJsonParser.TryParseDecimal(ref reader, out price);
+                else if (prop.SequenceEqual("lastPx"u8)) FastJsonParser.TryParseDecimal(ref reader, out lastPx);
+                else if (prop.SequenceEqual("orderQty"u8)) FastJsonParser.TryParseDecimal(ref reader, out orderQty);
+                else if (prop.SequenceEqual("leavesQty"u8)) FastJsonParser.TryParseDecimal(ref reader, out leavesQty);
+                else if (prop.SequenceEqual("lastQty"u8)) FastJsonParser.TryParseDecimal(ref reader, out lastQty);
+                else if (prop.SequenceEqual("timestamp"u8)) ts = reader.GetDateTimeOffset().ToUnixTimeMilliseconds();
+            }
 
+            // 중복 및 필터링 로직 (기존 로직 유지)
+            if (string.IsNullOrEmpty(orderId) || string.IsNullOrEmpty(clOrdId) || string.IsNullOrEmpty(execId) || execType != "Trade") continue;
             var execIdSet = _processedExecIDs.GetOrAdd(orderId, _ => new HashSet<string>());
             if (!execIdSet.Add(execId))
             {
+                _logger.LogWarningWithCaller($"duplicated execId {execId} for order {orderId}");
                 continue;
             }
 
-            // 4. execType이 'Trade'인 경우에만 처리합니다.
-            var execType = exeJson.TryGetProperty("execType", out var execTypeEl) ? execTypeEl.GetString() : null;
-            if (execType != "Trade")
+            if (!long.TryParse(clOrdId, out var clientOrderId))
             {
+                _logger.LogWarningWithCaller($"clOrdID({clOrdId}) not found on {SourceExchange}.");
                 continue;
             }
 
-            // 5. 파싱 및 이벤트 발생
-            try
+            if (string.IsNullOrEmpty(symbol))
             {
-                var report = ParseExecution(exeJson);
-                OnOrderUpdateReceived(report);
-                _logger.LogInformationWithCaller($"Processed new execution for order report => {report.ToString()}");
-            }
-            catch (FeedParseException fe)
-            {
-                _logger.LogErrorWithCaller(fe, $"Failed to parse BitMEX execution message. Raw: {fe.RawMessage}");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogErrorWithCaller(ex, $"An unexpected error occurred while processing execution message: {exeJson.ToString()}");
-            }
-        }
-
-        foreach (var exeJson in executions)
-        {
-            var orderId = exeJson.TryGetProperty("orderID", out var oiEl) ? oiEl.GetString() : null;
-            var ordStatus = exeJson.TryGetProperty("ordStatus", out var statEl) ? statEl.GetString() : null;
-
-            if (string.IsNullOrEmpty(orderId) || string.IsNullOrEmpty(ordStatus))
-            {
+                _logger.LogWarningWithCaller($"symbol parsed to null when processing execution message order-id({orderId})");
                 continue;
             }
+            var inst = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
+            if (inst == null) continue;
 
-            if (ordStatus is "Filled" or "Canceled" or "Rejected")
+            var status = ordStatus switch
             {
-                if (_processedExecIDs.TryRemove(orderId, out _))
-                {
-                    _logger.LogDebug("Cleaned up processed execution ID set for terminal order {OrderId}.", orderId);
-                }
-            }
+                "New" => OrderStatus.New,
+                "Filled" => OrderStatus.Filled,
+                "PartiallyFilled" => OrderStatus.PartiallyFilled,
+                "Canceled" => OrderStatus.Cancelled,
+                "Rejected" => OrderStatus.Rejected,
+                "PendingReplace" => OrderStatus.PartiallyFilled,
+                _ => HandleUnknownStatus(ordStatus) // Or log a warning for unknown status
+            };
+
+            // Report 생성 및 전송
+            var report = new OrderStatusReport(
+                clientOrderId: clientOrderId,
+                exchangeOrderId: orderId,
+                executionId: execId,
+                instrumentId: inst.InstrumentId,
+                side: side,
+                status: status,
+                price: Price.FromDecimal(price),
+                quantity: Quantity.FromDecimal(orderQty),
+                leavesQuantity: Quantity.FromDecimal(leavesQty),
+                timestamp: ts,
+                lastPrice: Price.FromDecimal(lastPx),
+                lastQuantity: Quantity.FromDecimal(lastQty)
+            );
+            OnOrderUpdateReceived(report);
+            _logger.LogInformationWithCaller($"Processed new execution for order report => {report}");
+
+            // 터미널 상태 시 캐시 정리
+            if (ordStatus is "Filled" or "Canceled" or "Rejected") _processedExecIDs.TryRemove(orderId, out _);
         }
-    }
-
-    private OrderStatusReport ParseExecution(JsonElement exeJson)
-    {
-        // _logger.LogInformationWithCaller($"Parsing BitMEX execution message: {exeJson.ToString()}");
-        // --- 1. 필수 필드 추출 및 검증 ---
-        var symbol = exeJson.TryGetProperty("symbol", out var symEl) ? symEl.GetString() : null;
-        if (string.IsNullOrEmpty(symbol))
-        {
-            throw new FeedParseException(SourceExchange, $"Symbol not found in execution message({exeJson}).", null, null);
-        }
-
-        var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
-        if (instrument == null)
-        {
-            throw new FeedParseException(SourceExchange, $"Unknown instrument symbol '{symbol}' in execution message({exeJson}).", null, null);
-        }
-
-        var clOrdIDString = exeJson.TryGetProperty("clOrdID", out var clOrdEl) ? clOrdEl.GetString() : null;
-        if (string.IsNullOrEmpty(clOrdIDString) || !long.TryParse(clOrdIDString, out var clientOrderId))
-        {
-            throw new FeedParseException(SourceExchange, $"clOrdID not found or invalid in execution message({exeJson}).", null, null);
-        }
-
-        // --- 2. 상태 및 데이터 필드 추출 ---
-        var executionId = exeJson.TryGetProperty("trdMatchID", out var trdMatchEl) ? trdMatchEl.GetString() : null;
-        var exchangeOrderId = exeJson.TryGetProperty("orderID", out var exOrdEl) ? exOrdEl.GetString() : null;
-        var ordStatusStr = exeJson.TryGetProperty("ordStatus", out var statEl) ? statEl.GetString() : null;
-        var timestampStr = exeJson.TryGetProperty("timestamp", out var tsEl) ? tsEl.GetString() : null;
-        var sideStr = exeJson.TryGetProperty("side", out var sideEl) ? sideEl.GetString() : null;
-
-        // --- 3. 값 변환 ---
-        var status = ordStatusStr switch
-        {
-            "New" => OrderStatus.New,
-            "Filled" => OrderStatus.Filled,
-            "PartiallyFilled" => OrderStatus.PartiallyFilled,
-            "Canceled" => OrderStatus.Cancelled,
-            "Rejected" => OrderStatus.Rejected,
-            "PendingReplace" => OrderStatus.PartiallyFilled,
-            _ => HandleUnknownStatus(ordStatusStr) // Or log a warning for unknown status
-        };
-
-        var side = sideStr switch
-        {
-            "Buy" => Side.Buy,
-            "Sell" => Side.Sell,
-            _ => throw new FeedParseException(SourceExchange, $"Invalid side value in execution message({exeJson}).", null, null)
-        };
-
-        var timestamp = !string.IsNullOrEmpty(timestampStr)
-            ? DateTimeOffset.Parse(timestampStr).ToUnixTimeMilliseconds()
-            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-        // GetProperty는 실패 시 예외를 던지므로, TryGetProperty를 사용하는 것이 더 안전합니다.
-        exeJson.TryGetProperty("price", out var priceEl);
-        exeJson.TryGetProperty("lastPx", out var lastPriceEl);
-        exeJson.TryGetProperty("orderQty", out var qtyEl);
-        exeJson.TryGetProperty("leavesQty", out var leavesEl);
-        exeJson.TryGetProperty("lastQty", out var lastQtyEl);
-
-        var price = Price.FromDecimal(priceEl.ValueKind == JsonValueKind.Number ? priceEl.GetDecimal() : 0);
-        var lastPrice = Price.FromDecimal(lastPriceEl.ValueKind == JsonValueKind.Number ? lastPriceEl.GetDecimal() : 0);
-        var quantity = Quantity.FromDecimal(qtyEl.ValueKind == JsonValueKind.Number ? qtyEl.GetDecimal() : 0);
-        var leavesQuantity = Quantity.FromDecimal(leavesEl.ValueKind == JsonValueKind.Number ? leavesEl.GetDecimal() : 0);
-        var lastQuantity = Quantity.FromDecimal(lastQtyEl.ValueKind == JsonValueKind.Number ? lastQtyEl.GetDecimal() : 0);
-
-        var rejectReason = exeJson.TryGetProperty("text", out var textEl) ? textEl.GetString() : null;
-
-        // --- 4. 최종 OrderStatusReport 객체 생성 ---
-        var report = new OrderStatusReport(
-            clientOrderId: clientOrderId,
-            exchangeOrderId: exchangeOrderId,
-            executionId: executionId,
-            instrumentId: instrument.InstrumentId,
-            side: side,
-            status: status,
-            price: price,
-            quantity: quantity,
-            leavesQuantity: leavesQuantity,
-            timestamp: timestamp,
-            rejectReason: rejectReason,
-            lastPrice: lastPrice,
-            lastQuantity: lastQuantity
-        );
-
-        return report;
     }
 
     private OrderStatus HandleUnknownStatus(string? status)
     {
-        _logger.LogWarning($"Unknown order status received: '{status}'. Returning OrderStatus.Pending.");
+        _logger.LogWarningWithCaller($"Unknown order status received: '{status}'. Returning OrderStatus.Pending.");
         return OrderStatus.Pending;
     }
 
-    private void ProcessOrderBook10(JsonElement data)
+    private void ProcessOrderBook10_Raw(ref Utf8JsonReader reader)
     {
-        if (!data.EnumerateArray().Any())
+        if (reader.TokenType != JsonTokenType.StartArray) return;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
-            return;
-        }
-
-        // BitMEX의 orderBook10은 스냅샷이므로, 첫 번째 항목에서 instrument와 timestamp를 가져옵니다.
-        foreach (var ele in data.EnumerateArray())
-        {
-            var symbol = ele.GetProperty("symbol").GetString();
-            if (symbol == null)
-            {
-                OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "Invalid symbol in depth message", null, null, BitmexTopic.OrderBook10.TopicId), null));
-                return;
-            }
-
-            var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
-            if (instrument == null)
-            {
-                OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Invalid instrument(symbol: {symbol}) in depth message", null, null, BitmexTopic.OrderBook10.TopicId), null));
-                return;
-            }
-
-            var timestampStr = ele.GetProperty("timestamp").GetString();
-            if (timestampStr == null)
-            {
-                OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "Invalid timestamp in depth message", null, null, BitmexTopic.OrderBook10.TopicId), null));
-                return;
-            }
-
-            DateTimeOffset dateTimeOffset = DateTimeOffset.Parse(timestampStr);
-            long unixTimeMilliseconds = dateTimeOffset.ToUnixTimeMilliseconds();
-
-            var updatesArray = new PriceLevelEntryArray();
-            int i = 0;
-            if (ele.TryGetProperty("bids", out var bidsElement))
-            {
-                foreach (var bid in bidsElement.EnumerateArray())
-                {
-                    var price = bid[0].GetDecimal();
-                    var size = bid[1].GetDecimal();
-                    var priceLevelEntry = new PriceLevelEntry(
-                        side: Side.Buy,
-                        priceTicks: price,
-                        quantity: size
-                    );
-                    updatesArray[i] = priceLevelEntry;
-                    i++;
-                }
-            }
-
-            if (ele.TryGetProperty("asks", out var asksElement))
-            {
-                foreach (var ask in asksElement.EnumerateArray())
-                {
-                    var price = ask[0].GetDecimal();
-                    var size = ask[1].GetDecimal();
-                    var priceLevelEntry = new PriceLevelEntry(
-                        side: Side.Sell,
-                        priceTicks: price,
-                        quantity: size
-                    );
-                    updatesArray[i] = priceLevelEntry;
-                    i++;
-                }
-            }
-            if (i > 0)
-            {
-                OnMarketDataReceived(new MarketDataEvent(
-                    sequence: 0, // orderBook10은 sequence 번호를 제공하지 않습니다.
-                    timestamp: unixTimeMilliseconds,
-                    kind: EventKind.Snapshot,
-                    instrumentId: instrument.InstrumentId,
-                    exchange: SourceExchange,
-                    prevSequence: 0,
-                    topicId: BitmexTopic.OrderBook10.TopicId,
-                    updateCount: i,
-                    updates: updatesArray
-                ));
-            }
-        }
-    }
-    private void ProcessOrderBookL2_25(JsonElement root)
-    {
-        // 1. Action 및 Data 추출
-        if (!root.TryGetProperty("action", out var actionProp) ||
-            !root.TryGetProperty("data", out var dataProp) ||
-            dataProp.ValueKind != JsonValueKind.Array)
-        {
-            return;
-        }
-
-        string action = actionProp.GetString() ?? string.Empty;
-        EventKind kind;
-
-        // 2. EventKind 매핑
-        switch (action)
-        {
-            case "partial":
-                kind = EventKind.Snapshot;
-                break;
-            case "insert":
-                kind = EventKind.Add;
-                break;
-            case "update":
-                kind = EventKind.Update;
-                break;
-            case "delete":
-                kind = EventKind.Delete;
-                break;
-            default:
-                _logger.LogWarningWithCaller($"Unknown action '{action}' in L2_25.");
-                return;
-        }
-
-        // 3. 데이터 순회 및 배치 처리
-        // InlineArray(40) 한계를 고려하여 40개씩 끊어서 전송
-        var updatesArray = new PriceLevelEntryArray();
-        int count = 0;
-
-        // 배치를 위해 현재 처리 중인 악기 정보를 추적
-        int currentInstrumentId = -1;
-        long currentTimestamp = 0;
-
-        foreach (var item in dataProp.EnumerateArray())
-        {
-            // --- A. 필수 필드 파싱 ---
-            if (!item.TryGetProperty("symbol", out var symProp) ||
-                !item.TryGetProperty("id", out var idProp) ||
-                !item.TryGetProperty("side", out var sideProp))
-            {
-                continue;
-            }
-
-            var symbol = symProp.GetString();
-            var id = idProp.GetInt64();
-            var sideStr = sideProp.GetString();
-
-            var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
-            if (instrument == null) continue;
-
-            // 타임스탬프 파싱 (L2는 항목별로 있을 수 있음)
+            int instId = -1;
             long ts = 0;
-            if (item.TryGetProperty("timestamp", out var tsProp) && tsProp.GetString() is { } tsStr)
+            var updates = new PriceLevelEntryArray();
+            int count = 0;
+
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
-                ts = DateTimeOffset.Parse(tsStr).ToUnixTimeMilliseconds();
-            }
-            else
-            {
-                ts = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            }
+                var prop = reader.ValueSpan;
+                reader.Read();
 
-            // --- B. 배치 플러시 조건 확인 ---
-            // 1) 배치가 꽉 찼거나 (40개)
-            // 2) 현재 배치와 다른 종목이 나왔을 때 (드물지만 안전장치)
-            if (count >= 40 || (currentInstrumentId != -1 && currentInstrumentId != instrument.InstrumentId))
-            {
-                // 이벤트 전송
-                OnMarketDataReceived(new MarketDataEvent(
-                    sequence: 0,
-                    timestamp: currentTimestamp,
-                    kind: kind,
-                    instrumentId: currentInstrumentId,
-                    exchange: SourceExchange,
-                    prevSequence: 0,
-                    topicId: BitmexTopic.OrderBookL2_25.TopicId,
-                    updateCount: count,
-                    updates: updatesArray
-                ));
-
-                // 리셋
-                count = 0;
-                updatesArray = new PriceLevelEntryArray(); // 구조체라 값 형식, 새 인스턴스로 초기화
-            }
-
-            currentInstrumentId = instrument.InstrumentId;
-            currentTimestamp = ts;
-
-            // --- C. 가격 및 수량 결정 (ID 매핑 로직) ---
-            decimal price = 0m;
-            decimal size = 0m;
-
-            // Size 추출 (Delete가 아니면 보통 있음)
-            if (item.TryGetProperty("size", out var sizeProp))
-            {
-                size = sizeProp.GetDecimal();
-            }
-
-            // Price 추출 및 캐시 관리
-            if (kind == EventKind.Snapshot || kind == EventKind.Add) // partial, insert
-            {
-                if (item.TryGetProperty("price", out var priceProp))
+                if (prop.SequenceEqual("symbol"u8)) instId = _instrumentRepository.FindBySymbol(Encoding.UTF8.GetString(reader.ValueSpan), ProdType, SourceExchange)?.InstrumentId ?? -1;
+                else if (prop.SequenceEqual("timestamp"u8)) ts = reader.GetDateTimeOffset().ToUnixTimeMilliseconds();
+                else if (prop.SequenceEqual("bids"u8) || prop.SequenceEqual("asks"u8))
                 {
-                    price = priceProp.GetDecimal();
-                    // 캐시에 저장 (Insert/Snapshot은 항상 가격이 옴)
-                    _l2IdToPrice[id] = price;
-                }
-            }
-            else if (kind == EventKind.Update) // update
-            {
-                // Update는 Price가 안 올 수 있음 -> 캐시에서 조회
-                // 가끔 리프라이싱(Repricing)이 일어나면 Price가 올 수도 있음
-                if (item.TryGetProperty("price", out var priceProp))
-                {
-                    price = priceProp.GetDecimal();
-                    _l2IdToPrice[id] = price; // 가격 변경 업데이트
-                }
-                else
-                {
-                    if (!_l2IdToPrice.TryGetValue(id, out price))
+                    var side = prop.SequenceEqual("bids"u8) ? Side.Buy : Side.Sell;
+                    if (reader.TokenType != JsonTokenType.StartArray) continue;
+
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                     {
-                        // 캐시에 없으면 처리가 불가능하므로 스킵 (혹은 에러로그)
-                        continue;
+                        // [price, size] 내부 배열
+                        reader.Read(); // Price
+                        FastJsonParser.TryParseDecimal(ref reader, out decimal p);
+                        reader.Read(); // Size
+                        FastJsonParser.TryParseDecimal(ref reader, out decimal s);
+                        reader.Read(); // End inner array
+
+                        if (count < 40) updates[count++] = new PriceLevelEntry(side, p, s);
                     }
                 }
             }
-            else if (kind == EventKind.Delete) // delete
+
+            if (instId != -1 && count > 0)
             {
-                // Delete는 Price가 안 옴 -> 캐시에서 조회 후 삭제
-                if (!_l2IdToPrice.TryRemove(id, out price))
+                OnMarketDataReceived(new MarketDataEvent(0, ts, EventKind.Snapshot, instId, SourceExchange, 0, BitmexTopic.OrderBook10.TopicId, count, updates));
+            }
+        }
+    }
+
+    // --------------------------------------------------------------------------------
+    // OrderBookL2_25 (가장 빈번함)
+    // --------------------------------------------------------------------------------
+    private void ProcessOrderBookL2_25_Raw(ref Utf8JsonReader reader, ReadOnlySpan<byte> actionSpan)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) return;
+
+        EventKind kind = actionSpan switch
+        {
+            _ when actionSpan.SequenceEqual("partial"u8) => EventKind.Snapshot,
+            _ when actionSpan.SequenceEqual("insert"u8) => EventKind.Add,
+            _ when actionSpan.SequenceEqual("update"u8) => EventKind.Update,
+            _ when actionSpan.SequenceEqual("delete"u8) => EventKind.Delete,
+            _ => EventKind.Update
+        };
+
+        var updatesArray = new PriceLevelEntryArray();
+        int count = 0;
+        int currentInstrumentId = -1;
+        long currentTimestamp = 0;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            long id = 0;
+            decimal price = 0, size = 0;
+            Side side = Side.Buy;
+            int instId = -1;
+
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                var prop = reader.ValueSpan;
+                reader.Read();
+
+                if (prop.SequenceEqual("symbol"u8))
                 {
-                    // 이미 없거나 찾을 수 없음. 
-                    // PriceLevelEntry에는 Price가 필수이므로, 
-                    // 이 경우 로직에 따라 무시하거나 로그를 남겨야 함.
-                    // 여기서는 무시.
-                    continue;
+                    // Symbol은 캐싱 처리가 되어있으므로 GetString()을 한 번만 허용하거나 바이트 비교 라이브러리 사용 권장
+                    var symbol = Encoding.UTF8.GetString(reader.ValueSpan);
+                    var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
+                    if (instrument != null) instId = instrument.InstrumentId;
+                }
+                else if (prop.SequenceEqual("id"u8)) id = reader.GetInt64();
+                else if (prop.SequenceEqual("side"u8)) side = reader.ValueTextEquals("Buy"u8) ? Side.Buy : Side.Sell;
+                else if (prop.SequenceEqual("size"u8)) FastJsonParser.TryParseDecimal(ref reader, out size);
+                else if (prop.SequenceEqual("price"u8))
+                {
+                    FastJsonParser.TryParseDecimal(ref reader, out price);
+                    _l2IdToPrice[id] = price;
+                }
+                else if (prop.SequenceEqual("timestamp"u8))
+                {
+                    currentTimestamp = reader.GetDateTimeOffset().ToUnixTimeMilliseconds();
                 }
             }
 
-            // --- D. 업데이트 배열에 추가 ---
-            var side = sideStr == "Buy" ? Side.Buy : Side.Sell;
+            // ID 매핑 및 가격 복구 (기존 로직 유지)
+            if (price == 0 && !_l2IdToPrice.TryGetValue(id, out price)) continue;
+            if (kind == EventKind.Delete) _l2IdToPrice.TryRemove(id, out _);
 
-            // InlineArray 인덱서 접근 (C# 12 기능)
-            // Span<T>으로 캐스팅하여 접근해야 할 수도 있음 (컴파일러 버전에 따라)
-            // 여기서는 구조체 정의상 인덱서가 있다고 가정하거나 Span 사용
-            // Span<PriceLevelEntry> span = updatesArray; 
-            // span[count] = ...
+            updatesArray[count++] = new PriceLevelEntry(side, price, size);
+            currentInstrumentId = instId;
 
-            // 예시 코드에서는 직접 할당 (System.Runtime.CompilerServices.InlineArrayAttribute 지원 시)
-            updatesArray[count] = new PriceLevelEntry(side, price, size);
-            count++;
+            // 40개 배치 처리
+            if (count >= 40)
+            {
+                OnMarketDataReceived(new MarketDataEvent(0, currentTimestamp, kind, currentInstrumentId, SourceExchange, 0, BitmexTopic.OrderBookL2_25.TopicId, count, updatesArray));
+                count = 0;
+                updatesArray = new PriceLevelEntryArray();
+            }
         }
 
-        // --- E. 남은 데이터 처리 ---
-        if (count > 0 && currentInstrumentId != -1)
-        {
-            OnMarketDataReceived(new MarketDataEvent(
-                sequence: 0,
-                timestamp: currentTimestamp,
-                kind: kind,
-                instrumentId: currentInstrumentId,
-                exchange: SourceExchange,
-                prevSequence: 0,
-                topicId: BitmexTopic.OrderBookL2_25.TopicId,
-                updateCount: count,
-                updates: updatesArray
-            ));
-        }
+        if (count > 0)
+            OnMarketDataReceived(new MarketDataEvent(0, currentTimestamp, kind, currentInstrumentId, SourceExchange, 0, BitmexTopic.OrderBookL2_25.TopicId, count, updatesArray));
     }
-    private void ProcessQuote(JsonElement data)
+
+    private void ProcessQuote_Raw(ref Utf8JsonReader reader)
     {
-        if (!data.EnumerateArray().Any())
+        if (reader.TokenType != JsonTokenType.StartArray) return;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
-            return;
-        }
+            decimal bPrice = 0, bSize = 0, aPrice = 0, aSize = 0;
+            int instId = -1;
+            long ts = 0;
 
-        foreach (var ele in data.EnumerateArray())
-        {
-            var symbol = ele.GetProperty("symbol").GetString();
-            if (symbol == null)
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
-                OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "Invalid symbol in depth message", null, null, BitmexTopic.Quote.TopicId), null));
-                return;
+                var prop = reader.ValueSpan;
+                reader.Read();
+
+                if (prop.SequenceEqual("symbol"u8)) instId = _instrumentRepository.FindBySymbol(Encoding.UTF8.GetString(reader.ValueSpan), ProdType, SourceExchange)?.InstrumentId ?? -1;
+                else if (prop.SequenceEqual("bidPrice"u8)) FastJsonParser.TryParseDecimal(ref reader, out bPrice);
+                else if (prop.SequenceEqual("bidSize"u8)) FastJsonParser.TryParseDecimal(ref reader, out bSize);
+                else if (prop.SequenceEqual("askPrice"u8)) FastJsonParser.TryParseDecimal(ref reader, out aPrice);
+                else if (prop.SequenceEqual("askSize"u8)) FastJsonParser.TryParseDecimal(ref reader, out aSize);
+                else if (prop.SequenceEqual("timestamp"u8)) ts = reader.GetDateTimeOffset().ToUnixTimeMilliseconds();
             }
 
-            var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
-            if (instrument == null)
-            {
-                OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Invalid instrument(symbol: {symbol}) in depth message", null, null, BitmexTopic.Quote.TopicId), null));
-                return;
-            }
+            if (instId == -1) continue;
 
-            var timestampStr = ele.GetProperty("timestamp").GetString();
-            if (timestampStr == null)
-            {
-                OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "Invalid timestamp in depth message", null, null, BitmexTopic.Quote.TopicId), null));
-                return;
-            }
+            var updates = new PriceLevelEntryArray();
+            updates[0] = new PriceLevelEntry(Side.Buy, bPrice, bSize);
+            updates[1] = new PriceLevelEntry(Side.Sell, aPrice, aSize);
 
-            DateTimeOffset dateTimeOffset = DateTimeOffset.Parse(timestampStr);
-            long unixTimeMilliseconds = dateTimeOffset.ToUnixTimeMilliseconds();
-
-            var updatesArray = new PriceLevelEntryArray();
-            var askPrice = ele.GetProperty("askPrice").GetDecimal();
-            var askSize = ele.GetProperty("askSize").GetDecimal();
-            var bidPrice = ele.GetProperty("bidPrice").GetDecimal();
-            var bidSize = ele.GetProperty("bidSize").GetDecimal();
-
-            var askLevelEntry = new PriceLevelEntry(
-                side: Side.Sell,
-                priceTicks: askPrice,
-                quantity: askSize
-            );
-            var bidLevelEntry = new PriceLevelEntry(
-                side: Side.Buy,
-                priceTicks: bidPrice,
-                quantity: bidSize
-            );
-            updatesArray[0] = askLevelEntry;
-            updatesArray[1] = bidLevelEntry;
-            OnMarketDataReceived(new MarketDataEvent(
-                sequence: 0,
-                timestamp: unixTimeMilliseconds,
-                kind: EventKind.Snapshot,
-                instrumentId: instrument.InstrumentId,
-                exchange: SourceExchange,
-                prevSequence: 0,
-                topicId: BitmexTopic.Quote.TopicId,
-                updateCount: 2,
-                updates: updatesArray
-            ));
+            OnMarketDataReceived(new MarketDataEvent(0, ts, EventKind.Snapshot, instId, SourceExchange, 0, BitmexTopic.Quote.TopicId, 2, updates));
         }
     }
 
-    private void ProcessTrade(JsonElement data)
+    // --------------------------------------------------------------------------------
+    // Trade 처리
+    // --------------------------------------------------------------------------------
+    private void ProcessTrade_Raw(ref Utf8JsonReader reader)
     {
-        if (!data.EnumerateArray().Any())
-        {
-            return;
-        }
+        if (reader.TokenType != JsonTokenType.StartArray) return;
 
-        foreach (var ele in data.EnumerateArray())
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
-            var symbol = ele.GetProperty("symbol").GetString();
-            if (symbol == null)
+            decimal price = 0, size = 0;
+            Side side = Side.Buy;
+            int instId = -1;
+            long ts = 0;
+
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                var prop = reader.ValueSpan;
+                reader.Read();
+
+                if (prop.SequenceEqual("symbol"u8)) instId = _instrumentRepository.FindBySymbol(Encoding.UTF8.GetString(reader.ValueSpan), ProdType, SourceExchange)?.InstrumentId ?? -1;
+                else if (prop.SequenceEqual("side"u8)) side = reader.ValueTextEquals("Buy"u8) ? Side.Buy : Side.Sell;
+                else if (prop.SequenceEqual("size"u8)) FastJsonParser.TryParseDecimal(ref reader, out size);
+                else if (prop.SequenceEqual("price"u8)) FastJsonParser.TryParseDecimal(ref reader, out price);
+                else if (prop.SequenceEqual("timestamp"u8)) ts = reader.GetDateTimeOffset().ToUnixTimeMilliseconds();
+            }
+
+            if (instId == -1)
             {
                 OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "Invalid symbol in depth message", null, null, BitmexTopic.Trade.TopicId), null));
-                return;
+                continue;
             }
 
-            var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
-            if (instrument == null)
-            {
-                OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, $"Invalid instrument(symbol: {symbol}) in depth message", null, null, BitmexTopic.Trade.TopicId), null));
-                return;
-            }
-
-            var timestampStr = ele.GetProperty("timestamp").GetString();
-            if (timestampStr == null)
-            {
-                OnError(new FeedErrorEventArgs(new FeedParseException(SourceExchange, "Invalid timestamp in depth message", null, null, BitmexTopic.Trade.TopicId), null));
-                return;
-            }
-
-            DateTimeOffset dateTimeOffset = DateTimeOffset.Parse(timestampStr);
-            long unixTimeMilliseconds = dateTimeOffset.ToUnixTimeMilliseconds();
-
-            var updatesArray = new PriceLevelEntryArray();
-            var price = ele.GetProperty("price").GetDecimal();
-            var size = ele.GetProperty("size").GetDecimal();
-            var sideStr = ele.GetProperty("side").GetString();
-            var priceLevelEntry = new PriceLevelEntry(
-                side: sideStr == "Buy" ? Side.Buy : Side.Sell,
-                priceTicks: price,
-                quantity: size
-            );
-            updatesArray[0] = priceLevelEntry;
-            OnMarketDataReceived(new MarketDataEvent(
-                sequence: 0,
-                timestamp: unixTimeMilliseconds,
-                kind: EventKind.Trade,
-                instrumentId: instrument.InstrumentId,
-                exchange: SourceExchange,
-                prevSequence: 0,
-                topicId: BitmexTopic.Trade.TopicId,
-                updateCount: 1,
-                updates: updatesArray
-            ));
+            var updates = new PriceLevelEntryArray();
+            updates[0] = new PriceLevelEntry(side, price, size);
+            OnMarketDataReceived(new MarketDataEvent(0, ts, EventKind.Trade, instId, SourceExchange, 0, BitmexTopic.Trade.TopicId, 1, updates));
         }
     }
 
@@ -665,76 +408,98 @@ public class BitmexAdapter : BaseAuthFeedAdapter
     {
         try
         {
-            using var document = JsonDocument.Parse(messageBytes);
-            var root = document.RootElement;
-            if (root.TryGetProperty("error", out var errorElement))
-            {
-                var errorMessage = errorElement.GetString() ?? "Unknown error.";
-                var statusCode = root.TryGetProperty("status", out var statusElement) && statusElement.TryGetInt32(out int code)
-                    ? code
-                    : 0;
+            var reader = new Utf8JsonReader(messageBytes.Span);
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return;
 
-                _logger.LogWarningWithCaller($"BitMEX WebSocket API Error (Status {statusCode}): {errorMessage}");
+            ReadOnlySpan<byte> tableName = default;
+            ReadOnlySpan<byte> actionName = default;
+            bool isSuccessTrue = false;
+            bool shouldExitEarly = false;
+
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName) continue;
+
+                var prop = reader.ValueSpan;
+                reader.Read(); // 값 위치로 이동
+
+                // 1. "error" 처리 로직
+                if (prop.SequenceEqual("error"u8))
+                {
+                    string errorMsg = reader.GetString() ?? "Unknown error.";
+                    // status 필드를 찾기 위해 전체를 다시 파싱하는 오버헤드를 피하기 위해 
+                    // 에러 메시지 위주로 먼저 로그를 남깁니다.
+                    _logger.LogWarningWithCaller($"BitMEX WebSocket API Error: {errorMsg}");
+                }
+                // 2. "success" 필드 확인 (인증 및 구독 응답 공통)
+                else if (prop.SequenceEqual("success"u8))
+                {
+                    isSuccessTrue = reader.GetBoolean();
+                    shouldExitEarly = true; // success가 있으면 무조건 데이터 파싱 안 함
+                }
+                // 3. "subscribe" 필드 확인
+                else if (prop.SequenceEqual("subscribe"u8))
+                {
+                    shouldExitEarly = true; // subscribe 응답이면 무조건 무시
+                }
+                // 4. "request" 필드 확인 (인증 성공 여부 판단용)
+                else if (prop.SequenceEqual("request"u8))
+                {
+                    if (isSuccessTrue && reader.TokenType == JsonTokenType.StartObject)
+                    {
+                        if (CheckIfAuthLimitRequest(ref reader))
+                        {
+                            _logger.LogInformationWithCaller("BitMEX WebSocket authentication successful.");
+                            OnAuthenticationStateChanged(true, "Authentication successful.");
+                        }
+                    }
+                }
+                // 5. 마켓 데이터 필드 추출 ("table", "action")
+                else if (prop.SequenceEqual("table"u8))
+                {
+                    tableName = reader.ValueSpan;
+                }
+                else if (prop.SequenceEqual("action"u8))
+                {
+                    actionName = reader.ValueSpan;
+                }
+                // 6. 실제 데이터 파싱 ("data")
+                else if (prop.SequenceEqual("data"u8))
+                {
+                    // 앞서 success나 subscribe가 발견되었다면 데이터 처리를 건너뜁니다.
+                    if (shouldExitEarly) return;
+
+                    if (tableName.SequenceEqual("orderBookL2_25"u8)) ProcessOrderBookL2_25_Raw(ref reader, actionName);
+                    else if (tableName.SequenceEqual("trade"u8)) ProcessTrade_Raw(ref reader);
+                    else if (tableName.SequenceEqual("quote"u8)) ProcessQuote_Raw(ref reader);
+                    else if (tableName.SequenceEqual("orderBook10"u8)) ProcessOrderBook10_Raw(ref reader);
+                    else if (tableName.SequenceEqual("execution"u8)) ProcessExecution_Raw(ref reader);
+
+                    break;
+                }
             }
 
-            // Authentication response
-            if (root.TryGetProperty("success", out var successElement) && successElement.GetBoolean())
-            {
-                if (root.TryGetProperty("request", out var reqEl) && reqEl.TryGetProperty("op", out var opEl) &&
-                    opEl.GetString() == "authKeyExpires")
-                {
-                    _logger.LogInformationWithCaller("BitMEX WebSocket authentication successful.");
-                    OnAuthenticationStateChanged(true, "Authentication successful.");
-                }
-                return;
-            }
-
-            // Subscription response, ignore it.
-            if (root.TryGetProperty("success", out _) || root.TryGetProperty("subscribe", out _))
-            {
-                return;
-            }
-
-            if (!root.TryGetProperty("table", out var tableElement))
-            {
-                return;
-            }
-
-            if (root.TryGetProperty("data", out var dataElement) &&
-                TopicRegistry.TryGetTopic(tableElement.GetString(), out var topic))
-            {
-                if (topic == BitmexTopic.OrderBook10)
-                {
-                    ProcessOrderBook10(dataElement);
-                }
-                else if (topic == BitmexTopic.OrderBookL2_25)
-                {
-                    ProcessOrderBookL2_25(root);
-                }
-                else if (topic == BitmexTopic.Quote)
-                {
-                    ProcessQuote(dataElement);
-                }
-                else if (topic == BitmexTopic.Trade)
-                {
-                    ProcessTrade(dataElement);
-                }
-                else if (topic == BitmexTopic.Execution)
-                {
-                    ProcessExecution(dataElement);
-                }
-            }
-        }
-        catch (JsonException jex)
-        {
-            // Handle parsing errors
-            OnError(new FeedErrorEventArgs(new FeedReceiveException(SourceExchange, "JSON parsing failed.", jex), null));
+            // 필드 순서상 success/subscribe가 뒤에 나올 경우를 대비한 최종 체크
+            if (shouldExitEarly) return;
         }
         catch (Exception ex)
         {
-            // Handle other processing errors
-            OnError(new FeedErrorEventArgs(new FeedReceiveException(SourceExchange, "Failed to process message.", ex), null));
+            _logger.LogErrorWithCaller(ex, "Optimized parsing failed.");
         }
+    }
+
+    // request.op == "authKeyExpires" 인지 확인하는 헬퍼
+    private bool CheckIfAuthLimitRequest(ref Utf8JsonReader reader)
+    {
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueTextEquals("op"u8))
+            {
+                reader.Read();
+                return reader.ValueTextEquals("authKeyExpires"u8);
+            }
+        }
+        return false;
     }
 
     protected override string? GetPingMessage()
