@@ -56,6 +56,10 @@ public class QuoterFactory : IQuoterFactory
             case QuoterType.Trend:
                 if (parameters.BookName == null) throw new ArgumentNullException("bookName");
                 return new TrendQuoter(_loggerFactory.CreateLogger<SingleOrderQuoter>(), side, instrument, _orderFactory, parameters.BookName, _marketDataManager);
+            // QuoterFactory.cs 내부 switch 문에 추가
+            case QuoterType.Shadow:
+                if (parameters.BookName == null) throw new ArgumentNullException("bookName");
+                return new ShadowQuoter(_loggerFactory.CreateLogger<ShadowQuoter>(), side, instrument, _orderFactory, parameters.BookName, _marketDataManager);
 
             default:
                 throw new ArgumentException($"Unsupported quoter type: {parameters.AskQuoterType}");

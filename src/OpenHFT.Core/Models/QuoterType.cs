@@ -26,4 +26,5 @@ public enum QuoterType
     /// A quoter that make trend-following quote by making reverse quote
     /// </summary>
     Trend,
+    Shadow
 }
