@@ -186,7 +186,7 @@ public class MockAdapter : BaseFeedAdapter
         throw new NotImplementedException();
     }
 
-    protected override Task ProcessMessage(MemoryStream messageStream)
+    protected override Task ProcessMessage(ReadOnlyMemory<byte> messageBytes)
     {
         throw new NotImplementedException();
     }
@@ -205,7 +205,7 @@ public class MockAdapter : BaseFeedAdapter
         throw new NotImplementedException();
     }
 
-    protected override bool IsPongMessage(MemoryStream messageStream)
+    protected override bool IsPongMessage(ReadOnlySpan<byte> messageSpan)
     {
         throw new NotImplementedException();
     }

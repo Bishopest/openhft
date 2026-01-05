@@ -33,49 +33,10 @@ public class OrderBook
     private readonly bool _enableL3;
     private long _nextOrderId = 1;
 
-    /// <summary>
-    /// Provides read-only access to all price levels on the bid side, sorted best to worst.
-    /// </summary>
-    public IEnumerable<PriceLevel> Bids
-    {
-        get
-        {
-            lock (_lock)
-            {
-                // Return a COPY of the data, not the live collection.
-                return _bids.GetAllLevels().ToList();
-            }
-        }
-    }
-    /// <summary>
-    /// Provides read-only access to all price levels on the ask side, sorted best to worst.
-    /// </summary>
-    public IEnumerable<PriceLevel> Asks
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _asks.GetAllLevels().ToList();
-            }
-        }
-    }
-
-    public OrderBook(Instrument instrument, ILogger<OrderBook>? logger = null, bool enableL3 = false)
-    {
-        _logger = logger;
-        _instrument = instrument;
-        _enableL3 = enableL3;
-
-        _bids = new BookSide(Side.Buy);
-        _asks = new BookSide(Side.Sell);
-
-        _lastSequence = 0;
-        _lastUpdateTimestamp = 0;
-        _snapshotSequence = 0;
-        _updateCount = 0;
-        _tradeCount = 0;
-    }
+    public ReadOnlySpan<PriceLevel> GetBidsSpan() => _bids.AsSpan();
+    public ReadOnlySpan<PriceLevel> GetAsksSpan() => _asks.AsSpan();
+    public IEnumerable<PriceLevel> Bids => _bids.GetAllLevels();
+    public IEnumerable<PriceLevel> Asks => _asks.GetAllLevels();
 
     public string Symbol => _instrument.Symbol;
     public int InstrumentId => _instrument.InstrumentId;
@@ -84,6 +45,22 @@ public class OrderBook
     public long LastUpdateTimestamp => _lastUpdateTimestamp;
     public long UpdateCount => _updateCount;
     public long TradeCount => _tradeCount;
+
+    public OrderBook(Instrument instrument, ILogger<OrderBook>? logger = null, bool enableL3 = false, int maxDepth = 5000)
+    {
+        _logger = logger;
+        _instrument = instrument;
+        _enableL3 = enableL3;
+
+        _bids = new BookSide(Side.Buy, maxDepth);
+        _asks = new BookSide(Side.Sell, maxDepth);
+
+        _lastSequence = 0;
+        _lastUpdateTimestamp = 0;
+        _snapshotSequence = 0;
+        _updateCount = 0;
+        _tradeCount = 0;
+    }
 
     /// <summary>
     /// Apply a market data event to the order book
@@ -201,8 +178,16 @@ public class OrderBook
     {
         lock (_lock)
         {
-            var bestBid = _bids.GetBestLevel();
-            return bestBid != null ? (bestBid.Price, bestBid.TotalQuantity) : (Price.FromTicks(0), Quantity.FromTicks(0));
+            // 1. ref readonly로 참조를 가져옵니다. (복사 발생 안 함)
+            ref readonly var bestBid = ref _bids.GetBestLevel();
+
+            // 2. Unsafe.IsNullRef를 사용하여 데이터가 존재하는지 체크합니다.
+            if (!Unsafe.IsNullRef(in bestBid))
+            {
+                return (bestBid.Price, bestBid.TotalQuantity);
+            }
+
+            return (Price.FromTicks(0), Quantity.FromTicks(0));
         }
     }
 
@@ -214,8 +199,16 @@ public class OrderBook
     {
         lock (_lock)
         {
-            var bestAsk = _asks.GetBestLevel();
-            return bestAsk != null ? (bestAsk.Price, bestAsk.TotalQuantity) : (Price.FromTicks(0), Quantity.FromTicks(0));
+            // 1. 참조 가져오기
+            ref readonly var bestAsk = ref _asks.GetBestLevel();
+
+            // 2. 주소 유효성 체크
+            if (!Unsafe.IsNullRef(in bestAsk))
+            {
+                return (bestAsk.Price, bestAsk.TotalQuantity);
+            }
+
+            return (Price.FromTicks(0), Quantity.FromTicks(0));
         }
     }
 
@@ -401,15 +394,14 @@ public class OrderBook
 
         for (int i = 0; i < levels; i++)
         {
-            var bid = i < bids.Length ? bids[i] : null;
-            var ask = i < asks.Length ? asks[i] : null;
+            PriceLevel? bid = i < bids.Length ? bids[i] : (PriceLevel?)null;
+            PriceLevel? ask = i < asks.Length ? asks[i] : (PriceLevel?)null;
 
-            // Assuming price ticks are convertible to decimal by dividing by 100.
-            var bidPrice = bid != null ? bid.Price.ToDecimal().ToString("F2") : "";
-            var bidSize = bid != null ? bid.TotalQuantity.ToDecimal().ToString("N0") : "";
+            var bidPrice = bid.HasValue ? bid.Value.Price.ToDecimal().ToString("F2") : "";
+            var bidSize = bid.HasValue ? bid.Value.TotalQuantity.ToDecimal().ToString("N0") : "";
 
-            var askPrice = ask != null ? ask.Price.ToDecimal().ToString("F2") : "";
-            var askSize = ask != null ? ask.TotalQuantity.ToDecimal().ToString("N0") : "";
+            var askPrice = ask.HasValue ? ask.Value.Price.ToDecimal().ToString("F2") : "";
+            var askSize = ask.HasValue ? ask.Value.TotalQuantity.ToDecimal().ToString("N0") : "";
 
             string spreadStr = "";
             if (i == 0 && spread > 0)

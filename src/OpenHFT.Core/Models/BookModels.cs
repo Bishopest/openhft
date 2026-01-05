@@ -1,45 +1,27 @@
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using OpenHFT.Core.Models;
 
 namespace OpenHFT.Core.Models;
 
-/// <summary>
-/// Represents a single price level in the order book
-/// Optimized for performance with minimal allocations
-/// </summary>
-public class PriceLevel
+[StructLayout(LayoutKind.Sequential, Pack = 8)] // 메모리 정렬 최적화
+public struct PriceLevel
 {
-    public Price Price { get; set; }
-    public Quantity TotalQuantity { get; set; }
-    public long OrderCount { get; set; }
-    public long LastUpdateSequence { get; set; }
-    public long LastUpdateTimestamp { get; set; }
+    public Price Price;
+    public Quantity TotalQuantity;
+    public long OrderCount;
+    public long LastUpdateSequence;
+    public long LastUpdateTimestamp;
 
-    // L3 specific: list of individual orders at this level (for simulation)
-    public List<OrderEntry>? Orders { get; set; }
-
-    public PriceLevel(Price price)
-    {
-        Price = price;
-        TotalQuantity = Quantity.FromTicks(0);
-        OrderCount = 0;
-        LastUpdateSequence = 0;
-        LastUpdateTimestamp = 0;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Update(Quantity quantity, long sequence, long timestamp)
     {
         TotalQuantity = quantity;
         LastUpdateSequence = sequence;
         LastUpdateTimestamp = timestamp;
-
-        // Update order count (simplified - in real L3 this would be managed differently)
         OrderCount = quantity.ToTicks() > 0 ? Math.Max(1, OrderCount) : 0;
     }
 
     public bool IsEmpty => TotalQuantity.ToTicks() <= 0;
-
     public override string ToString() => $"{Price}@{TotalQuantity}({OrderCount})";
 }
 
@@ -71,75 +53,147 @@ public class OrderEntry
 /// </summary>
 public class BookSide
 {
-    private readonly SortedDictionary<Price, PriceLevel> _levels;
     private readonly Side _side;
+    private readonly PriceLevel[] _data;
+    private int _count;
     private readonly bool _isAscending;
+    private readonly int _maxDepth;
 
-    public BookSide(Side side)
+    public BookSide(Side side, int maxDepth = 5000)
     {
         _side = side;
-        _isAscending = side == Side.Sell; // Asks ascending, Bids descending
-
-        // Custom comparer for price levels
-        var comparer = _isAscending ? Comparer<Price>.Default : Comparer<Price>.Create((x, y) => y.CompareTo(x));
-        _levels = new SortedDictionary<Price, PriceLevel>(comparer);
+        _maxDepth = maxDepth;
+        _data = new PriceLevel[maxDepth];
+        _isAscending = side == Side.Sell;
     }
 
     public Side Side => _side;
-    public int LevelCount => _levels.Count;
+    public int LevelCount => _count;
+    public ReadOnlySpan<PriceLevel> AsSpan() => _data.AsSpan(0, _count);
 
+    // 1. 최우선 호가 조회 (O(1), Zero-copy)
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ref readonly PriceLevel GetBestLevel()
+    {
+        if (_count == 0) return ref Unsafe.NullRef<PriceLevel>();
+        return ref _data[0]; // 무조건 첫 번째 요소가 Best
+    }
+
+    // 2. 인덱스 기반 조회 (O(1), Zero-copy)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ref readonly PriceLevel GetLevelAt(int index)
+    {
+        if (index < 0 || index >= _count) return ref Unsafe.NullRef<PriceLevel>();
+        return ref _data[index];
+    }
+
+    // 3. 특정 가격의 레벨 찾기 (O(log N))
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int FindIndex(Price price)
+    {
+        int low = 0;
+        int high = _count - 1;
+        while (low <= high)
+        {
+            int mid = low + ((high - low) >> 1);
+            int comp = _data[mid].Price.CompareTo(price);
+            if (!_isAscending) comp *= -1;
+
+            if (comp == 0) return mid;
+            if (comp < 0) low = mid + 1;
+            else high = mid - 1;
+        }
+        return ~low;
+    }
+
+    // 4. 레벨 업데이트 (O(N)이나 실제로는 Array.Copy로 인해 극도로 빠름)
     public void UpdateLevel(Price price, Quantity quantity, long sequence, long timestamp)
     {
+        int index = FindIndex(price);
+
         if (quantity.ToTicks() <= 0)
         {
-            // Remove level
-            _levels.Remove(price);
+            // --- 삭제 로직 ---
+            if (index >= 0)
+            {
+                if (index < _count - 1)
+                {
+                    Array.Copy(_data, index + 1, _data, index, _count - index - 1);
+                }
+                _count--;
+            }
         }
         else
         {
-            // Add or update level
-            if (!_levels.TryGetValue(price, out var level))
+            // --- 추가 또는 업데이트 로직 ---
+            if (index >= 0)
             {
-                level = new PriceLevel(price);
-                _levels[price] = level;
+                // 1. 이미 존재하는 가격이면 업데이트
+                _data[index].Update(quantity, sequence, timestamp);
             }
-            level.Update(quantity, sequence, timestamp);
+            else
+            {
+                // 2. 새로운 가격인 경우 삽입 위치 찾기
+                int insertIdx = ~index;
+
+                // [바이낸스 지침 반영] 
+                // 만약 배열이 꽉 찼는데, 삽입하려는 위치가 마지막 인덱스(maxDepth)와 같거나 크다면?
+                // 이 가격은 현재 우리가 추적하는 상위 5000개보다 더 나쁜 가격이므로 무시합니다.
+                if (_count == _maxDepth && insertIdx >= _maxDepth)
+                {
+                    return;
+                }
+
+                // 삽입 위치가 maxDepth를 넘지 않도록 다시 한번 보정 (안전 장치)
+                if (insertIdx >= _maxDepth) return;
+
+                if (insertIdx < _count)
+                {
+                    // 배열이 가득 찼다면 마지막 요소는 버려질 것이므로 이동 개수를 조정
+                    int elementsToMove = (_count == _maxDepth)
+                        ? (_maxDepth - insertIdx - 1)
+                        : (_count - insertIdx);
+
+                    if (elementsToMove > 0)
+                    {
+                        Array.Copy(_data, insertIdx, _data, insertIdx + 1, elementsToMove);
+                    }
+                }
+
+                // 새 데이터 삽입
+                _data[insertIdx] = new PriceLevel { Price = price };
+                _data[insertIdx].Update(quantity, sequence, timestamp);
+
+                // 개수 증가
+                if (_count < _maxDepth)
+                {
+                    _count++;
+                }
+            }
         }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public PriceLevel? GetBestLevel()
-    {
-        return _levels.Count > 0 ? _levels.First().Value : null;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public PriceLevel? GetLevelAt(int index)
-    {
-        if (index >= _levels.Count) return null;
-        return _levels.Skip(index).First().Value;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public PriceLevel? GetLevel(Price price)
-    {
-        return _levels.TryGetValue(price, out var level) ? level : null;
     }
 
     public IEnumerable<PriceLevel> GetTopLevels(int count)
     {
-        return _levels.Values.Take(count);
+        // _data 배열의 0부터 실제 데이터 개수(_count) 혹은 요청 개수 중 작은 값만큼만 반환
+        int limit = Math.Min(count, _count);
+        for (int i = 0; i < limit; i++)
+        {
+            yield return _data[i];
+        }
     }
 
     public IEnumerable<PriceLevel> GetAllLevels()
     {
-        return _levels.Values;
+        for (int i = 0; i < _count; i++)
+        {
+            yield return _data[i];
+        }
     }
 
     public void Clear()
     {
-        _levels.Clear();
+        _count = 0;
     }
 
     /// <summary>
@@ -149,42 +203,14 @@ public class BookSide
     public Quantity GetDepth(int levels)
     {
         Quantity totalDepth = Quantity.FromTicks(0);
-        int count = 0;
+        int limit = Math.Min(levels, _count);
 
-        foreach (var level in _levels.Values)
+        // LINQ나 foreach 대신 인덱스 기반 for 루프를 사용하여 성능 최적화
+        for (int i = 0; i < limit; i++)
         {
-            if (count >= levels) break;
-            totalDepth += level.TotalQuantity; // Uses Quantity's operator+
-            count++;
+            totalDepth += _data[i].TotalQuantity;
         }
 
         return totalDepth;
-    }
-
-    /// <summary>
-    /// Get total quantity available at or better than specified price
-    /// </summary>
-    public Quantity GetQuantityAtOrBetter(Price price)
-    {
-        Quantity totalQuantity = Quantity.FromTicks(0);
-
-        foreach (var kvp in _levels)
-        {
-            var levelPrice = kvp.Key;
-            var level = kvp.Value;
-
-            bool includeLevel = _side == Side.Buy ? levelPrice >= price : levelPrice <= price;
-
-            if (includeLevel)
-            {
-                totalQuantity += level.TotalQuantity;
-            }
-            else
-            {
-                break; // Levels are sorted, so we can stop here
-            }
-        }
-
-        return totalQuantity;
     }
 }

@@ -103,6 +103,7 @@ public class OrderBookTests
 
         var updates = new PriceLevelEntryArray();
         updates[0] = new PriceLevelEntry(Side.Buy, price, quantity);
+        updates[1] = new PriceLevelEntry(Side.Buy, price - 1m, quantity);
 
         var marketDataEvent = new MarketDataEvent(
             sequence: 1,
@@ -110,7 +111,7 @@ public class OrderBookTests
             kind: EventKind.Add,
             instrumentId: symbolId,
             exchange: ExchangeEnum.BINANCE,
-            updateCount: 1,
+            updateCount: 2,
             updates: updates
         );
 
@@ -138,6 +139,7 @@ public class OrderBookTests
 
         var updates = new PriceLevelEntryArray();
         updates[0] = new PriceLevelEntry(Side.Sell, price, quantity);
+        updates[1] = new PriceLevelEntry(Side.Sell, price + 1m, quantity);
 
         var marketDataEvent = new MarketDataEvent(
             sequence: 1,
@@ -145,7 +147,7 @@ public class OrderBookTests
             kind: EventKind.Add,
             instrumentId: symbolId,
             exchange: ExchangeEnum.BINANCE,
-            updateCount: 1,
+            updateCount: 2,
             updates: updates
         );
 
@@ -173,17 +175,19 @@ public class OrderBookTests
 
         var bidUpdates = new PriceLevelEntryArray();
         bidUpdates[0] = new PriceLevelEntry(Side.Buy, bidPrice, 1m);
+        bidUpdates[1] = new PriceLevelEntry(Side.Buy, bidPrice - 1m, 1m);
         var askUpdates = new PriceLevelEntryArray();
         askUpdates[0] = new PriceLevelEntry(Side.Sell, askPrice, 1m);
+        askUpdates[1] = new PriceLevelEntry(Side.Sell, askPrice + 1m, 1m);
 
         // Add bid
         var bidEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), EventKind.Add, symbolId, exchange,
-            updateCount: 1, updates: bidUpdates);
+            updateCount: 2, updates: bidUpdates);
         orderBook.ApplyEvent(bidEvent);
 
         // Add ask
         var askEvent = new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), EventKind.Add, symbolId, exchange,
-            updateCount: 1, updates: askUpdates);
+            updateCount: 2, updates: askUpdates);
         orderBook.ApplyEvent(askEvent);
 
         // Act
@@ -206,14 +210,16 @@ public class OrderBookTests
 
         var bidUpdates = new PriceLevelEntryArray();
         bidUpdates[0] = new PriceLevelEntry(Side.Buy, bidPrice, 1m);
+        bidUpdates[1] = new PriceLevelEntry(Side.Buy, bidPrice - 1m, 1m);
         var askUpdates = new PriceLevelEntryArray();
         askUpdates[0] = new PriceLevelEntry(Side.Sell, askPrice, 1m);
+        askUpdates[1] = new PriceLevelEntry(Side.Sell, askPrice + 1m, 1m);
 
         // Add bid and ask
         var bidEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), EventKind.Add, symbolId, exchange,
-            updateCount: 1, updates: bidUpdates);
+            updateCount: 2, updates: bidUpdates);
         var askEvent = new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), EventKind.Add, symbolId, exchange,
-            updateCount: 1, updates: askUpdates);
+            updateCount: 2, updates: askUpdates);
 
         orderBook.ApplyEvent(bidEvent);
         orderBook.ApplyEvent(askEvent);
@@ -272,13 +278,15 @@ public class OrderBookTests
 
         var bidUpdates = new PriceLevelEntryArray();
         bidUpdates[0] = new PriceLevelEntry(Side.Buy, 50000m, 1m);
+        bidUpdates[1] = new PriceLevelEntry(Side.Buy, 50000m - 1m, 1m);
         var askUpdates = new PriceLevelEntryArray();
         askUpdates[0] = new PriceLevelEntry(Side.Sell, 50100m, 1m);
+        askUpdates[1] = new PriceLevelEntry(Side.Sell, 50100m + 1m, 1m);
 
         var bidEvent = new MarketDataEvent(1, TimestampUtils.GetTimestampMicros(), EventKind.Add, symbolId, exchange,
-            updateCount: 1, updates: bidUpdates);
+            updateCount: 2, updates: bidUpdates);
         var askEvent = new MarketDataEvent(2, TimestampUtils.GetTimestampMicros(), EventKind.Add, symbolId, exchange,
-            updateCount: 1, updates: askUpdates);
+            updateCount: 2, updates: askUpdates);
 
         orderBook.ApplyEvent(bidEvent);
         orderBook.ApplyEvent(askEvent);
