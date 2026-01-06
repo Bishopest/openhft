@@ -21,7 +21,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
     private readonly ConcurrentDictionary<string, HashSet<string>> _processedExecIDs = new();
     // BitMEX L2 OrderBook ID to Price mapping cache
     // Key: BitMEX ID (long), Value: Price (decimal)
-    private readonly ConcurrentDictionary<long, decimal> _l2IdToPrice = new();
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<long, decimal>> _l2IdToPrice = new();
     public BitmexAdapter(ILogger<BitmexAdapter> logger, ProductType type, IInstrumentRepository instrumentRepository, ExecutionMode executionMode) : base(logger, type, instrumentRepository, executionMode)
     {
     }
@@ -266,61 +266,75 @@ public class BitmexAdapter : BaseAuthFeedAdapter
     {
         if (reader.TokenType != JsonTokenType.StartArray) return;
 
-        EventKind kind = actionSpan switch
-        {
-            _ when actionSpan.SequenceEqual("partial"u8) => EventKind.Snapshot,
-            _ when actionSpan.SequenceEqual("insert"u8) => EventKind.Add,
-            _ when actionSpan.SequenceEqual("update"u8) => EventKind.Update,
-            _ when actionSpan.SequenceEqual("delete"u8) => EventKind.Delete,
-            _ => EventKind.Update
-        };
+        // 1. Action 확인
+        bool isPartial = actionSpan.SequenceEqual("partial"u8);
+        EventKind kind = isPartial ? EventKind.Snapshot :
+                         actionSpan.SequenceEqual("insert"u8) ? EventKind.Add :
+                         actionSpan.SequenceEqual("update"u8) ? EventKind.Update :
+                         actionSpan.SequenceEqual("delete"u8) ? EventKind.Delete : EventKind.Update;
 
         var updatesArray = new PriceLevelEntryArray();
         int count = 0;
         int currentInstrumentId = -1;
         long currentTimestamp = 0;
+        ConcurrentDictionary<long, decimal>? symbolCache = null;
 
         while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
             long id = 0;
             decimal price = 0, size = 0;
             Side side = Side.Buy;
-            int instId = -1;
+            string? itemSymbol = null;
 
             while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
                 var prop = reader.ValueSpan;
                 reader.Read();
 
-                if (prop.SequenceEqual("symbol"u8))
-                {
-                    // Symbol은 캐싱 처리가 되어있으므로 GetString()을 한 번만 허용하거나 바이트 비교 라이브러리 사용 권장
-                    var symbol = Encoding.UTF8.GetString(reader.ValueSpan);
-                    var instrument = _instrumentRepository.FindBySymbol(symbol, ProdType, SourceExchange);
-                    if (instrument != null) instId = instrument.InstrumentId;
-                }
+                if (prop.SequenceEqual("symbol"u8)) itemSymbol = reader.GetString();
                 else if (prop.SequenceEqual("id"u8)) id = reader.GetInt64();
                 else if (prop.SequenceEqual("side"u8)) side = reader.ValueTextEquals("Buy"u8) ? Side.Buy : Side.Sell;
                 else if (prop.SequenceEqual("size"u8)) FastJsonParser.TryParseDecimal(ref reader, out size);
-                else if (prop.SequenceEqual("price"u8))
+                else if (prop.SequenceEqual("price"u8)) FastJsonParser.TryParseDecimal(ref reader, out price);
+                else if (prop.SequenceEqual("timestamp"u8)) currentTimestamp = reader.GetDateTimeOffset().ToUnixTimeMilliseconds();
+            }
+
+            if (string.IsNullOrEmpty(itemSymbol)) continue;
+
+            // --- 핵심 수정: 종목별 캐시 확보 및 스냅샷 시 초기화 ---
+            if (symbolCache == null)
+            {
+                symbolCache = _l2IdToPrice.GetOrAdd(itemSymbol, _ => new ConcurrentDictionary<long, decimal>());
+                if (isPartial)
                 {
-                    FastJsonParser.TryParseDecimal(ref reader, out price);
-                    _l2IdToPrice[id] = price;
-                }
-                else if (prop.SequenceEqual("timestamp"u8))
-                {
-                    currentTimestamp = reader.GetDateTimeOffset().ToUnixTimeMilliseconds();
+                    symbolCache.Clear(); // [매우 중요] 기존 세션의 쓰레기 데이터를 모두 지웁니다.
+                    _logger.LogInformationWithCaller($"BitMEX L2 Cache cleared for {itemSymbol} due to partial snapshot.");
                 }
             }
 
-            // ID 매핑 및 가격 복구 (기존 로직 유지)
-            if (price == 0 && !_l2IdToPrice.TryGetValue(id, out price)) continue;
-            if (kind == EventKind.Delete) _l2IdToPrice.TryRemove(id, out _);
+            var inst = _instrumentRepository.FindBySymbol(itemSymbol, ProdType, SourceExchange);
+            if (inst == null) continue;
+            currentInstrumentId = inst.InstrumentId;
+
+            // 가격 결정 로직
+            if (kind == EventKind.Snapshot || kind == EventKind.Add)
+            {
+                if (price != 0) symbolCache[id] = price;
+            }
+            else if (kind == EventKind.Update)
+            {
+                if (price != 0) symbolCache[id] = price;
+                else symbolCache.TryGetValue(id, out price);
+            }
+            else if (kind == EventKind.Delete)
+            {
+                symbolCache.TryRemove(id, out price);
+            }
+
+            if (price == 0) continue; // 가격 정보가 없으면 오더북 파괴의 원인이 되므로 스킵
 
             updatesArray[count++] = new PriceLevelEntry(side, price, size);
-            currentInstrumentId = instId;
 
-            // 40개 배치 처리
             if (count >= 40)
             {
                 OnMarketDataReceived(new MarketDataEvent(0, currentTimestamp, kind, currentInstrumentId, SourceExchange, 0, BitmexTopic.OrderBookL2_25.TopicId, count, updatesArray));

@@ -216,4 +216,103 @@ public class OrderBookIntegrity_E2E_Tests
 
         validationErrors.Should().BeEmpty("The order book should maintain its integrity throughout the test.");
     }
+
+    // MarketDataManager에서 orderbook topic을 지정하는 함수 GetTopicForConsumer 가 있으므로
+    // orderbook 토픽을 L2로 수정할 때는 GetTopicForConsumer 함수도 수정해줘야함.
+    [TestCase(ExchangeEnum.BITMEX, ProductType.PerpetualFuture, "XBTUSD", 3, TestName = "Bitmex_Reconnection_ChaosTest_WithResub")]
+    [TestCase(ExchangeEnum.BINANCE, ProductType.PerpetualFuture, "BTCUSDT", 2, TestName = "Binance_Reconnection_ChaosTest_WithResub")]
+    public async Task Reconnection_Integrity_ChaosTest_WithResubscription(ExchangeEnum exchange, ProductType productType, string symbol, int chaosIterations)
+    {
+        // --- 1. Arrange ---
+        var instrument = _instrumentRepo.FindBySymbol(symbol, productType, exchange);
+        var adapter = _adapterRegistry.GetAdapter(exchange, productType);
+        var validationErrors = new ConcurrentQueue<string>();
+        var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+
+        // 반복마다 데이터 수신을 확인하기 위한 변수
+        TaskCompletionSource<bool> iterationDataReceived = new();
+
+        _marketDataManager.Install(instrument);
+
+        void IntegrityCheckCallback(object? sender, OrderBook book)
+        {
+            // 데이터가 한 번이라도 들어오면 완료 신호를 보냄
+            if (book.UpdateCount > 0)
+            {
+                iterationDataReceived.TrySetResult(true);
+            }
+
+            if (!book.ValidateIntegrity())
+            {
+                var err = $"[Integrity Failure] {exchange} {symbol} at {DateTime.Now:HH:mm:ss.fff}. Book: {book}";
+                validationErrors.Enqueue(err);
+            }
+        }
+
+        var subscriberName = $"ChaosTest_{symbol}";
+        _marketDataManager.SubscribeOrderBook(instrument.InstrumentId, subscriberName, IntegrityCheckCallback);
+
+        try
+        {
+            var topic = exchange == ExchangeEnum.BINANCE ? BinanceTopic.DepthUpdate : (ExchangeTopic)BitmexTopic.OrderBook10;
+
+            // --- 2. Act & Chaos Loop ---
+            for (int i = 1; i <= chaosIterations; i++)
+            {
+                // 반복 시작 시 TCS 초기화
+                iterationDataReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+                TestContext.WriteLine($"\n[Iteration {i}] STEP 1: Connecting and Subscribing...");
+                if (!adapter.IsConnected)
+                {
+                    await adapter.ConnectAsync(cts.Token);
+                }
+                await adapter.SubscribeAsync(new[] { instrument }, new[] { topic }, cts.Token);
+
+                // [중요] 데이터 수신 확인 (최대 15초 대기)
+                TestContext.WriteLine($"[Iteration {i}] STEP 2: Waiting for first data update...");
+                var dataWaitTask = await Task.WhenAny(iterationDataReceived.Task, Task.Delay(15000, cts.Token));
+
+                if (dataWaitTask != iterationDataReceived.Task)
+                {
+                    Assert.Fail($"[Iteration {i}] Timed out waiting for OrderBook data from {exchange}.");
+                }
+
+                TestContext.WriteLine($"[Iteration {i}] STEP 3: Data flowing. Monitoring for 5 seconds...");
+                await Task.Delay(5000, cts.Token); // 데이터가 쌓이는 동안 잠시 관찰
+
+                validationErrors.Should().BeEmpty($"OrderBook should be valid during active flow (Iteration {i})");
+
+                TestContext.WriteLine($"[Iteration {i}] STEP 4: FORCING CONNECTION DROP!");
+                if (adapter is BaseFeedAdapter baseAdapter)
+                {
+                    baseAdapter.SimulateConnectionDrop();
+                }
+
+                // 끊김 확인
+                await Task.Delay(2000, cts.Token);
+                adapter.IsConnected.Should().BeFalse($"Adapter should be disconnected (Iteration {i})");
+
+                // 자동 재연결 대기
+                TestContext.WriteLine($"[Iteration {i}] STEP 5: Waiting for auto-reconnect...");
+                var reconnectTimeout = DateTime.UtcNow.AddSeconds(30);
+                while (!adapter.IsConnected && DateTime.UtcNow < reconnectTimeout)
+                {
+                    await Task.Delay(1000, cts.Token);
+                }
+
+                adapter.IsConnected.Should().BeTrue($"Adapter must reconnect within timeout (Iteration {i})");
+
+                // 루프가 반복되면서 다시 'STEP 1'의 SubscribeAsync로 이동하여 재구독 프로세스 검증
+            }
+        }
+        finally
+        {
+            _marketDataManager.UnsubscribeOrderBook(instrument.InstrumentId, subscriberName);
+        }
+
+        // --- 3. Assert ---
+        validationErrors.Should().BeEmpty("No integrity errors should occur across all reconnection and resubscription cycles.");
+        TestContext.WriteLine("\n🎉 Chaos Test Passed Successfully.");
+    }
 }
