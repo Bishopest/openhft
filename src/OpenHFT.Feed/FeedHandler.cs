@@ -108,6 +108,11 @@ public class FeedHandler : IFeedHandler
             finally
             {
                 _orderUpdateRingBuffer.Publish(sequence);
+                long gatingSequence = _orderUpdateRingBuffer.GetMinimumGatingSequence();
+
+                _logger.LogInformation(
+                    $"Published order update for CID {orderStatusReport.ClientOrderId} to Seq {sequence}. " +
+                    $"[RingBuffer Status: Cursor={_orderUpdateRingBuffer.Cursor}, GatingSeq={gatingSequence}, Remaining={_orderUpdateRingBuffer.GetRemainingCapacity()}]");
             }
         }
         else
