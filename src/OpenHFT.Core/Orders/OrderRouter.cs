@@ -103,11 +103,20 @@ public class OrderRouter : IOrderRouter
             {
                 // Forward the report to the correct order instance.
                 updatableOrder.OnStatusReportReceived(report);
+                if (report.Status == OrderStatus.Filled)
+                {
+                    _logger.LogInformationWithCaller($"Order {report.ClientOrderId} reached terminal state: {report.Status}. ExchangeID: {report.ExchangeOrderId}");
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogErrorWithCaller(ex, $"An error occurred while processing a status report for ClientOrderId {report.ClientOrderId}.");
             }
+        }
+        else
+        {
+            _logger.LogWarningWithCaller($"Received OrderStatusReport for unknown ClientOrderId: {report.ClientOrderId}. " +
+                $"Status: {report.Status}, ExchangeID: {report.ExchangeOrderId}, Price: {report.Price.ToDecimal()}");
         }
     }
 
