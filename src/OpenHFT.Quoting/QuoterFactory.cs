@@ -53,14 +53,13 @@ public class QuoterFactory : IQuoterFactory
                 var gatewayForLayered = _orderGatewayRegistry.GetGatewayForInstrument(instrument.InstrumentId);
                 if (gatewayForLayered == null) throw new ArgumentNullException("gateway");
                 return new LayeredQuoter(_loggerFactory.CreateLogger<LayeredQuoter>(), side, instrument, _orderFactory, gatewayForLayered, parameters.BookName, _marketDataManager, parameters);
-            case QuoterType.Trend:
-                if (parameters.BookName == null) throw new ArgumentNullException("bookName");
-                return new TrendQuoter(_loggerFactory.CreateLogger<SingleOrderQuoter>(), side, instrument, _orderFactory, parameters.BookName, _marketDataManager);
             // QuoterFactory.cs 내부 switch 문에 추가
             case QuoterType.Shadow:
                 if (parameters.BookName == null) throw new ArgumentNullException("bookName");
                 return new ShadowQuoter(_loggerFactory.CreateLogger<ShadowQuoter>(), side, instrument, _orderFactory, parameters.BookName, _marketDataManager);
-
+            case QuoterType.ShadowMaker:
+                if (parameters.BookName == null) throw new ArgumentNullException("bookName");
+                return new ShadowMakerQuoter(_loggerFactory.CreateLogger<ShadowQuoter>(), side, instrument, _orderFactory, parameters.BookName, _marketDataManager);
             default:
                 throw new ArgumentException($"Unsupported quoter type: {parameters.AskQuoterType}");
         }

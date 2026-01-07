@@ -23,8 +23,12 @@ public enum QuoterType
     Layered,
 
     /// <summary>
-    /// A quoter that make trend-following quote by making reverse quote
+    /// A quoter that aggressively hits marketable prices and cancels remaining orders not filled right away(similar to IOC)
     /// </summary>
-    Trend,
-    Shadow
+    Shadow,
+    /// <summary>
+    /// A quoter that aggressively hits marketable prices and remains on the book to capture maker rebates. 
+    /// It continuously monitors the order book and cancels the remaining quantity if the order loses price priority (is outquoted).
+    /// </summary>
+    ShadowMaker
 }
