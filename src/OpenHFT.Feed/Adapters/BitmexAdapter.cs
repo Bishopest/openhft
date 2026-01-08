@@ -266,18 +266,20 @@ public class BitmexAdapter : BaseAuthFeedAdapter
     {
         if (reader.TokenType != JsonTokenType.StartArray) return;
 
-        // 1. Action 확인
+        // 1. Action 및 초기 설정
         bool isPartial = actionSpan.SequenceEqual("partial"u8);
-        EventKind kind = isPartial ? EventKind.Snapshot :
-                         actionSpan.SequenceEqual("insert"u8) ? EventKind.Add :
-                         actionSpan.SequenceEqual("update"u8) ? EventKind.Update :
-                         actionSpan.SequenceEqual("delete"u8) ? EventKind.Delete : EventKind.Update;
+        EventKind baseKind = isPartial ? EventKind.Snapshot :
+                             actionSpan.SequenceEqual("insert"u8) ? EventKind.Add :
+                             actionSpan.SequenceEqual("update"u8) ? EventKind.Update :
+                             actionSpan.SequenceEqual("delete"u8) ? EventKind.Delete : EventKind.Update;
 
         var updatesArray = new PriceLevelEntryArray();
         int count = 0;
         int currentInstrumentId = -1;
         long currentTimestamp = 0;
         ConcurrentDictionary<long, decimal>? symbolCache = null;
+
+        bool isFirstChunkOfPartial = true;
 
         while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
@@ -301,14 +303,13 @@ public class BitmexAdapter : BaseAuthFeedAdapter
 
             if (string.IsNullOrEmpty(itemSymbol)) continue;
 
-            // --- 핵심 수정: 종목별 캐시 확보 및 스냅샷 시 초기화 ---
+            // 종목별 캐시 관리
             if (symbolCache == null)
             {
                 symbolCache = _l2IdToPrice.GetOrAdd(itemSymbol, _ => new ConcurrentDictionary<long, decimal>());
                 if (isPartial)
                 {
-                    symbolCache.Clear(); // [매우 중요] 기존 세션의 쓰레기 데이터를 모두 지웁니다.
-                    _logger.LogInformationWithCaller($"BitMEX L2 Cache cleared for {itemSymbol} due to partial snapshot.");
+                    symbolCache.Clear(); // 재연결 시 ID-Price 매핑 초기화
                 }
             }
 
@@ -316,35 +317,50 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             if (inst == null) continue;
             currentInstrumentId = inst.InstrumentId;
 
-            // 가격 결정 로직
-            if (kind == EventKind.Snapshot || kind == EventKind.Add)
+            // 가격 결정 로직 (ID 매핑 활용)
+            if (baseKind == EventKind.Snapshot || baseKind == EventKind.Add)
             {
                 if (price != 0) symbolCache[id] = price;
             }
-            else if (kind == EventKind.Update)
+            else if (baseKind == EventKind.Update)
             {
                 if (price != 0) symbolCache[id] = price;
                 else symbolCache.TryGetValue(id, out price);
             }
-            else if (kind == EventKind.Delete)
+            else if (baseKind == EventKind.Delete)
             {
                 symbolCache.TryRemove(id, out price);
             }
 
-            if (price == 0) continue; // 가격 정보가 없으면 오더북 파괴의 원인이 되므로 스킵
+            if (price == 0) continue;
 
             updatesArray[count++] = new PriceLevelEntry(side, price, size);
 
+            // 40개가 찼을 때 전송 로직
             if (count >= 40)
             {
-                OnMarketDataReceived(new MarketDataEvent(0, currentTimestamp, kind, currentInstrumentId, SourceExchange, 0, BitmexTopic.OrderBookL2_25.TopicId, count, updatesArray));
+                // [핵심 로직] partial일 경우 첫 번째만 Snapshot(Clear용), 나머지는 Update(누적용)
+                var currentEventKind = (isPartial && !isFirstChunkOfPartial) ? EventKind.Update : baseKind;
+
+                OnMarketDataReceived(new MarketDataEvent(
+                    0, currentTimestamp, currentEventKind, currentInstrumentId,
+                    SourceExchange, 0, BitmexTopic.OrderBookL2_25.TopicId, count, updatesArray));
+
                 count = 0;
+                isFirstChunkOfPartial = false; // 이후 묶음부터는 지우지 마라
                 updatesArray = new PriceLevelEntryArray();
             }
         }
 
+        // 루프 종료 후 남은 데이터 처리
         if (count > 0)
-            OnMarketDataReceived(new MarketDataEvent(0, currentTimestamp, kind, currentInstrumentId, SourceExchange, 0, BitmexTopic.OrderBookL2_25.TopicId, count, updatesArray));
+        {
+            var currentEventKind = (isPartial && !isFirstChunkOfPartial) ? EventKind.Update : baseKind;
+
+            OnMarketDataReceived(new MarketDataEvent(
+                0, currentTimestamp, currentEventKind, currentInstrumentId,
+                SourceExchange, 0, BitmexTopic.OrderBookL2_25.TopicId, count, updatesArray));
+        }
     }
 
     private void ProcessQuote_Raw(ref Utf8JsonReader reader)
@@ -425,6 +441,7 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             var reader = new Utf8JsonReader(messageBytes.Span);
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return;
 
+            // 변수 초기화
             ReadOnlySpan<byte> tableName = default;
             ReadOnlySpan<byte> actionName = default;
             bool isSuccessTrue = false;
@@ -434,30 +451,28 @@ public class BitmexAdapter : BaseAuthFeedAdapter
             {
                 if (reader.TokenType != JsonTokenType.PropertyName) continue;
 
-                var prop = reader.ValueSpan;
-                reader.Read(); // 값 위치로 이동
+                // 프로퍼티 이름 (예: "table", "action", "data")
+                var propName = reader.ValueSpan;
 
-                // 1. "error" 처리 로직
-                if (prop.SequenceEqual("error"u8))
+                // 값으로 이동
+                if (!reader.Read()) break;
+
+                // 1. 제어 메시지 처리
+                if (propName.SequenceEqual("error"u8))
                 {
-                    string errorMsg = reader.GetString() ?? "Unknown error.";
-                    // status 필드를 찾기 위해 전체를 다시 파싱하는 오버헤드를 피하기 위해 
-                    // 에러 메시지 위주로 먼저 로그를 남깁니다.
-                    _logger.LogWarningWithCaller($"BitMEX WebSocket API Error: {errorMsg}");
+                    _logger.LogWarningWithCaller($"BitMEX Error: {reader.GetString()}");
                 }
-                // 2. "success" 필드 확인 (인증 및 구독 응답 공통)
-                else if (prop.SequenceEqual("success"u8))
+                else if (propName.SequenceEqual("success"u8))
                 {
                     isSuccessTrue = reader.GetBoolean();
-                    shouldExitEarly = true; // success가 있으면 무조건 데이터 파싱 안 함
+                    shouldExitEarly = true;
                 }
-                // 3. "subscribe" 필드 확인
-                else if (prop.SequenceEqual("subscribe"u8))
+                else if (propName.SequenceEqual("subscribe"u8))
                 {
-                    shouldExitEarly = true; // subscribe 응답이면 무조건 무시
+                    shouldExitEarly = true;
                 }
-                // 4. "request" 필드 확인 (인증 성공 여부 판단용)
-                else if (prop.SequenceEqual("request"u8))
+                // 2. 인증 요청 확인
+                else if (propName.SequenceEqual("request"u8))
                 {
                     if (isSuccessTrue && reader.TokenType == JsonTokenType.StartObject)
                     {
@@ -468,33 +483,40 @@ public class BitmexAdapter : BaseAuthFeedAdapter
                         }
                     }
                 }
-                // 5. 마켓 데이터 필드 추출 ("table", "action")
-                else if (prop.SequenceEqual("table"u8))
+                // 3. 테이블 및 액션 정보 저장
+                else if (propName.SequenceEqual("table"u8))
                 {
-                    tableName = reader.ValueSpan;
+                    tableName = reader.ValueSpan; // "orderBookL2_25" 저장
                 }
-                else if (prop.SequenceEqual("action"u8))
+                else if (propName.SequenceEqual("action"u8))
                 {
-                    actionName = reader.ValueSpan;
+                    actionName = reader.ValueSpan; // "partial", "update" 등 저장
                 }
-                // 6. 실제 데이터 파싱 ("data")
-                else if (prop.SequenceEqual("data"u8))
+                // 4. 핵심 데이터 파싱
+                else if (propName.SequenceEqual("data"u8))
                 {
-                    // 앞서 success나 subscribe가 발견되었다면 데이터 처리를 건너뜁니다.
                     if (shouldExitEarly) return;
 
-                    if (tableName.SequenceEqual("orderBookL2_25"u8)) ProcessOrderBookL2_25_Raw(ref reader, actionName);
-                    else if (tableName.SequenceEqual("trade"u8)) ProcessTrade_Raw(ref reader);
-                    else if (tableName.SequenceEqual("quote"u8)) ProcessQuote_Raw(ref reader);
-                    else if (tableName.SequenceEqual("orderBook10"u8)) ProcessOrderBook10_Raw(ref reader);
-                    else if (tableName.SequenceEqual("execution"u8)) ProcessExecution_Raw(ref reader);
+                    // [핵심 수정] 저장해둔 tableName과 actionName을 사용하여 라우팅
+                    if (tableName.SequenceEqual("orderBookL2_25"u8))
+                        ProcessOrderBookL2_25_Raw(ref reader, actionName);
+                    else if (tableName.SequenceEqual("trade"u8))
+                        ProcessTrade_Raw(ref reader);
+                    else if (tableName.SequenceEqual("quote"u8))
+                        ProcessQuote_Raw(ref reader);
+                    else if (tableName.SequenceEqual("orderBook10"u8))
+                        ProcessOrderBook10_Raw(ref reader);
+                    else if (tableName.SequenceEqual("execution"u8))
+                        ProcessExecution_Raw(ref reader);
 
+                    // data 필드는 보통 메시지의 마지막이므로 파싱 후 종료
                     break;
                 }
+                else
+                {
+                    reader.TrySkip();
+                }
             }
-
-            // 필드 순서상 success/subscribe가 뒤에 나올 경우를 대비한 최종 체크
-            if (shouldExitEarly) return;
         }
         catch (Exception ex)
         {
