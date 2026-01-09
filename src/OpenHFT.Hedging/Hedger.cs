@@ -20,7 +20,6 @@ public class Hedger
     private readonly IMarketDataManager _marketDataManager;
     private readonly IFxRateService _fxRateManager;
     private OrderBook? _cachedOrderBook;
-    private OrderBook? _cachedReferenceOrderBook;
     private IOrder? _hedgeOrder = null!;
 
     private readonly object _pendingValueLock = new();
@@ -153,7 +152,7 @@ public class Hedger
                 _netPendingHedgeQuantity += targetQuantity;
             }
 
-            _logger.LogInformationWithCaller($"Fill received: {fill}. Pending Hedge Value accumulated to: {_netPendingHedgeQuantity}");
+            _logger.LogInformationWithCaller($"Quoting Fill received: {fill}. Pending Hedge Value accumulated to: {_netPendingHedgeQuantity}");
         }
         catch (Exception ex)
         {
@@ -168,30 +167,7 @@ public class Hedger
             return;
         }
 
-        try
-        {
-            var singedHedgeQuantityDecimal = fill.Side == Side.Buy ? fill.Quantity.ToDecimal() * -1m : fill.Quantity.ToDecimal();
-
-            lock (_pendingValueLock)
-            {
-                _netPendingHedgeQuantity += Quantity.FromDecimal(singedHedgeQuantityDecimal);
-            }
-
-            _logger.LogInformationWithCaller($"Fill received: {fill}. Pending Hedge Value accumulated to: {_netPendingHedgeQuantity}");
-
-            // in case of ws execution message arrives later
-            if (sender is not null
-                && sender is IOrder order
-                && order.Status == OrderStatus.Filled
-                && order.LatestReport is not null)
-            {
-                ClearActiveOrder(order.LatestReport.Value);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogErrorWithCaller(ex, "Error inside UpdateQuotingFill in Hedger.");
-        }
+        _logger.LogInformationWithCaller($"Hedge Fill received: {fill}. Pending Hedge Value accumulated to: {_netPendingHedgeQuantity}");
     }
 
     private void OnOrderStatusChanged(object? sender, OrderStatusReport report)
@@ -380,7 +356,13 @@ public class Hedger
             _hedgeOrder = newOrder;
         }
 
-        _logger.LogInformationWithCaller($"({target.Side}) Submitting new order {newOrder.ClientOrderId} for hedge: {target}");
+        lock (_pendingValueLock)
+        {
+            decimal sign = target.Side == Side.Buy ? 1 : -1;
+            _netPendingHedgeQuantity -= Quantity.FromDecimal(target.Size.ToDecimal() * sign);
+        }
+
+        _logger.LogInformationWithCaller($"({target.Side}) Submitting new order {newOrder.ClientOrderId} for hedge: {target}, remaining qty :{_netPendingHedgeQuantity}");
         await newOrder.SubmitAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
@@ -413,6 +395,17 @@ public class Hedger
             }
 
             _logger.LogInformationWithCaller($"({_hedgeOrder.Side}) Order {_hedgeOrder.ClientOrderId} reached terminal state {finalReport.Status}. Clearing hedge order.");
+
+            if (finalReport.LeavesQuantity.ToTicks() > 0)
+            {
+                lock (_pendingValueLock)
+                {
+                    decimal sign = _hedgeOrder.Side == Side.Buy ? 1 : -1;
+                    _netPendingHedgeQuantity += Quantity.FromDecimal(finalReport.LeavesQuantity.ToDecimal() * sign);
+
+                    _logger.LogInformationWithCaller($"Hedge order partially filled/cancelled. Returning {finalReport.LeavesQuantity} to pending. New pending: {_netPendingHedgeQuantity}");
+                }
+            }
 
             // fully filled process
             if (finalReport.Status == OrderStatus.Filled)
