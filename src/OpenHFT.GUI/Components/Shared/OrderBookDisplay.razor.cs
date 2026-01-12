@@ -298,8 +298,20 @@ public partial class OrderBookDisplay : ComponentBase, IDisposable
             }
 
             // Calculate and store the format strings based on the instrument's properties.
-            _priceFormat = $"F{GetDecimalPlaces(PriceGrouping)}";
-            _quantityFormat = $"N{GetDecimalPlaces(PriceGrouping)}";
+            if (DisplayInstrument != null)
+            {
+                // Price format is determined by the grouping/tick size.
+                _priceFormat = $"F{GetDecimalPlaces(PriceGrouping)}";
+
+                // Quantity format is determined by the instrument's LotSize.
+                _quantityFormat = $"N{GetDecimalPlaces(DisplayInstrument.LotSize.ToDecimal())}";
+            }
+            else
+            {
+                // Fallback to defaults if no instrument is selected.
+                _priceFormat = "F2";
+                _quantityFormat = "N4";
+            }
         }
     }
 
