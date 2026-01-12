@@ -45,7 +45,8 @@ public class OrderBookIntegrity_E2E_Tests
         Directory.CreateDirectory(_testDirectory);
         var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
 1,BITMEX,XBTUSD,PerpetualFuture,XBT,USD,0.5,1,1,1
-2,BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.01,0.001,1,0.001";
+2,BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.01,0.001,1,0.001
+3,BITHUMB,KRW-ETH,Spot,ETH,KRW,1000,0.0001,1,0.002";
         File.WriteAllText(Path.Combine(_testDirectory, "instruments.csv"), csvContent);
 
         IConfiguration configuration = new ConfigurationBuilder()
@@ -100,6 +101,13 @@ public class OrderBookIntegrity_E2E_Tests
             ExecutionMode.Live
         ));
 
+        services.AddSingleton<IFeedAdapter>(provider => new BithumbPublicAdapter(
+            provider.GetRequiredService<ILogger<BithumbPublicAdapter>>(),
+            ProductType.Spot,
+            provider.GetRequiredService<IInstrumentRepository>(),
+            ExecutionMode.Live
+        ));
+
         services.AddSingleton<IFeedAdapterRegistry, FeedAdapterRegistry>();
 
         // Use the real MarketDataManager which will create consumers
@@ -133,6 +141,7 @@ public class OrderBookIntegrity_E2E_Tests
 
     [TestCase(ExchangeEnum.BINANCE, ProductType.PerpetualFuture, "BTCUSDT", TestName = "Binance_BTCUSDT_Perpetual_OrderBookIntegrity")]
     [TestCase(ExchangeEnum.BITMEX, ProductType.PerpetualFuture, "XBTUSD", TestName = "Bitmex_XBTUSD_Perpetual_OrderBookIntegrity")]
+    [TestCase(ExchangeEnum.BITHUMB, ProductType.Spot, "KRW-ETH", TestName = "Bithumb_KRW-ETH_Spot_OrderBookIntegrity")]
     public async Task LiveStream_ShouldMaintainOrderBookIntegrity_ForDuration(ExchangeEnum exchange, ProductType productType, string symbol)
     {
         // --- Arrange ---
@@ -181,9 +190,7 @@ public class OrderBookIntegrity_E2E_Tests
             await adapter.ConnectAsync(cancellationTokenSource.Token);
         }
 
-        var topic = exchange == ExchangeEnum.BINANCE
-            ? BinanceTopic.DepthUpdate
-            : (ExchangeTopic)BitmexTopic.OrderBook10;
+        var topic = GetOrderBookTopic(exchange);
 
         await adapter.SubscribeAsync(new[] { instrument }, new[] { topic }, cancellationTokenSource.Token);
 
@@ -221,6 +228,7 @@ public class OrderBookIntegrity_E2E_Tests
     // orderbook 토픽을 L2로 수정할 때는 GetTopicForConsumer 함수도 수정해줘야함.
     [TestCase(ExchangeEnum.BITMEX, ProductType.PerpetualFuture, "XBTUSD", 3, TestName = "Bitmex_Reconnection_ChaosTest_WithResub")]
     [TestCase(ExchangeEnum.BINANCE, ProductType.PerpetualFuture, "BTCUSDT", 2, TestName = "Binance_Reconnection_ChaosTest_WithResub")]
+    [TestCase(ExchangeEnum.BITHUMB, ProductType.Spot, "KRW-ETH", 1, TestName = "Bithumb_Reconnection_ChaosTest_WithResub")]
     public async Task Reconnection_Integrity_ChaosTest_WithResubscription(ExchangeEnum exchange, ProductType productType, string symbol, int chaosIterations)
     {
         // --- 1. Arrange ---
@@ -254,7 +262,7 @@ public class OrderBookIntegrity_E2E_Tests
 
         try
         {
-            var topic = exchange == ExchangeEnum.BINANCE ? BinanceTopic.DepthUpdate : (ExchangeTopic)BitmexTopic.OrderBook10;
+            var topic = GetOrderBookTopic(exchange);
 
             // --- 2. Act & Chaos Loop ---
             for (int i = 1; i <= chaosIterations; i++)
@@ -295,7 +303,7 @@ public class OrderBookIntegrity_E2E_Tests
 
                 // 자동 재연결 대기
                 TestContext.WriteLine($"[Iteration {i}] STEP 5: Waiting for auto-reconnect...");
-                var reconnectTimeout = DateTime.UtcNow.AddSeconds(30);
+                var reconnectTimeout = DateTime.UtcNow.AddSeconds(10);
                 while (!adapter.IsConnected && DateTime.UtcNow < reconnectTimeout)
                 {
                     await Task.Delay(1000, cts.Token);
@@ -314,5 +322,20 @@ public class OrderBookIntegrity_E2E_Tests
         // --- 3. Assert ---
         validationErrors.Should().BeEmpty("No integrity errors should occur across all reconnection and resubscription cycles.");
         TestContext.WriteLine("\n🎉 Chaos Test Passed Successfully.");
+    }
+
+    private ExchangeTopic GetOrderBookTopic(ExchangeEnum exchange)
+    {
+        switch (exchange)
+        {
+            case ExchangeEnum.BINANCE:
+                return BinanceTopic.DepthUpdate;
+            case ExchangeEnum.BITMEX:
+                return BitmexTopic.OrderBook10;
+            case ExchangeEnum.BITHUMB:
+                return BithumbTopic.OrderBook;
+            default:
+                throw new InvalidOperationException($"Unsupported exchange: {exchange}");
+        }
     }
 }
