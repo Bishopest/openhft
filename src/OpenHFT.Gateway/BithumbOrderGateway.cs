@@ -73,9 +73,9 @@ public class BithumbOrderGateway : IOrderGateway
     {
         // 빗썸 V2 취소는 DELETE 메서드이며 order_id를 QueryString으로 보냄
         var queryParams = new Dictionary<string, object>
-    {
-        { "order_id", request.OrderId }
-    };
+        {
+            { "order_id", request.OrderId }
+        };
 
         // 엔드포인트가 /v2/order (단수) 임에 주의
         var result = await _apiClient.SendPrivateRequestAsync<BithumbCancelResponse>(
@@ -206,11 +206,11 @@ public class BithumbOrderGateway : IOrderGateway
 
     // 빗썸 전용 내부 모델
     private record BithumbOrderResponse(
-        [property: System.Text.Json.Serialization.JsonPropertyName("order_id")] string OrderId,
-        [property: System.Text.Json.Serialization.JsonPropertyName("market")] string Market,
-        [property: System.Text.Json.Serialization.JsonPropertyName("side")] string Side,
-        [property: System.Text.Json.Serialization.JsonPropertyName("state")] string State,
-        [property: System.Text.Json.Serialization.JsonPropertyName("price")] string Price,
-        [property: System.Text.Json.Serialization.JsonPropertyName("volume")] string Volume
+        [property: JsonPropertyName("order_id")] string OrderId,
+        [property: JsonPropertyName("market")] string Market,
+        [property: JsonPropertyName("side")] string Side,
+        [property: JsonPropertyName("state")] string State,
+        [property: JsonPropertyName("price")] string Price,
+        [property: JsonPropertyName("volume")] string Volume
     );
 }
