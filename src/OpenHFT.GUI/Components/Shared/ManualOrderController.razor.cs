@@ -50,8 +50,19 @@ public partial class ManualOrderController : ComponentBase, IDisposable
     private List<Instrument> _availableInstruments = new();
 
     // --- Form Bound Values ---
-    private Instrument? SelectedInstrument { get; set; }
-
+    private Instrument? _selectedInstrument;
+    private Instrument? SelectedInstrument
+    {
+        get => _selectedInstrument;
+        set
+        {
+            if (_selectedInstrument != value)
+            {
+                _selectedInstrument = value;
+                StateHasChanged();
+            }
+        }
+    }
     private string? _selectedOmsIdentifier;
     private string? SelectedOmsIdentifier
     {
@@ -159,6 +170,16 @@ public partial class ManualOrderController : ComponentBase, IDisposable
         }
 
         return true;
+    }
+
+    private string GetQuantityFormat()
+    {
+        if (SelectedInstrument == null) return "N2"; // 기본값
+
+        decimal lotSize = SelectedInstrument.LotSize.ToDecimal();
+        int decimalPlaces = BitConverter.GetBytes(decimal.GetBits(lotSize)[3])[2];
+
+        return $"N{decimalPlaces}";
     }
 
     /// <summary>

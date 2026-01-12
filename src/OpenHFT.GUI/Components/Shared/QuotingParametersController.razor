@@ -79,8 +79,8 @@
                     <MudNumericField Format="N0" @bind-Value="_model.MaxCumAskFills" Label="Max Cum Ask Fills" Variant="Variant.Outlined" Required="true" Min="0" />
                 </MudItem>
             </MudGrid>
-            <MudNumericField Format="N0" @bind-Value="_model.Size" Label="Size (Quantity)" Variant="Variant.Outlined"
-                Required="true" Min="0" Step="0.001m" />
+            <MudNumericField Format="@GetQuantityFormat()" @bind-Value="_model.Size" Label="Size (Quantity)" Variant="Variant.Outlined"
+                Required="true" Min="0" Step="@(_selectedInstrument?.LotSize.ToDecimal() ?? 0.00000001m)" />
             <MudNumericField @bind-Value="_model.Depth" Label="Depth (Levels)" Variant="Variant.Outlined"
                 Required="true" Min="1" />
             <MudAutocomplete T="Instrument" Label="FV Source Instrument" @bind-Value="_selectedFvSourceInstrument"

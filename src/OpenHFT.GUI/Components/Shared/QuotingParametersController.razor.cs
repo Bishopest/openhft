@@ -51,6 +51,7 @@ public partial class QuotingParametersController
             {
                 _selectedInstrument = value;
                 OnInstrumentSelected.InvokeAsync(value);
+                StateHasChanged();
             }
         }
     }
@@ -195,6 +196,16 @@ public partial class QuotingParametersController
     private void TogglePostOnly(bool isPostOnly)
     {
         _model.PostOnly = isPostOnly;
+    }
+
+    private string GetQuantityFormat()
+    {
+        if (_selectedInstrument == null) return "N2"; // 기본값
+
+        decimal lotSize = _selectedInstrument.LotSize.ToDecimal();
+        int decimalPlaces = BitConverter.GetBytes(decimal.GetBits(lotSize)[3])[2];
+
+        return $"N{decimalPlaces}";
     }
 
     private async Task HandleSubmit()

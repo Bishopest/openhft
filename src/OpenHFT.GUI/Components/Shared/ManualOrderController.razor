@@ -31,7 +31,8 @@
             </MudSelect>
             <MudNumericField T="decimal?" @bind-Value="OrderPriceDecimal" Label="Price" For="@(() => OrderPriceDecimal)"
                              Variant="Variant.Outlined" Required="true" RequiredError="Price is required." Min="0m" />
-            <MudNumericField T="decimal?" @bind-Value="OrderSizeDecimal" Label="Size (Quantity)" For="@(() => OrderSizeDecimal)"
+            <MudNumericField T="decimal?" @Format="@GetQuantityFormat()" Step="@(SelectedInstrument?.LotSize.ToDecimal() ?? 0.00000001m)" 
+                             bind-Value="OrderSizeDecimal" Label="Size (Quantity)" For="@(() => OrderSizeDecimal)"
                              Variant="Variant.Outlined" Required="true" RequiredError="Size is required." Min="0m" />
             <MudSwitch T="bool" Value="@_model.PostOnly" ValueChanged="TogglePostOnly" Label="PostOnly" Color="Color.Success" />
             <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-4">
