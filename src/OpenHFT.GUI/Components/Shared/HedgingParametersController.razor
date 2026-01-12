@@ -1,5 +1,6 @@
 ﻿@using OpenHFT.Core.Models
 @using OpenHFT.Core.Instruments
+@using OpenHFT.Core.Orders
 @using OpenHFT.Hedging
 
 <MudPaper Class="pa-2 d-flex flex-column" Style="height: 100%; overflow: hidden;">
@@ -34,10 +35,11 @@
                     </ItemTemplate>
                 </MudAutocomplete>
 
-                <MudSelect T="HedgeOrderType" @bind-Value="_model.OrderType" Label="Hedge Order Type"
+                <MudSelect T="AlgoOrderType" @bind-Value="_model.OrderType" Label="Hedge Order Type"
                            Variant="Variant.Outlined" Margin="Margin.Dense" Required="true">
-                    @foreach (HedgeOrderType ot in Enum.GetValues(typeof(HedgeOrderType)))
+                    @foreach (AlgoOrderType ot in Enum.GetValues(typeof(AlgoOrderType)))
                     {
+                        @if(ot == AlgoOrderType.None) continue;
                         <MudSelectItem Value="ot">@ot.ToString()</MudSelectItem>
                     }
                 </MudSelect>

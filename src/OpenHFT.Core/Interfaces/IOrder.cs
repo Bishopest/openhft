@@ -1,5 +1,6 @@
 using System;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.Orders;
 
 namespace OpenHFT.Core.Interfaces;
 
@@ -47,6 +48,12 @@ public interface IOrder
     /// Gets a value indicating whether this is a Post-Only order.
     /// </summary>
     bool IsPostOnly { get; set; }
+
+    /// <summary>
+    /// Gets the algo type of this order, if not algo type, then none.
+    /// </summary>
+    AlgoOrderType AlgoOrderType { get; }
+
 
     /// <summary>
     /// Gets the type of this order

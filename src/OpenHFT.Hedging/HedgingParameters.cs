@@ -1,5 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.Orders;
 
 namespace OpenHFT.Hedging;
 
@@ -7,7 +8,7 @@ public readonly struct HedgingParameters : IEquatable<HedgingParameters>
 {
     public readonly int QuotingInstrumentId { get; }
     public readonly int InstrumentId { get; }
-    public readonly HedgeOrderType OrderType { get; }
+    public readonly AlgoOrderType OrderType { get; }
     public readonly Quantity Size { get; }
 
     /// <summary>
@@ -21,7 +22,7 @@ public readonly struct HedgingParameters : IEquatable<HedgingParameters>
     public HedgingParameters(
         int quotingInstrumentId,
         int instrumentId,
-        HedgeOrderType orderType,
+        AlgoOrderType orderType,
         Quantity size)
     {
         QuotingInstrumentId = quotingInstrumentId;

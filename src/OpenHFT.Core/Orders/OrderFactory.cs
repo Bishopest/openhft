@@ -15,17 +15,27 @@ public class OrderFactory : IOrderFactory
     private readonly IOrderGatewayRegistry _gatewayRegistry;
     private readonly ILogger<Order> _orderLogger;
     private readonly IClientIdGenerator _idGenerator;
+    private readonly IMarketDataManager _marketDataManager;
+    private readonly IInstrumentRepository _instrumentRepository;
 
 
     /// <summary>
     /// Initializes a new instance of the OrderFactory.
     /// </summary>
-    public OrderFactory(IOrderRouter orderRouter, IOrderGatewayRegistry gatewayRegistry, ILogger<Order> orderLogger, IClientIdGenerator idGenerator)
+    public OrderFactory(
+        IOrderRouter orderRouter,
+        IOrderGatewayRegistry gatewayRegistry,
+        ILogger<Order> orderLogger,
+        IClientIdGenerator idGenerator,
+        IMarketDataManager marketDataManager,
+        IInstrumentRepository instrumentRepository)
     {
         _orderRouter = orderRouter ?? throw new ArgumentNullException(nameof(orderRouter));
         _gatewayRegistry = gatewayRegistry ?? throw new ArgumentNullException(nameof(gatewayRegistry));
         _orderLogger = orderLogger ?? throw new ArgumentNullException(nameof(orderLogger));
         _idGenerator = idGenerator ?? throw new ArgumentNullException(nameof(idGenerator));
+        _marketDataManager = marketDataManager ?? throw new ArgumentNullException(nameof(marketDataManager));
+        _instrumentRepository = instrumentRepository ?? throw new ArgumentNullException(nameof(instrumentRepository));
     }
 
     /// <summary>
@@ -35,25 +45,34 @@ public class OrderFactory : IOrderFactory
     /// <param name="side">The side (Buy/Sell) of the order.</param>
     /// <param name="bookName">The name of the Book fills belongs to</param> 
     /// <returns>A new, initialized IOrder instance.</returns>
-    public IOrder Create(int instrumentId, Side side, string bookName, OrderSource source)
+    public IOrder Create(int instrumentId, Side side, string bookName, OrderSource source, AlgoOrderType algoType = AlgoOrderType.None)
     {
         // 1. Get the correct Order Gateway for the instrument.
         // This assumes you have a way to know the exchange from the instrumentId.
         // For simplicity, let's assume a method in the registry.
-        var orderGateway = _gatewayRegistry.GetGatewayForInstrument(instrumentId);
+        var gateway = _gatewayRegistry.GetGatewayForInstrument(instrumentId);
         // Use the generator to create the ID.
-        long clientOrderId = _idGenerator.NextId(source);
+        long clientId = _idGenerator.NextId(source);
         // 2. Create the new Order instance, injecting its dependencies.
-        var order = new Order(
-            clientOrderId,
-            instrumentId,
-            side,
-            bookName,
-            _orderRouter,
-            orderGateway ?? throw new ArgumentNullException("orderGateway"),
-            _orderLogger
-        );
+        switch (algoType)
+        {
+            case AlgoOrderType.OppositeFirst:
+                return new OppositeFirstOrder(
+                    clientId, instrumentId, side, bookName,
+                    _orderRouter, gateway, _orderLogger, _marketDataManager);
 
-        return order;
+            case AlgoOrderType.FirstFollow:
+                // FirstFollow는 TickSize를 알기 위해 Instrument 객체가 필요함
+                var instrument = _instrumentRepository.GetById(instrumentId);
+                return new FirstFollowOrder(
+                    clientId, instrument!, side, bookName,
+                    _orderRouter, gateway, _orderLogger, _marketDataManager);
+            case AlgoOrderType.None:
+            default:
+                // 일반 주문 생성
+                return new Order(
+                    clientId, instrumentId, side, bookName,
+                    _orderRouter, gateway, _orderLogger);
+        }
     }
 }

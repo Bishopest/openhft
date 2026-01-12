@@ -5,30 +5,32 @@ using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Orders;
 using OpenHFT.Core.Utils;
-using OpenHFT.Quoting.Models;
 
 namespace OpenHFT.Hedging;
 
-public class Hedger
+public class Hedger : IDisposable
 {
     private readonly ILogger _logger;
     private readonly Instrument _quoteInstrument;
     private readonly Instrument _hedgeInstrument;
     private readonly HedgingParameters _hedgeParameters;
-    private readonly IOrderFactory _orderFactory; // To create IOrder objects
+    private readonly IOrderFactory _orderFactory;
     private readonly string _bookName;
     private readonly IMarketDataManager _marketDataManager;
     private readonly IFxRateService _fxRateManager;
+
     private OrderBook? _cachedOrderBook;
-    private IOrder? _hedgeOrder = null!;
+
+    // 활성 헤지 주문 (일반 Order 또는 AlgoOrder)
+    private IOrder? _activeHedgeOrder;
 
     private readonly object _pendingValueLock = new();
     private readonly object _stateLock = new();
 
-    private readonly object _targetLock = new();
-    // remaining value in denomination currency
-    // if (+) then (Buy) ,otherwise (Sell)
+    // 헤지가 필요한 잔여 가치 (Denomination Currency 기준)
+    // (+): 매수 필요, (-): 매도 필요
     private Quantity _netPendingHedgeQuantity = Quantity.FromDecimal(0);
+
     private bool _isActive = false;
     private static readonly HashSet<string> SupportedCurrencies = new() { "BTC", "USDT" };
 
@@ -61,72 +63,81 @@ public class Hedger
         if (!IsValidCurrency(_quoteInstrument.DenominationCurrency) ||
             !IsValidCurrency(_hedgeInstrument.DenominationCurrency))
         {
-            _logger.LogWarningWithCaller($"Unsupported denom currency quote({_quoteInstrument.DenominationCurrency}) or hedge({_hedgeInstrument.DenominationCurrency}) detected. Only BTC and USDT are supported.");
+            _logger.LogWarningWithCaller($"Unsupported currency pair Q:{_quoteInstrument.DenominationCurrency}/H:{_hedgeInstrument.DenominationCurrency}. Only BTC/USDT supported.");
             return;
         }
 
         if (_quoteInstrument.BaseCurrency != _hedgeInstrument.BaseCurrency)
         {
-            _logger.LogWarningWithCaller($"quoting base {_quoteInstrument.BaseCurrency} is not equals to hedge base {_hedgeInstrument.BaseCurrency}, skipping");
+            _logger.LogWarningWithCaller($"Base currency mismatch: Quote({_quoteInstrument.BaseCurrency}) != Hedge({_hedgeInstrument.BaseCurrency}). Skipping.");
             return;
         }
 
         _isActive = true;
         _logger.LogInformationWithCaller($"Starting Hedger for Q:{_quoteInstrument.Symbol} H:{_hedgeInstrument.Symbol}.");
+
+        // 초기 진입 시점 판단을 위해 오더북 구독 (이후 AlgoOrder는 각자 구독함)
         var subscriptionKey = $"Hedger_{_quoteInstrument.Symbol}_{_hedgeInstrument.Symbol}_{_bookName}";
         _marketDataManager.SubscribeOrderBook(_hedgeInstrument.InstrumentId, subscriptionKey, (sender, book) => UpdateHedgeOrderBook(book));
     }
 
     public void Deactivate()
     {
-        if (_hedgeOrder is not null)
+        lock (_stateLock)
         {
-            try
+            // 활성 주문이 있다면 취소 시도
+            if (_activeHedgeOrder is not null)
             {
-                _ = _hedgeOrder.CancelAsync(CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogErrorWithCaller(ex, "Failed to cancel hedge order.");
+                try
+                {
+                    _ = _activeHedgeOrder.CancelAsync(CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogErrorWithCaller(ex, "Failed to cancel hedge order during deactivation.");
+                }
             }
         }
 
-        if (!_isActive)
-        {
-            _logger.LogWarningWithCaller($"Can not deactivate non-active hedger on quoting instrument {_quoteInstrument.Symbol}, hedging instrument {_hedgeInstrument.Symbol} on book {_bookName}");
-            return;
-        }
+        if (!_isActive) return;
 
         _isActive = false;
         _logger.LogInformationWithCaller($"Stop Hedger for Q:{_quoteInstrument.Symbol} H:{_hedgeInstrument.Symbol}.");
+
         var subscriptionKey = $"Hedger_{_quoteInstrument.Symbol}_{_hedgeInstrument.Symbol}_{_bookName}";
         _marketDataManager.UnsubscribeOrderBook(_hedgeInstrument.InstrumentId, subscriptionKey);
     }
 
     private bool IsValidCurrency(Currency c) => SupportedCurrencies.Contains(c.Symbol.ToUpper());
 
+    // 시장 데이터 수신 핸들러
     public void UpdateHedgeOrderBook(OrderBook ob)
     {
-        if (ob.InstrumentId != _hedgeInstrument.InstrumentId)
-        {
-            return;
-        }
+        if (ob.InstrumentId != _hedgeInstrument.InstrumentId) return;
 
         _cachedOrderBook = ob;
-        var target = GetHedgeQuote();
-        _ = ExecuteQuoteUpdateAsync(target);
+
+        // 활성 주문이 없을 때만 신규 진입 여부를 체크
+        // (주문이 있으면 AlgoOrder가 알아서 정정하거나, 일반 주문이면 대기)
+        lock (_stateLock)
+        {
+            if (_activeHedgeOrder == null)
+            {
+                _ = CheckAndStartHedgeAsync();
+            }
+        }
     }
 
+    // Quoting 체결 수신 (헤지 물량 발생)
     public void UpdateQuotingFill(Fill fill)
     {
-        if (fill.InstrumentId != _quoteInstrument.InstrumentId)
-        {
-            return;
-        }
+        if (fill.InstrumentId != _quoteInstrument.InstrumentId) return;
 
         try
         {
             var fillValueAmount = _quoteInstrument.ValueInDenominationCurrency(fill.Price, fill.Quantity);
+            // 매수 체결 -> 롱 포지션 증가 -> 헤지는 매도(-) 필요
+            // 매도 체결 -> 숏 포지션 증가 -> 헤지는 매수(+) 필요
             var hedgeValueAmount = fill.Side == Side.Buy ? fillValueAmount * -1m : fillValueAmount;
 
             lock (_pendingValueLock)
@@ -138,8 +149,6 @@ public class Hedger
                     return;
                 }
 
-                // 4. Hedge Instrument 수량 환산 (Reference Price or Hedge Price 사용)
-                // 정확한 수량 계산을 위해 Hedge Instrument의 현재가(Mid)를 사용하는 것이 가장 정확함
                 if (_cachedOrderBook == null)
                 {
                     _logger.LogWarningWithCaller("Hedge orderbook not ready. Skipping hedge accumulation.");
@@ -152,27 +161,130 @@ public class Hedger
                 _netPendingHedgeQuantity += targetQuantity;
             }
 
-            _logger.LogInformationWithCaller($"Quoting Fill received: {fill}. Pending Hedge Value accumulated to: {_netPendingHedgeQuantity}");
+            _logger.LogInformationWithCaller($"Quoting Fill: {fill.Side} {fill.Quantity} @ {fill.Price}. Pending Hedge: {_netPendingHedgeQuantity}");
+
+            // 물량 변동이 생겼으므로 즉시 진입 체크
+            _ = CheckAndStartHedgeAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogErrorWithCaller(ex, "Error inside UpdateQuotingFill in Hedger.");
+            _logger.LogErrorWithCaller(ex, "Error inside UpdateQuotingFill.");
+        }
+    }
+
+    private async Task CheckAndStartHedgeAsync()
+    {
+        decimal pendingQtyDecimal;
+        lock (_pendingValueLock)
+        {
+            pendingQtyDecimal = _netPendingHedgeQuantity.ToDecimal();
+        }
+
+        // 1. 헤지 조건 체크 (최소 수량 등)
+        if (_hedgeParameters.Size.ToDecimal() <= 0m ||
+            Math.Abs(pendingQtyDecimal) < _hedgeInstrument.MinOrderSize.ToDecimal())
+        {
+            return;
+        }
+
+        // 2. 중복 진입 방지
+        lock (_stateLock)
+        {
+            if (_activeHedgeOrder != null) return;
+        }
+
+        var sideToHedge = pendingQtyDecimal > 0 ? Side.Buy : Side.Sell;
+        var absQty = Math.Abs(pendingQtyDecimal);
+        var maxSliceSize = _hedgeParameters.Size.ToDecimal();
+
+        // 3. 주문 수량 결정 (Slice 적용)
+        var qtyToOrderDec = absQty > maxSliceSize ? maxSliceSize : absQty;
+        var lotSize = _hedgeInstrument.LotSize.ToDecimal();
+        qtyToOrderDec = Math.Floor(qtyToOrderDec / lotSize) * lotSize;
+
+        if (qtyToOrderDec < _hedgeInstrument.MinOrderSize.ToDecimal()) return;
+
+        // 4. AlgoOrderType 결정
+        var algoType = _hedgeParameters.OrderType switch
+        {
+            AlgoOrderType.OppositeFirst => AlgoOrderType.OppositeFirst,
+            AlgoOrderType.FirstFollow => AlgoOrderType.FirstFollow,
+            _ => AlgoOrderType.None
+        };
+
+        var qtyToOrder = Quantity.FromDecimal(qtyToOrderDec);
+
+        // 5. 주문 실행
+        await StartNewHedgeOrderAsync(sideToHedge, qtyToOrder, algoType);
+    }
+
+    private async Task StartNewHedgeOrderAsync(Side side, Quantity quantity, AlgoOrderType algoType)
+    {
+        // 1. 빌더를 통해 주문 생성 (가격은 AlgoOrder가 스스로 결정하므로 설정 안 함)
+        var builder = new OrderBuilder(_orderFactory, _hedgeInstrument.InstrumentId, side, _bookName, OrderSource.NonManual, algoType);
+
+        var newOrder = builder
+            .WithQuantity(quantity)
+            .WithOrderType(OrderType.Limit)
+            .WithPostOnly(false)
+            .WithStatusChangedHandler(OnOrderStatusChanged)
+            .WithFillHandler(OnHedgingFill)
+            .Build();
+
+        lock (_stateLock)
+        {
+            if (_activeHedgeOrder != null) return; // Race condition 방어
+            _activeHedgeOrder = newOrder;
+        }
+
+        decimal sign = side == Side.Buy ? 1 : -1;
+        decimal qtyDec = quantity.ToDecimal();
+
+        // 2. [Intention-based Accounting] 주문 제출 전, 체결된 것으로 가정하고 수량 차감
+        lock (_pendingValueLock)
+        {
+            _netPendingHedgeQuantity -= Quantity.FromDecimal(qtyDec * sign);
+        }
+
+        _logger.LogInformationWithCaller($"({side}) Submitting Hedge {newOrder.ClientOrderId}: {quantity} (Algo: {algoType}). Remaining pending: {_netPendingHedgeQuantity}");
+
+        try
+        {
+            // 3. 주문 전송 (여기서 AlgoOrder.SubmitAsync가 실행됨)
+            await newOrder.SubmitAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogErrorWithCaller(ex, $"Failed to submit hedge order {newOrder.ClientOrderId}. Rolling back pending quantity.");
+
+            // 4. [Rollback] 전송 실패 시 차감했던 수량 복구 및 주문 정리
+            lock (_pendingValueLock)
+            {
+                _netPendingHedgeQuantity += Quantity.FromDecimal(qtyDec * sign);
+            }
+
+            lock (_stateLock)
+            {
+                if (_activeHedgeOrder == newOrder)
+                {
+                    if (_activeHedgeOrder is IDisposable disposable) disposable.Dispose();
+                    _activeHedgeOrder = null;
+                }
+            }
         }
     }
 
     public void OnHedgingFill(object? sender, Fill fill)
     {
-        if (fill.InstrumentId != _hedgeInstrument.InstrumentId)
-        {
-            return;
-        }
+        if (fill.InstrumentId != _hedgeInstrument.InstrumentId) return;
 
-        _logger.LogInformationWithCaller($"Hedge Fill received: {fill}. Pending Hedge Value accumulated to: {_netPendingHedgeQuantity}");
+        // 이미 Submit 시점에 수량을 반영했으므로 여기서는 로그만 남김
+        _logger.LogInformationWithCaller($"[WS Fill] Hedge filled: {fill.Quantity} @ {fill.Price}.");
     }
 
     private void OnOrderStatusChanged(object? sender, OrderStatusReport report)
     {
-        // Check if the order has reached a terminal state
+        // 종료 상태만 처리 (New, PartiallyFilled 등은 AlgoOrder가 알아서 처리)
         switch (report.Status)
         {
             case OrderStatus.Cancelled:
@@ -183,251 +295,61 @@ public class Hedger
         }
     }
 
-    private SideQuote? GetHedgeQuote()
-    {
-        decimal pendingQtyDecimal;
-        lock (_pendingValueLock)
-        {
-            pendingQtyDecimal = _netPendingHedgeQuantity.ToDecimal();
-        }
-
-        if (_hedgeParameters.Size.ToDecimal() <= 0m
-            || Math.Abs(pendingQtyDecimal) < _hedgeInstrument.MinOrderSize.ToDecimal())
-        {
-            return null;
-        }
-
-        var sideToHedge = _netPendingHedgeQuantity.ToDecimal() > 0 ? Side.Buy : Side.Sell;
-        var absQty = Math.Abs(pendingQtyDecimal);
-        var maxSliceSize = _hedgeParameters.Size.ToDecimal();
-        var qtyToOrderDec = absQty > maxSliceSize ? maxSliceSize : absQty;
-        var lotSize = _hedgeInstrument.LotSize.ToDecimal();
-        qtyToOrderDec = Math.Floor(qtyToOrderDec / lotSize) * lotSize;
-
-        if (qtyToOrderDec < _hedgeInstrument.MinOrderSize.ToDecimal()) return null;
-
-        if (_cachedOrderBook == null) return null;
-
-        var (bestBid, _) = _cachedOrderBook.GetBestBid();
-        var (bestAsk, _) = _cachedOrderBook.GetBestAsk();
-
-        if (bestBid.ToDecimal() <= 0 || bestAsk.ToDecimal() <= 0) return null;
-
-        var qtyToOrder = Quantity.FromDecimal(qtyToOrderDec);
-        var tick = _hedgeInstrument.TickSize.ToDecimal();
-
-        if (_hedgeParameters.OrderType == HedgeOrderType.OppositeFirst)
-        {
-            // Taker: Buy -> Ask, Sell -> Bid
-            if (sideToHedge == Side.Buy)
-            {
-                Price oppositeFirstMarketPrice = bestAsk;
-                Price myPrice = _hedgeOrder is null ? bestAsk : _hedgeOrder.Price;
-                decimal properPriceDecimal = Math.Min(oppositeFirstMarketPrice.ToDecimal(), myPrice.ToDecimal());
-                return new SideQuote(sideToHedge, Price.FromDecimal(properPriceDecimal), qtyToOrder);
-            }
-            else
-            {
-                Price oppositeFirstMarketPrice = bestBid;
-                Price myPrice = _hedgeOrder is null ? bestBid : _hedgeOrder.Price;
-                decimal properPriceDecimal = Math.Max(oppositeFirstMarketPrice.ToDecimal(), myPrice.ToDecimal());
-                return new SideQuote(sideToHedge, Price.FromDecimal(properPriceDecimal), qtyToOrder);
-            }
-        }
-        else if (_hedgeParameters.OrderType == HedgeOrderType.FirstFollow)// FirstFollow (Maker)
-        {
-            if (sideToHedge == Side.Buy)
-            {
-                Price ourSideFirstMarketPrice = bestBid;
-                Price myPrice = _hedgeOrder is null ? bestBid : _hedgeOrder.Price;
-                if (ourSideFirstMarketPrice > myPrice)
-                {
-                    var properPrice = Price.FromDecimal(ourSideFirstMarketPrice.ToDecimal() + tick);
-                    return new SideQuote(sideToHedge, properPrice, qtyToOrder);
-                }
-                else
-                {
-                    return new SideQuote(sideToHedge, myPrice, qtyToOrder);
-                }
-            }
-            else
-            {
-                Price ourSideFirstMarketPrice = bestAsk;
-                Price myPrice = _hedgeOrder is null ? bestAsk : _hedgeOrder.Price;
-                if (ourSideFirstMarketPrice < myPrice)
-                {
-                    var properPrice = Price.FromDecimal(ourSideFirstMarketPrice.ToDecimal() - tick);
-                    return new SideQuote(sideToHedge, properPrice, qtyToOrder);
-                }
-                else
-                {
-                    return new SideQuote(sideToHedge, myPrice, qtyToOrder);
-                }
-            }
-        }
-        else if (_hedgeParameters.OrderType == HedgeOrderType.AnchorInner)
-        {
-            if (_hedgeOrder is not null)
-            {
-                if (_hedgeOrder.Quantity != qtyToOrder)
-                {
-                    return null;
-                }
-
-                return new SideQuote(sideToHedge, _hedgeOrder.Price, _hedgeOrder.Quantity);
-            }
-
-            if (sideToHedge == Side.Buy)
-            {
-                Price ourSideFirstMarketPrice = bestBid;
-                return new SideQuote(sideToHedge, ourSideFirstMarketPrice, qtyToOrder);
-            }
-            else
-            {
-                Price ourSideFirstMarketPrice = bestAsk;
-                return new SideQuote(sideToHedge, ourSideFirstMarketPrice, qtyToOrder);
-            }
-        }
-
-        return null;
-    }
-
-    public async Task ExecuteQuoteUpdateAsync(SideQuote? target)
-    {
-        IOrder? currentOrder;
-        lock (_stateLock)
-        {
-            currentOrder = _hedgeOrder;
-        }
-
-        try
-        {
-            if (target is null)
-            {
-                if (currentOrder is not null)
-                {
-                    // This cancel request might be superseded by another request later.
-                    await currentOrder.CancelAsync(CancellationToken.None).ConfigureAwait(false);
-                }
-                return;
-            }
-
-            if (currentOrder == null)
-            {
-                await StartNewHedgeAsync(target.Value);
-            }
-            else
-            {
-                if (target.Value.Price != currentOrder.Price)
-                {
-                    // This replace request is a primary candidate for being superseded.
-                    await currentOrder.ReplaceAsync(target.Value.Price, OrderType.Limit, CancellationToken.None).ConfigureAwait(false);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogErrorWithCaller(ex, $"An unexpected error occurred during hedge execution for instrument {_hedgeInstrument.Symbol}.");
-        }
-    }
-
-    private async Task StartNewHedgeAsync(SideQuote target)
-    {
-        var orderBuilder = new OrderBuilder(_orderFactory, _hedgeInstrument.InstrumentId, target.Side, _bookName, OrderSource.NonManual);
-        var newOrder = orderBuilder
-            .WithPrice(target.Price)
-            .WithQuantity(target.Size)
-            .WithOrderType(OrderType.Limit)
-            .WithStatusChangedHandler(OnOrderStatusChanged)
-            .WithFillHandler(OnHedgingFill)
-            .Build();
-
-        lock (_stateLock)
-        {
-            // Ensure there isn't already an active order (race condition check)
-            if (_hedgeOrder is not null)
-            {
-                _logger.LogWarningWithCaller($"({target.Side}) Aborting StartNewHedgeAsync; an hedge order was created concurrently.");
-                newOrder.RemoveStatusChangedHandler(OnOrderStatusChanged);
-                newOrder.RemoveFillHandler(OnHedgingFill);
-                return;
-            }
-
-            _hedgeOrder = newOrder;
-        }
-
-        lock (_pendingValueLock)
-        {
-            decimal sign = target.Side == Side.Buy ? 1 : -1;
-            _netPendingHedgeQuantity -= Quantity.FromDecimal(target.Size.ToDecimal() * sign);
-        }
-
-        _logger.LogInformationWithCaller($"({target.Side}) Submitting new order {newOrder.ClientOrderId} for hedge: {target}, remaining qty :{_netPendingHedgeQuantity}");
-        await newOrder.SubmitAsync(CancellationToken.None).ConfigureAwait(false);
-    }
-
-    private Quantity CalculateQuantityFromValue(Instrument instrument, Price price, decimal valueToHedge)
-    {
-        if (valueToHedge == 0m)
-        {
-            return Quantity.FromDecimal(0m);
-        }
-
-        var unitValue = instrument.ValueInDenominationCurrency(price, Quantity.FromDecimal(1m));
-        if (unitValue.Amount <= 0m) return Quantity.FromDecimal(0m);
-
-        decimal rawQuantityDecimal = valueToHedge / unitValue.Amount;
-
-        var minOrderSizeTicks = instrument.MinOrderSize.ToTicks();
-        if (minOrderSizeTicks <= 0) return Quantity.FromDecimal(0m);
-
-        return Quantity.FromDecimal(rawQuantityDecimal);
-    }
-
     private void ClearActiveOrder(OrderStatusReport finalReport)
     {
         lock (_stateLock)
         {
-            if (_hedgeOrder is null || _hedgeOrder.ClientOrderId != finalReport.ClientOrderId)
-            {
-                // This is a late message for an old, already cleared order. Ignore.
-                return;
-            }
+            if (_activeHedgeOrder is null || _activeHedgeOrder.ClientOrderId != finalReport.ClientOrderId) return;
 
-            _logger.LogInformationWithCaller($"({_hedgeOrder.Side}) Order {_hedgeOrder.ClientOrderId} reached terminal state {finalReport.Status}. Clearing hedge order.");
+            _logger.LogInformationWithCaller($"({_activeHedgeOrder.Side}) Hedge Order {_activeHedgeOrder.ClientOrderId} ended ({finalReport.Status}).");
 
+            // 1. [Rollback] 체결되지 못하고 남은 잔량(LeavesQty) 복구
+            // (Submit 시점에 전체 수량을 뺐으므로, 체결 안 된 부분은 다시 더해줘야 함)
             if (finalReport.LeavesQuantity.ToTicks() > 0)
             {
                 lock (_pendingValueLock)
                 {
-                    decimal sign = _hedgeOrder.Side == Side.Buy ? 1 : -1;
+                    decimal sign = _activeHedgeOrder.Side == Side.Buy ? 1 : -1;
                     _netPendingHedgeQuantity += Quantity.FromDecimal(finalReport.LeavesQuantity.ToDecimal() * sign);
 
-                    _logger.LogInformationWithCaller($"Hedge order partially filled/cancelled. Returning {finalReport.LeavesQuantity} to pending. New pending: {_netPendingHedgeQuantity}");
+                    _logger.LogInformationWithCaller($"Restoring {finalReport.LeavesQuantity} to pending. New pending: {_netPendingHedgeQuantity}");
                 }
             }
 
-            // fully filled process
-            if (finalReport.Status == OrderStatus.Filled)
+            // 2. 자원 정리 (이벤트 구독 해제)
+            if (_activeHedgeOrder is IDisposable disposableOrder)
             {
-                _logger.LogInformationWithCaller($"Hedge order {finalReport.ClientOrderId} has been fully filled.");
+                disposableOrder.Dispose();
             }
 
-            _hedgeOrder = null;
+            _activeHedgeOrder = null;
         }
+
+        // 3. 주문이 끝났으므로, 남은 물량이나 복구된 물량 처리를 위해 다시 체크
+        _ = CheckAndStartHedgeAsync();
+    }
+
+    private Quantity CalculateQuantityFromValue(Instrument instrument, Price price, decimal valueToHedge)
+    {
+        if (valueToHedge == 0m) return Quantity.FromDecimal(0m);
+
+        var unitValue = instrument.ValueInDenominationCurrency(price, Quantity.FromDecimal(1m));
+        if (unitValue.Amount <= 0m) return Quantity.FromDecimal(0m);
+
+        decimal rawQty = valueToHedge / unitValue.Amount;
+        var minOrderSizeTicks = instrument.MinOrderSize.ToTicks();
+        if (minOrderSizeTicks <= 0) return Quantity.FromDecimal(0m);
+
+        return Quantity.FromDecimal(rawQty);
     }
 
     public void Dispose()
     {
+        Deactivate();
         lock (_stateLock)
         {
-            if (_hedgeOrder != null)
-            {
-                _hedgeOrder.RemoveStatusChangedHandler(OnOrderStatusChanged);
-                _hedgeOrder.RemoveFillHandler(OnHedgingFill);           // Unsubscribe to prevent memory leaks
-                _hedgeOrder = null; // Or consider sending a final cancel request.
-            }
-            Deactivate();
+            if (_activeHedgeOrder is IDisposable d) d.Dispose();
+            _activeHedgeOrder = null;
         }
     }
 }

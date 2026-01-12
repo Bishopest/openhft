@@ -107,6 +107,7 @@ public class QuotingEngineTests
 
         // --- 5. ServiceProvider 빌드 및 객체 생성 ---
         _serviceProvider = services.BuildServiceProvider();
+        _instrumentRepo = _serviceProvider.GetRequiredService<IInstrumentRepository>();
         _marketDataManager = _serviceProvider.GetRequiredService<IMarketDataManager>();
         _feedHandler = _serviceProvider.GetRequiredService<IFeedHandler>();
         _orderRouter = _serviceProvider.GetRequiredService<IOrderRouter>();
@@ -733,7 +734,9 @@ public class QuotingEngineTests
             testRouter, // <--- Inject the local router instance here
             _serviceProvider.GetRequiredService<IOrderGatewayRegistry>(),
             _serviceProvider.GetRequiredService<ILogger<Order>>(),
-            _serviceProvider.GetRequiredService<IClientIdGenerator>()
+            _serviceProvider.GetRequiredService<IClientIdGenerator>(),
+            _marketDataManager,
+            _instrumentRepo
         );
 
         // 2. Create 4 orders (buffer size + 1) using the new factory.

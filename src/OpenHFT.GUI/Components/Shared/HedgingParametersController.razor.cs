@@ -4,6 +4,7 @@ using MudBlazor;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
+using OpenHFT.Core.Orders;
 using OpenHFT.Hedging;
 
 namespace OpenHFT.GUI.Components.Shared;
@@ -26,7 +27,7 @@ public partial class HedgingParametersController : ComponentBase
 
     private class ParameterFormModel
     {
-        public HedgeOrderType OrderType { get; set; }
+        public AlgoOrderType OrderType { get; set; } = AlgoOrderType.OppositeFirst;
         public decimal Size { get; set; } = 100m;
     }
 
@@ -87,5 +88,5 @@ public partial class HedgingParametersController : ComponentBase
         => Task.FromResult(_availableInstruments.Where(i => i.Symbol.Contains(text, System.StringComparison.OrdinalIgnoreCase)));
 
     private string ConvertInstrumentToString(Instrument? inst)
-        => inst is not null ? $"{inst.Symbol} ({inst.SourceExchange})" : string.Empty;
+        => inst is not null ? $"{inst.Symbol} ({inst.SourceExchange}) ({inst.ProductType})" : string.Empty;
 }

@@ -19,11 +19,11 @@ public class OrderBuilder : IOrderBuilder
     /// <param name="instrumentId">The ID of the instrument for the order.</param>
     /// <param name="side">The side (Buy/Sell) for the order.</param>
     /// <param name="bookName">The name of the Book fills belongs to</param> 
-    public OrderBuilder(IOrderFactory orderFactory, int instrumentId, Side side, string bookName, OrderSource orderSource)
+    public OrderBuilder(IOrderFactory orderFactory, int instrumentId, Side side, string bookName, OrderSource orderSource, AlgoOrderType algoType = AlgoOrderType.None)
     {
         if (orderFactory == null) throw new ArgumentNullException(nameof(orderFactory));
 
-        IOrder baseOrder = orderFactory.Create(instrumentId, side, bookName, orderSource);
+        IOrder baseOrder = orderFactory.Create(instrumentId, side, bookName, orderSource, algoType);
         _order = baseOrder;
     }
 
@@ -68,9 +68,19 @@ public class OrderBuilder : IOrderBuilder
     {
         // Perform any final validation before returning the order.
         var order = (IOrder)_order;
-        if (order.Price.ToTicks() <= 0 || order.Quantity.ToTicks() <= 0)
+
+        bool isAlgo = order.AlgoOrderType != AlgoOrderType.None;
+
+        // AlgoOrder가 아닌 경우에만 가격 > 0 필수 체크
+        if (!isAlgo && order.Price.ToTicks() <= 0)
         {
-            throw new InvalidOperationException("Order price and quantity must be positive.");
+            throw new InvalidOperationException("Standard Order price must be positive.");
+        }
+
+        // 수량은 필수
+        if (order.Quantity.ToTicks() <= 0)
+        {
+            throw new InvalidOperationException("Order quantity must be positive.");
         }
 
         return order;

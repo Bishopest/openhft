@@ -9,5 +9,5 @@ namespace OpenHFT.Core.Interfaces;
 public interface IOrderFactory
 {
     // The factory needs the basic, immutable properties to create the correct order type.
-    IOrder Create(int instrumentId, Side side, string bookName, OrderSource source);
+    IOrder Create(int instrumentId, Side side, string bookName, OrderSource source, AlgoOrderType algoType = AlgoOrderType.None);
 }

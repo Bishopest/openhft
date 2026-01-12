@@ -143,8 +143,8 @@ public class HedgerManagerTests
         var bitmexInstance = _quotingManager.GetInstance(bitmexInstrument.InstrumentId);
         var binanceInstance = _quotingManager.GetInstance(binanceInstrument.InstrumentId);
 
-        var bitmexHedgeParams = new HedgingParameters(bitmexInstrument.InstrumentId, binanceInstrument.InstrumentId, HedgeOrderType.OppositeFirst, Quantity.FromDecimal(100m));
-        var binanceHedgeParams = new HedgingParameters(binanceInstrument.InstrumentId, bitmexInstrument.InstrumentId, HedgeOrderType.OppositeFirst, Quantity.FromDecimal(100m));
+        var bitmexHedgeParams = new HedgingParameters(bitmexInstrument.InstrumentId, binanceInstrument.InstrumentId, AlgoOrderType.OppositeFirst, Quantity.FromDecimal(100m));
+        var binanceHedgeParams = new HedgingParameters(binanceInstrument.InstrumentId, bitmexInstrument.InstrumentId, AlgoOrderType.OppositeFirst, Quantity.FromDecimal(100m));
 
         // 4. 헤저 스타트
         _manager.UpdateHedgingParameters(bitmexHedgeParams);

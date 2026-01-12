@@ -5,12 +5,14 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moq;
 using NUnit.Framework;
+using OpenHFT.Core.Configuration;
 using OpenHFT.Core.DataBase;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Orders;
 using OpenHFT.Core.Positions;
+using OpenHFT.Processing;
 using OpenHFT.Service;
 
 namespace OpenHFT.Tests.Core.Positions;
@@ -54,6 +56,9 @@ public class PositionManagerTests
         services.AddLogging(builder => builder.AddConsole()); // AddConsole() 사용
         services.AddSingleton(configuration);
         services.AddSingleton<IInstrumentRepository, InstrumentRepository>();
+        services.AddSingleton(new SubscriptionConfig());
+        services.AddSingleton<MarketDataDistributor>();
+        services.AddSingleton<IMarketDataManager, MarketDataManager>();
 
         // Order 파이프라인 등록
         services.AddSingleton<IOrderRouter, OrderRouter>();

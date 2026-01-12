@@ -45,7 +45,7 @@ public class OrderBuilderTests
 
         // The factory will return a real, but basic, Order object.
         var orderShell = CreateOrderShell();
-        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test", OrderSource.NonManual)).Returns(orderShell);
+        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test", OrderSource.NonManual, AlgoOrderType.None)).Returns(orderShell);
 
         var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide, "test", OrderSource.NonManual);
 
@@ -75,7 +75,7 @@ public class OrderBuilderTests
     {
         // Arrange
         var orderShell = CreateOrderShell();
-        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test", OrderSource.NonManual)).Returns(orderShell);
+        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test", OrderSource.NonManual, AlgoOrderType.None)).Returns(orderShell);
         var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide, "test", OrderSource.NonManual);
 
         // Act & Assert
@@ -91,7 +91,7 @@ public class OrderBuilderTests
     {
         // Arrange
         var orderShell = CreateOrderShell();
-        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test", OrderSource.NonManual)).Returns(orderShell);
+        _mockOrderFactory.Setup(f => f.Create(InstrumentId, TestSide, "test", OrderSource.NonManual, AlgoOrderType.None)).Returns(orderShell);
         var builder = new OrderBuilder(_mockOrderFactory.Object, InstrumentId, TestSide, "test", OrderSource.NonManual);
 
         // Act & Assert

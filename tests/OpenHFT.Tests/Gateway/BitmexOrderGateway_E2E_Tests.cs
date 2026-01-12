@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
+using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
@@ -72,6 +73,9 @@ public class BitmexOrderGateway_E2E_Tests
 
         services.AddSingleton(configuration);
         services.AddSingleton<IInstrumentRepository, InstrumentRepository>();
+        services.AddSingleton(new SubscriptionConfig());
+        services.AddSingleton<MarketDataDistributor>();
+        services.AddSingleton<IMarketDataManager, MarketDataManager>();
         services.AddSingleton<IOrderUpdateHandler, OrderUpdateDistributor>();
         services.AddSingleton<MarketDataDistributor>();
         services.AddSingleton(provider =>

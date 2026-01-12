@@ -47,6 +47,8 @@ public class Order : IOrder, IOrderUpdatable
             }
         }
     }
+
+    public virtual AlgoOrderType AlgoOrderType => AlgoOrderType.None;
     public event EventHandler<OrderStatusReport>? StatusChanged;
     public event EventHandler<Fill>? OrderFilled;
 
@@ -90,7 +92,7 @@ public class Order : IOrder, IOrderUpdatable
     }
 
     // --- Action Methods ---
-    public async Task SubmitAsync(CancellationToken cancellationToken = default)
+    public virtual async Task SubmitAsync(CancellationToken cancellationToken = default)
     {
         // Update internal state first to prevent race conditions
         Status = OrderStatus.NewRequest;
