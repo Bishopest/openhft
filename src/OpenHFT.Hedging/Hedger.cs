@@ -324,9 +324,6 @@ public class Hedger : IDisposable
 
             _activeHedgeOrder = null;
         }
-
-        // 3. 주문이 끝났으므로, 남은 물량이나 복구된 물량 처리를 위해 다시 체크
-        _ = CheckAndStartHedgeAsync();
     }
 
     private Quantity CalculateQuantityFromValue(Instrument instrument, Price price, decimal valueToHedge)
