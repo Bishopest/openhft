@@ -73,31 +73,43 @@ public class MarketDataManager : IMarketDataManager
     /// <param name="consumerName">A unique name for this specific consumer/callback.</param>
     public void Install(Instrument instrument)
     {
-        // Atomically get or create the OrderBookConsumer for this instrument.
-        var orderBookConsumer = _consumers.GetOrAdd(instrument.InstrumentId, (id) =>
+        // --- OrderBookConsumer Installation ---
+        var orderBookTopic = GetTopicForConsumer<OrderBookConsumer>(instrument);
+
+        if (orderBookTopic != null)
         {
-            _logger.LogInformationWithCaller($"First subscriber for {instrument.Symbol} ({id}). Creating new OrderBookConsumer and requesting data feed.");
+            _consumers.GetOrAdd(instrument.InstrumentId, (id) =>
+            {
+                _logger.LogInformationWithCaller($"Creating new OrderBookConsumer for {instrument.Symbol} on topic {orderBookTopic.GetTopicName()}.");
 
-            var obConsumer = new OrderBookConsumer(instrument, _logger, GetTopicForConsumer<OrderBookConsumer>(instrument));
-
-            // 1. Register the new consumer to receive raw market data.
-            _distributor.Subscribe(obConsumer);
-            return obConsumer;
-        });
-
-        // Atomically get or create the BestOrderBookConsumer for this instrument.
-        var bestOrderBookConsumer = _bestOrderBookConsumers.GetOrAdd(instrument.InstrumentId, (id) =>
+                var obConsumer = new OrderBookConsumer(instrument, _logger, orderBookTopic);
+                _distributor.Subscribe(obConsumer);
+                return obConsumer;
+            });
+        }
+        else
         {
-            _logger.LogInformationWithCaller($"First subscriber for {instrument.Symbol} ({id}). Creating new BestOrderBookConsumer and requesting data feed.");
+            _logger.LogWarningWithCaller($"No suitable topic found for OrderBookConsumer on {instrument.SourceExchange} for instrument {instrument.Symbol}. This consumer will not be installed.");
+        }
 
-            var bobConsumer = new BestOrderBookConsumer(instrument, _logger, GetTopicForConsumer<BestOrderBookConsumer>(instrument));
+        // --- BestOrderBookConsumer Installation ---
+        var bestOrderBookTopic = GetTopicForConsumer<BestOrderBookConsumer>(instrument);
 
-            // Register the new consumer to receive raw market data.
-            _distributor.Subscribe(bobConsumer);
-            return bobConsumer;
-        });
+        if (bestOrderBookTopic != null)
+        {
+            _bestOrderBookConsumers.GetOrAdd(instrument.InstrumentId, (id) =>
+            {
+                _logger.LogInformationWithCaller($"Creating new BestOrderBookConsumer for {instrument.Symbol} on topic {bestOrderBookTopic.GetTopicName()}.");
 
-        _logger.LogInformationWithCaller($"market data consumer successfully installed for {instrument.Symbol}.");
+                var bobConsumer = new BestOrderBookConsumer(instrument, _logger, bestOrderBookTopic);
+                _distributor.Subscribe(bobConsumer);
+                return bobConsumer;
+            });
+        }
+        else
+        {
+            _logger.LogWarningWithCaller($"No suitable topic found for BestOrderBookConsumer on {instrument.SourceExchange} for instrument {instrument.Symbol}. This consumer will not be installed.");
+        }
     }
 
     public void SubscribeOrderBook(int instrumentId, string subscriberName, EventHandler<OrderBook> callback)
@@ -218,6 +230,16 @@ public class MarketDataManager : IMarketDataManager
                 if (typeof(TConsumer) == typeof(BestOrderBookConsumer))
                 {
                     return BitmexTopic.Quote;
+                }
+                break;
+            case ExchangeEnum.BITHUMB:
+                if (typeof(TConsumer) == typeof(OrderBookConsumer))
+                {
+                    return BithumbTopic.OrderBook;
+                }
+                else if (typeof(TConsumer) == typeof(BestOrderBookConsumer))
+                {
+                    return null;
                 }
                 break;
                 // 다른 거래소에 대한 case를 여기에 추가할 수 있습니다.

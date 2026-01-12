@@ -50,6 +50,11 @@ public interface IFeedAdapter : IDisposable
     /// </summary>
     ExecutionMode ExecMode { get; }
     /// <summary>
+    /// Gets the stream type(e.g., PublicStream, PrivateStream)
+    /// Bithumb divide public/private ws endpoint. 
+    /// </summary>
+    StreamType StreamType { get; }
+    /// <summary>
     /// Check if adapter is connected
     /// </summary>
     bool IsConnected { get; }

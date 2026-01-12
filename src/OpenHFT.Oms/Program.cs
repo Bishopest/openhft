@@ -245,6 +245,59 @@ public class Program
                                     executionConfig.Feed
                                 ));
                                 break;
+                            case ExchangeEnum.BITHUMB:
+                                services.AddSingleton<BaseRestApiClient>(provider => new BithumbRestApiClient(
+                                    provider.GetRequiredService<ILogger<BithumbRestApiClient>>(),
+                                    provider.GetRequiredService<IInstrumentRepository>(),
+                                    provider.GetRequiredService<IHttpClientFactory>().CreateClient($"{nameof(BithumbRestApiClient)}-{productType}-{executionConfig.Api}"),
+                                    productType,
+                                    executionConfig.Api,
+                                    apiSecret,
+                                    apiKey));
+                                services.AddSingleton<IOrderGateway>(provider =>
+                                {
+                                    var apiClients = provider.GetRequiredService<IEnumerable<BaseRestApiClient>>();
+                                    var specificApiClient = apiClients.OfType<BithumbRestApiClient>()
+                                        .FirstOrDefault(c => c.ProdType == productType && c.ExecutionMode == executionConfig.Api);
+
+                                    if (specificApiClient == null)
+                                        throw new InvalidOperationException($"BithumbRestApiClient for {productType} not found.");
+
+                                    return new BithumbOrderGateway(
+                                        provider.GetRequiredService<ILogger<BithumbOrderGateway>>(),
+                                        specificApiClient,
+                                        provider.GetRequiredService<IInstrumentRepository>(),
+                                        productType);
+                                });
+                                services.AddSingleton<IFeedAdapter>(provider =>
+                                {
+                                    return new BithumbPublicAdapter(
+                                        provider.GetRequiredService<ILogger<BithumbPublicAdapter>>(),
+                                        productType,
+                                        provider.GetRequiredService<IInstrumentRepository>(),
+                                        executionConfig.Feed
+                                    );
+                                });
+                                services.AddSingleton<IFeedAdapter>(provider =>
+                                {
+                                    var apiClients = provider.GetRequiredService<IEnumerable<BaseRestApiClient>>();
+                                    var specificApiClient = apiClients.OfType<BithumbRestApiClient>()
+                                        .FirstOrDefault(c => c.ProdType == productType && c.ExecutionMode == executionConfig.Api);
+
+                                    if (specificApiClient == null)
+                                        throw new InvalidOperationException($"BithumbRestApiClient for {productType} not found.");
+
+                                    return new BithumbPrivateAdapter(
+                                        provider.GetRequiredService<ILogger<BithumbPrivateAdapter>>(),
+                                        productType,
+                                        provider.GetRequiredService<IInstrumentRepository>(),
+                                        executionConfig.Feed,
+                                        specificApiClient,
+                                        apiKey,
+                                        apiSecret
+                                    );
+                                });
+                                break;
                         }
                     }
                 }

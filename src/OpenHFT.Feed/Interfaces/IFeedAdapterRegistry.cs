@@ -6,6 +6,6 @@ namespace OpenHFT.Feed.Interfaces;
 
 public interface IFeedAdapterRegistry
 {
-    IFeedAdapter? GetAdapter(ExchangeEnum exchange, ProductType productType);
+    IFeedAdapter? GetAdapter(ExchangeEnum exchange, ProductType productType, StreamType streamType = StreamType.PublicStream);
     IEnumerable<IFeedAdapter> GetAllAdapters();
 }

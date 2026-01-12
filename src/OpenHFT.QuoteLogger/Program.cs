@@ -158,6 +158,17 @@ public class Program
                                     executionConfig.Feed
                                 ));
                                 break;
+                            case ExchangeEnum.BITHUMB:
+                                services.AddSingleton<IFeedAdapter>(provider =>
+                                {
+                                    return new BithumbPublicAdapter(
+                                        provider.GetRequiredService<ILogger<BithumbPublicAdapter>>(),
+                                        productType,
+                                        provider.GetRequiredService<IInstrumentRepository>(),
+                                        executionConfig.Feed
+                                    );
+                                });
+                                break;
                         }
                     }
                 }

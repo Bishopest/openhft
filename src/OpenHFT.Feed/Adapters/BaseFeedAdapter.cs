@@ -44,6 +44,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
         TimeSpan.FromSeconds(15)
     };
 
+    public virtual StreamType StreamType => StreamType.PublicStream;
     public bool IsConnected => _webSocket?.State == WebSocketState.Open;
     public string Status => _webSocket?.State.ToString() ?? "Disconnected";
     private readonly Dictionary<Instrument, HashSet<int>> _subscriptions = new();
@@ -283,7 +284,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
             try
             {
                 _webSocket = new ClientWebSocket();
-                ConfigureWebSocket(_webSocket);
+                ConfigureWebsocket(_webSocket);
 
                 var baseUrl = GetBaseUrl();
                 _logger.LogInformationWithCaller($"Connecting to {baseUrl} (Attempt {retryAttempt + 1})");
@@ -545,8 +546,6 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     /// </summary>
     protected abstract string GetBaseUrl();
 
-    protected abstract void ConfigureWebsocket(ClientWebSocket websocket);
-
     /// <summary>
     /// Processes a raw message received from the WebSocket.
     /// </summary>
@@ -565,7 +564,7 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     /// <summary>
     /// Allows subclasses to apply specific WebSocket configurations.
     /// </summary>
-    protected virtual void ConfigureWebSocket(ClientWebSocket webSocket)
+    protected virtual void ConfigureWebsocket(ClientWebSocket webSocket)
     {
         webSocket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
     }
@@ -624,6 +623,11 @@ public abstract class BaseFeedAdapter : IFeedAdapter
             // cleanup pre-subscribed topics
             _subscriptions.Clear();
         }
+    }
+
+    protected CancellationToken GetAdapterCancellationToken()
+    {
+        return _cancellationTokenSource?.Token ?? CancellationToken.None;
     }
 
     protected virtual void Dispose(bool disposing)

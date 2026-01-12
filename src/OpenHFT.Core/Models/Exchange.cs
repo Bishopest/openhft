@@ -1,6 +1,5 @@
 using System;
 
-
 namespace OpenHFT.Core.Models;
 
 /// <summary>
@@ -14,6 +13,7 @@ public enum ExchangeEnum
     BITMEX = 102,
     BYBIT = 103,
     BITGET = 104,
+    BITHUMB = 105
 }
 
 /// <summary>
@@ -34,6 +34,7 @@ public static class Exchange
             Tuple.Create(BITMEX, ExchangeEnum.BITMEX),
             Tuple.Create(BYBIT, ExchangeEnum.BYBIT),
             Tuple.Create(BITGET, ExchangeEnum.BITGET),
+            Tuple.Create(BITHUMB, ExchangeEnum.BITHUMB),
             // Add other exchanges here as needed
         };
 
@@ -63,6 +64,9 @@ public static class Exchange
     public const string BYBIT = "bybit";
 
     public const string BITGET = "bitget";
+
+    public const string BITHUMB = "bithumb";
+
 
     /// <summary>
     /// Gets the internal ExchangeEnum code for the specified exchange name.

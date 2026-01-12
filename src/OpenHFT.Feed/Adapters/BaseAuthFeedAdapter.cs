@@ -21,13 +21,18 @@ public abstract class BaseAuthFeedAdapter : BaseFeedAdapter
     {
     }
 
+    protected void SetApiKeyAndSecret(string apiKey, string apiSecret)
+    {
+        ApiKey = apiKey;
+        ApiSecret = apiSecret;
+    }
+
     public override async Task AuthenticateAsync(string apiKey, string apiSecret, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(apiSecret))
             throw new ArgumentException("API key and secret cannot be null or empty for authentication.");
 
-        ApiKey = apiKey;
-        ApiSecret = apiSecret;
+        SetApiKeyAndSecret(apiKey, apiSecret);
 
         // Delegate the exchange-specific authentication logic to the derived class.
         try

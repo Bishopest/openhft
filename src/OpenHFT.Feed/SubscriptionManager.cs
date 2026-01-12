@@ -157,7 +157,7 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
 
     private void OnAdapterAuthenticationStateChanged(object? sender, AuthenticationEventArgs e)
     {
-        if (e.IsAuthenticated && sender is IFeedAdapter adapter)
+        if (e.IsAuthenticated && sender is BaseAuthFeedAdapter adapter)
         {
             // Run private topic subscription in the background to not block the event handler.
             _ = SubscribePrivateTopicsAsync(adapter);
@@ -209,25 +209,9 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
         }
     }
 
-    private async Task SubscribePrivateTopicsAsync(IFeedAdapter adapter, CancellationToken cancellationToken = default)
+    private async Task SubscribePrivateTopicsAsync(BaseAuthFeedAdapter adapter, CancellationToken cancellationToken = default)
     {
-        if (adapter is not BaseAuthFeedAdapter authAdapter)
-        {
-            _logger.LogWarningWithCaller($"Adapter {adapter.SourceExchange} does not support authentication (BaseAuthFeedAdapter not implemented). Skipping private topics.");
-            return;
-        }
-
-        var privateTopics = adapter.SourceExchange switch
-        {
-            ExchangeEnum.BINANCE => BinanceTopic.GetAllPrivateTopics(),
-            ExchangeEnum.BITMEX => BitmexTopic.GetAllPrivateTopics(),
-            _ => Enumerable.Empty<ExchangeTopic>()
-        };
-
-        if (!privateTopics.Any()) return;
-
-        _logger.LogInformationWithCaller($"Subscribing to {privateTopics.Count()} private topics for {adapter.SourceExchange}/{adapter.ProdType}.");
-        await authAdapter.SubscribeToPrivateTopicsAsync(cancellationToken);
+        await adapter.SubscribeToPrivateTopicsAsync(cancellationToken);
     }
 
     private T ParseEnum<T>(string value) where T : struct, Enum
@@ -261,6 +245,7 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
         {
             ExchangeEnum.BINANCE => BinanceTopic.GetAllMarketTopics(),
             ExchangeEnum.BITMEX => BitmexTopic.GetAllMarketTopics(),
+            ExchangeEnum.BITHUMB => BithumbTopic.GetAllMarketTopics(),
             // Add other exchanges here
             _ => Enumerable.Empty<ExchangeTopic>()
         };

@@ -106,6 +106,12 @@ public class ExchangeFeedManager : IExchangeFeedManager, IAsyncDisposable
                     _instrumentRepository,
                     config.ExecutionMode
                 ),
+                ExchangeEnum.BITHUMB => new BithumbPublicAdapter(
+                    _serviceProvider.GetRequiredService<ILogger<BithumbPublicAdapter>>(),
+                    productType,
+                    _instrumentRepository,
+                    config.ExecutionMode
+                ),
                 _ => throw new NotSupportedException($"Adapter for {exchange} not supported.")
             };
 
@@ -134,6 +140,7 @@ public class ExchangeFeedManager : IExchangeFeedManager, IAsyncDisposable
         {
             ExchangeEnum.BINANCE => new List<BinanceTopic> { BinanceTopic.DepthUpdate },
             ExchangeEnum.BITMEX => new List<BitmexTopic> { BitmexTopic.OrderBookL2_25 },
+            ExchangeEnum.BITHUMB => new List<BithumbTopic> { BithumbTopic.OrderBook },
             // Add other exchanges here
             _ => Enumerable.Empty<ExchangeTopic>()
         };

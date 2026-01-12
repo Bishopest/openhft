@@ -64,31 +64,27 @@ public class FeedOrchestrator : IHostedService
 
     private void OnAdapterConnectionStateChanged(object? sender, ConnectionStateChangedEventArgs e)
     {
-        if (e.IsConnected && sender is IFeedAdapter adapter)
+        if (e.IsConnected && sender is BaseAuthFeedAdapter adapter)
         {
             _logger.LogInformationWithCaller($"Adapter {adapter.SourceExchange} reconnected. Attempting to re-authenticate.");
             _ = AuthenticateAdapterAsync(adapter);
         }
     }
 
-    private async Task AuthenticateAdapterAsync(IFeedAdapter adapter)
+    private async Task AuthenticateAdapterAsync(BaseAuthFeedAdapter adapter)
     {
-        // StartAdapterAsync의 인증 로직과 동일
-        if (adapter is BaseAuthFeedAdapter authAdapter)
+        var apiKey = _configuration[$"{adapter.SourceExchange.ToString().ToUpper()}_{adapter.ExecMode.ToString().ToUpper()}_API_KEY"];
+        var apiSecret = _configuration[$"{adapter.SourceExchange.ToString().ToUpper()}_{adapter.ExecMode.ToString().ToUpper()}_API_SECRET"];
+        if (!string.IsNullOrEmpty(apiKey) && !string.IsNullOrEmpty(apiSecret))
         {
-            var apiKey = _configuration[$"{adapter.SourceExchange.ToString().ToUpper()}_{adapter.ExecMode.ToString().ToUpper()}_API_KEY"];
-            var apiSecret = _configuration[$"{adapter.SourceExchange.ToString().ToUpper()}_{adapter.ExecMode.ToString().ToUpper()}_API_SECRET"];
-            if (!string.IsNullOrEmpty(apiKey) && !string.IsNullOrEmpty(apiSecret))
+            try
             {
-                try
-                {
-                    _logger.LogInformationWithCaller($"Re-authenticating with {adapter.SourceExchange}...");
-                    await authAdapter.AuthenticateAsync(apiKey, apiSecret);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogErrorWithCaller(ex, $"Failed to re-authenticate with {adapter.SourceExchange}.");
-                }
+                _logger.LogInformationWithCaller($"Re-authenticating with {adapter.SourceExchange}...");
+                await adapter.AuthenticateAsync(apiKey, apiSecret);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogErrorWithCaller(ex, $"Failed to re-authenticate with {adapter.SourceExchange}.");
             }
         }
     }
