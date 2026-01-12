@@ -83,7 +83,7 @@ public class OrderBuilderTests
         {
             builder.WithQuantity(Quantity.FromDecimal(1m)).Build();
         });
-        Assert.That(ex.Message, Is.EqualTo("Order price and quantity must be positive."));
+        Assert.That(ex.Message, Is.EqualTo("Standard Order price must be positive."));
     }
 
     [Test]
@@ -99,6 +99,6 @@ public class OrderBuilderTests
         {
             builder.WithPrice(Price.FromDecimal(50000m)).Build();
         });
-        Assert.That(ex.Message, Is.EqualTo("Order price and quantity must be positive."));
+        Assert.That(ex.Message, Is.EqualTo("Order quantity must be positive."));
     }
 }
