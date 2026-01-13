@@ -9,8 +9,8 @@ namespace OpenHFT.Gateway;
 
 public class NullOrderGateway : IOrderGateway
 {
+    public bool SupportsOrderReplacement { get; } = false;
     public ExchangeEnum SourceExchange => ExchangeEnum.Undefined;
-
     public ProductType ProdType => ProductType.PerpetualFuture;
 
     public Task CancelAllOrdersAsync(string symbol, CancellationToken cancellationToken = default)

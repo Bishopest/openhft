@@ -13,6 +13,8 @@ public class Order : IOrder, IOrderUpdatable
     private readonly ILogger _logger;
     private readonly IOrderRouter _router;
     private readonly IOrderGateway _gateway;
+    public bool SupportsOrderReplacement { get; }
+
     public long ClientOrderId { get; }
     public string? ExchangeOrderId { get; internal set; }
     public OrderStatus Status { get; internal set; }
@@ -66,6 +68,7 @@ public class Order : IOrder, IOrderUpdatable
 
         _router = router;
         _gateway = gateway;
+        SupportsOrderReplacement = gateway.SupportsOrderReplacement;
         _logger = logger;
         _router.RegisterOrder(this);
     }
@@ -121,43 +124,49 @@ public class Order : IOrder, IOrderUpdatable
     /// </summary>
     public async Task ReplaceAsync(Price newPrice, OrderType orderType, CancellationToken cancellationToken = default)
     {
-        // 1. Check if the order is in a state that can be replaced.
-        if (Status != OrderStatus.New && Status != OrderStatus.PartiallyFilled)
+        if (_gateway.SupportsOrderReplacement)
         {
-            // Or log a warning and return.
-            _logger.LogWarningWithCaller($"Cannot replace order in '{Status}' state. Info => {ToString()}");
-            return;
-        }
-
-        if (string.IsNullOrEmpty(ExchangeOrderId))
-        {
-            // This can happen if the 'New' confirmation from the exchange hasn't arrived yet.
-            _logger.LogWarningWithCaller($"Cannot replace order: ExchangeOrderId is not yet known. Info => {ToString()}");
-            return;
-        }
-
-        // 2. Update internal state to 'ReplaceRequest'
-        var origStatus = Status;
-        Status = OrderStatus.ReplaceRequest;
-
-        // 3. Create request and call the gateway
-        var request = new ReplaceOrderRequest(ExchangeOrderId, newPrice, InstrumentId);
-        var result = await _gateway.SendReplaceOrderAsync(request, cancellationToken);
-
-        // 4. Handle immediate failure
-        if (!result.IsSuccess)
-        {
-            lock (_stateLock)
+            // 1. Check if the order is in a state that can be replaced.
+            if (Status != OrderStatus.New && Status != OrderStatus.PartiallyFilled)
             {
-                Status = origStatus;
+                // Or log a warning and return.
+                _logger.LogWarningWithCaller($"Cannot replace order in '{Status}' state. Info => {ToString()}");
+                return;
             }
+
+            if (string.IsNullOrEmpty(ExchangeOrderId))
+            {
+                // This can happen if the 'New' confirmation from the exchange hasn't arrived yet.
+                _logger.LogWarningWithCaller($"Cannot replace order: ExchangeOrderId is not yet known. Info => {ToString()}");
+                return;
+            }
+
+            // 2. Update internal state to 'ReplaceRequest'
+            var origStatus = Status;
+            Status = OrderStatus.ReplaceRequest;
+
+            // 3. Create request and call the gateway
+            var request = new ReplaceOrderRequest(ExchangeOrderId, newPrice, InstrumentId);
+            var result = await _gateway.SendReplaceOrderAsync(request, cancellationToken);
+
+            // 4. Handle immediate failure
+            if (!result.IsSuccess)
+            {
+                lock (_stateLock)
+                {
+                    Status = origStatus;
+                }
+            }
+            else if (result.Report.HasValue)
+            {
+                // If the gateway returns an immediate report, process it.
+                OnStatusReportReceived(result.Report.Value);
+            }
+
+            return;
         }
-        else if (result.Report.HasValue)
-        {
-            // If the gateway returns an immediate report, process it.
-            OnStatusReportReceived(result.Report.Value);
-        }
-        // On success, we wait for a WebSocket update to confirm the replacement.
+
+        await CancelAsync(cancellationToken);
     }
 
     /// <summary>
@@ -285,6 +294,7 @@ public class Order : IOrder, IOrderUpdatable
             LeavesQuantity = report.LeavesQuantity;
             LastUpdateTime = report.Timestamp;
             LatestReport = report;
+
             if (!string.IsNullOrEmpty(report.ExchangeOrderId))
             {
                 if (string.IsNullOrEmpty(ExchangeOrderId))
@@ -293,7 +303,6 @@ public class Order : IOrder, IOrderUpdatable
                 }
                 ExchangeOrderId = report.ExchangeOrderId;
             }
-
 
             StatusChanged?.Invoke(this, report);
             _router.RaiseStatusChanged(this, report);

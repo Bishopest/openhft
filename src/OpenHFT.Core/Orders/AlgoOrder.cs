@@ -95,7 +95,14 @@ public abstract class AlgoOrder : Order, IAlgoOrder, IDisposable
 
         if (targetPrice.ToTicks() > 0 && targetPrice != this.Price)
         {
-            _ = ReplaceAsync(targetPrice, OrderType.Limit);
+            if (SupportsOrderReplacement)
+            {
+                _ = ReplaceAsync(targetPrice, OrderType.Limit);
+            }
+            else
+            {
+                _ = CancelAsync();
+            }
         }
     }
 

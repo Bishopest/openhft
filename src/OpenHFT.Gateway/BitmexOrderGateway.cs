@@ -18,6 +18,7 @@ public class BitmexOrderGateway : IOrderGateway
     private readonly BitmexRestApiClient _apiClient;
     private readonly IInstrumentRepository _instrumentRepository;
 
+    public bool SupportsOrderReplacement { get; } = true;
     public ExchangeEnum SourceExchange => ExchangeEnum.BITMEX;
     public ProductType ProdType { get; }
 

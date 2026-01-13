@@ -112,7 +112,7 @@ public sealed class LayeredQuoteManager : IDisposable
             }
             else
             {
-                await TrimAsync(targetQuote, cancellationToken);
+                await TrimAsync(targetQuote, isPostOnly, cancellationToken);
             }
         }
         finally
@@ -152,7 +152,7 @@ public sealed class LayeredQuoteManager : IDisposable
         }
     }
 
-    public async Task TrimAsync(Quote quote, CancellationToken cancellationToken)
+    public async Task TrimAsync(Quote quote, bool isPostOnly, CancellationToken cancellationToken)
     {
         var workingDepth = _activeOrders.Count;
         if (workingDepth <= 0)
@@ -181,6 +181,7 @@ public sealed class LayeredQuoteManager : IDisposable
         if (workingDepth > _initialDepth)
         {
             await outerOrder.CancelAsync();
+            return;
         }
 
         if (_priceInterval is null)
@@ -202,11 +203,27 @@ public sealed class LayeredQuoteManager : IDisposable
                 return;
             }
 
+            var supportReplace = outerOrder.SupportsOrderReplacement;
+            if (!supportReplace)
+            {
+                await outerOrder.CancelAsync(cancellationToken);
+                await AppendAsync(quote, isPostOnly, cancellationToken);
+                return;
+            }
+
             var newInnerPrice = Price.FromDecimal(mostInnerPrice.ToDecimal() + signedInterval);
             await ReplaceOrderAndUpdateStateAsync(outerOrder, newInnerPrice, cancellationToken);
         }
         else if (signedQuotePriceDec < mostInnerPrice.ToDecimal() * direction)
         {
+            var supportReplace = outerOrder.SupportsOrderReplacement;
+            if (!supportReplace)
+            {
+                await innerOrder.CancelAsync(cancellationToken);
+                await AppendAsync(quote, isPostOnly, cancellationToken);
+                return;
+            }
+
             var newOuterPrice = Price.FromDecimal(mostOuterPrice.ToDecimal() - signedInterval);
             await ReplaceOrderAndUpdateStateAsync(innerOrder, newOuterPrice, cancellationToken);
         }

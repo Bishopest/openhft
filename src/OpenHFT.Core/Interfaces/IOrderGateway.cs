@@ -15,6 +15,11 @@ public interface IOrderGateway
     ExchangeEnum SourceExchange { get; }
     ProductType ProdType { get; }
     /// <summary>
+    /// Indicates whether the exchange supports atomic Cancel/Replace (Amend) operations.
+    /// If false, the Order object must emulate replacement via Cancel + New.
+    /// </summary>
+    bool SupportsOrderReplacement { get; }
+    /// <summary>
     /// Submits a new order to the exchange.
     /// </summary>
     /// <param name="request">An immutable object containing all necessary information for the new order.</param>

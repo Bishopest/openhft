@@ -97,6 +97,7 @@ public class TestOrder : IOrder, IOrderUpdatable
     public Side Side { get; }
 
     // --- Public properties to inspect results ---
+    public bool SupportsOrderReplacement { get; } = true;
     public OrderStatusReport? LastReceivedReport { get; private set; }
     public int ReportsReceivedCount { get; private set; }
 

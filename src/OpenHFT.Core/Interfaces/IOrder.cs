@@ -6,6 +6,12 @@ namespace OpenHFT.Core.Interfaces;
 
 public interface IOrder
 {
+    /// <summary>
+    /// Indicates whether the exchange supports atomic Cancel/Replace (Amend) operations.
+    /// If false, the Order object must emulate replacement via Cancel + New.
+    /// </summary>
+    bool SupportsOrderReplacement { get; }
+
     public int InstrumentId { get; }
 
     public string BookName { get; }

@@ -21,6 +21,7 @@ public sealed class ThrottlingGatewayDecorator : IOrderGateway
     private readonly RateLimiter _perSecondLimiter;
     private readonly RateLimiter _perMinuteLimiter;
 
+    public bool SupportsOrderReplacement => _wrappedGateway.SupportsOrderReplacement;
     public ExchangeEnum SourceExchange => _wrappedGateway.SourceExchange;
     public ProductType ProdType => _wrappedGateway.ProdType;
 

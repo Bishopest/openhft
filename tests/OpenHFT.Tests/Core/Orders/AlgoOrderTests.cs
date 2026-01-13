@@ -32,6 +32,7 @@ public class AlgoOrderTests
         // TickSize 1, LotSize 1 인 테스트용 종목
         _instrument = new CryptoPerpetual(InstrumentId, "BTCUSDT", ExchangeEnum.BINANCE, Currency.BTC, Currency.USDT, Price.FromDecimal(1m), Quantity.FromDecimal(1m), 1m, Quantity.FromDecimal(1m));
         // Gateway Mock Setup (성공 응답 기본값)
+        _mockGateway.Setup(g => g.SupportsOrderReplacement).Returns(true);
         _mockGateway.Setup(g => g.SendReplaceOrderAsync(It.IsAny<ReplaceOrderRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new OrderModificationResult(true, "ExId_1", null, null));
 

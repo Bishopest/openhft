@@ -17,6 +17,7 @@ public class BithumbOrderGateway : IOrderGateway
     private readonly BithumbRestApiClient _apiClient;
     private readonly IInstrumentRepository _instrumentRepository;
 
+    public bool SupportsOrderReplacement { get; } = false;
     public ExchangeEnum SourceExchange => ExchangeEnum.BITHUMB;
     public ProductType ProdType { get; }
 

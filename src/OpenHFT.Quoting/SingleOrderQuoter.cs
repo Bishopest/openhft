@@ -20,6 +20,10 @@ public class SingleOrderQuoter : IQuoter
     private readonly string _bookName;
     private readonly object _stateLock = new();
     private IOrder? _activeOrder;
+
+    // [추가] Replace 실패(취소) 시 즉시 재전송할 쿼트 정보 저장
+    private Quote? _pendingReentryQuote;
+    private bool _pendingReentryPostOnly;
     /// <summary>
     /// The most recent quote that was requested to be updated.
     /// Null if the last action was a cancellation.
@@ -82,6 +86,7 @@ public class SingleOrderQuoter : IQuoter
             lock (_stateLock)
             {
                 currentOrder = _activeOrder;
+                _pendingReentryQuote = null;
             }
 
             if (currentOrder is null)
@@ -110,7 +115,20 @@ public class SingleOrderQuoter : IQuoter
                     }
                     else
                     {
-                        await currentOrder.ReplaceAsync(effectiveQuote.Price, OrderType.Limit, cancellationToken).ConfigureAwait(false);
+                        if (currentOrder.SupportsOrderReplacement)
+                        {
+                            await currentOrder.ReplaceAsync(effectiveQuote.Price, OrderType.Limit, cancellationToken).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            lock (_stateLock)
+                            {
+                                _pendingReentryQuote = effectiveQuote;
+                                _pendingReentryPostOnly = isPostOnly;
+                            }
+
+                            await currentOrder.CancelAsync(cancellationToken).ConfigureAwait(false);
+                        }
                     }
                 }
             }
@@ -289,6 +307,26 @@ public class SingleOrderQuoter : IQuoter
             case OrderStatus.Cancelled:
             case OrderStatus.Rejected:
                 ClearActiveOrder(report);
+
+                Quote? reentryQuote = null;
+                bool reentryPostOnly = false;
+
+                lock (_stateLock)
+                {
+                    if (_pendingReentryQuote != null)
+                    {
+                        reentryQuote = _pendingReentryQuote;
+                        reentryPostOnly = _pendingReentryPostOnly;
+                        _pendingReentryQuote = null;
+                    }
+                }
+
+                if (reentryQuote != null)
+                {
+                    _logger.LogDebug($"({_side}) Order {report.ClientOrderId} ended ({report.Status}). Triggering immediate reentry for {reentryQuote}.");
+                    Task.Run(() => StartNewQuoteAsync(reentryQuote.Value, reentryPostOnly, CancellationToken.None));
+                }
+
                 break;
         }
     }
