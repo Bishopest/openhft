@@ -287,6 +287,10 @@ public class Order : IOrder, IOrderUpdatable
             LatestReport = report;
             if (!string.IsNullOrEmpty(report.ExchangeOrderId))
             {
+                if (string.IsNullOrEmpty(ExchangeOrderId))
+                {
+                    _router.MapExchangeIdToClientId(report.ExchangeOrderId, this.ClientOrderId);
+                }
                 ExchangeOrderId = report.ExchangeOrderId;
             }
 
@@ -345,5 +349,4 @@ public class Order : IOrder, IOrderUpdatable
                $"(ID:{InstrumentId}) @ {Price.ToDecimal()} [{Status}] " +
                $"(Leaves: {LeavesQuantity.ToDecimal()}){exoIdPart}";
     }
-
 }

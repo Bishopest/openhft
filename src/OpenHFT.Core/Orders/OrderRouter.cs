@@ -15,6 +15,7 @@ public class OrderRouter : IOrderRouter
 {
     private readonly ILogger<OrderRouter> _logger;
     private readonly ConcurrentDictionary<long, IOrderUpdatable> _activeOrders = new();
+    private readonly ConcurrentDictionary<string, long> _exchangeIdToClientIdMap = new();
 
     // A queue to hold the IDs of orders pending final deregistration.
     // It acts as a buffer. An order is only truly removed when it's pushed out of this queue.
@@ -88,11 +89,63 @@ public class OrderRouter : IOrderRouter
                 if (finalOrder is IOrder ord)
                 {
                     ord.ResetState();
+                    if (!string.IsNullOrEmpty(ord.ExchangeOrderId))
+                    {
+                        _exchangeIdToClientIdMap.TryRemove(ord.ExchangeOrderId, out _);
+                    }
                 }
             }
         }
 
         _logger.LogDebug("Order {ClientOrderId} was buffered for lazy deregistration.", order.ClientOrderId);
+    }
+
+    public void MapExchangeIdToClientId(string exchangeOrderId, long clientOrderId)
+    {
+        if (string.IsNullOrEmpty(exchangeOrderId)) return;
+        _exchangeIdToClientIdMap[exchangeOrderId] = clientOrderId;
+        _logger.LogDebug("Mapped ExchangeOrderId {ExchangeOrderId} to ClientOrderId {ClientOrderId}", exchangeOrderId, clientOrderId);
+    }
+
+    public void RouteReportByExchangeId(in OrderStatusReport report)
+    {
+        if (report.ClientOrderId > 0)
+        {
+            // If ClientOrderId is already present, use the standard path.
+            RouteReport(in report);
+            return;
+        }
+
+        if (string.IsNullOrEmpty(report.ExchangeOrderId))
+        {
+            _logger.LogWarningWithCaller($"Cannot route report: Both ClientOrderId and ExchangeOrderId are missing. report info => {report}");
+            return;
+        }
+
+        if (_exchangeIdToClientIdMap.TryGetValue(report.ExchangeOrderId, out long clientOrderId))
+        {
+            // Create a new report with the resolved ClientOrderId.
+            var resolvedReport = new OrderStatusReport(
+                clientOrderId: clientOrderId, // Use the resolved ID
+                exchangeOrderId: report.ExchangeOrderId,
+                executionId: report.ExecutionId,
+                instrumentId: report.InstrumentId,
+                side: report.Side,
+                status: report.Status,
+                price: report.Price,
+                quantity: report.Quantity,
+                leavesQuantity: report.LeavesQuantity,
+                timestamp: report.Timestamp,
+                rejectReason: report.RejectReason,
+                lastQuantity: report.LastQuantity,
+                lastPrice: report.LastPrice
+            );
+            RouteReport(in resolvedReport);
+        }
+        else
+        {
+            _logger.LogWarningWithCaller($"Received report for unknown ExchangeOrderId: {report.ExchangeOrderId}. Cannot route.");
+        }
     }
 
     public void RouteReport(in OrderStatusReport report)

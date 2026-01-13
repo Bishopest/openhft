@@ -23,8 +23,21 @@ public class OrderUpdateDistributor : IOrderUpdateHandler
     {
         try
         {
-            // Disruptor로부터 받은 Report를 OrderRouter에게 전달
-            _orderRouter.RouteReport(data.Report);
+            var report = data.Report;
+            if (report.ClientOrderId > 0)
+            {
+                // Standard path for exchanges that support ClientOrderId.
+                _orderRouter.RouteReport(in report);
+            }
+            else if (!string.IsNullOrEmpty(report.ExchangeOrderId))
+            {
+                // Path for exchanges like Bithumb that only provide ExchangeOrderId.
+                _orderRouter.RouteReportByExchangeId(in report);
+            }
+            else
+            {
+                _logger.LogWarningWithCaller($"Received an OrderStatusReport with no valid ID. Sequence: {sequence}");
+            }
         }
         catch (Exception ex)
         {
