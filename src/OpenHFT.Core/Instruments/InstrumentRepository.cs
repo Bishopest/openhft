@@ -73,7 +73,7 @@ public class InstrumentRepository : IInstrumentRepository
                 var market = Enum.Parse<ExchangeEnum>(record.market, true);
                 var symbol = (string)record.symbol;
                 Enum.TryParse<ProductType>(record.type, true, out ProductType productType);
-                var baseCurrency = Currency.FromString(symbol.Replace((string)record.quote_currency, "")); // Simplified logic
+                var baseCurrency = Currency.FromString(record.base_currency); // Simplified logic
                 var quoteCurrency = Currency.FromString(record.quote_currency);
                 var tickSize = Price.FromDecimal(decimal.Parse(record.minimum_price_variation));
                 var lotSize = Quantity.FromDecimal(decimal.Parse(record.lot_size));
