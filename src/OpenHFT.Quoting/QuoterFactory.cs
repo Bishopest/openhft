@@ -52,9 +52,6 @@ public class QuoterFactory : IQuoterFactory
             case QuoterType.Shadow:
                 if (parameters.BookName == null) throw new ArgumentNullException("bookName");
                 return new ShadowQuoter(_loggerFactory.CreateLogger<ShadowQuoter>(), side, instrument, _orderFactory, parameters.BookName, _marketDataManager);
-            case QuoterType.ShadowMaker:
-                if (parameters.BookName == null) throw new ArgumentNullException("bookName");
-                return new ShadowMakerQuoter(_loggerFactory.CreateLogger<ShadowQuoter>(), side, instrument, _orderFactory, parameters.BookName, _marketDataManager);
             default:
                 throw new ArgumentException($"Unsupported quoter type: {parameters.AskQuoterType}");
         }
