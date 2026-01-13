@@ -13,11 +13,6 @@ public enum QuoterType
     Single,
 
     /// <summary>
-    /// A quoter that submits multiple orders by ordersOnGroup structure.
-    /// </summary>
-    Multi,
-
-    /// <summary>
     /// A quoter that submits multiple orders by layeredQuoteManager structur./
     /// </summary>
     Layered,

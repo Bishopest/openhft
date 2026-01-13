@@ -43,11 +43,6 @@ public class QuoterFactory : IQuoterFactory
             case QuoterType.Single:
                 if (parameters.BookName == null) throw new ArgumentNullException("bookName");
                 return new SingleOrderQuoter(_loggerFactory.CreateLogger<SingleOrderQuoter>(), side, instrument, _orderFactory, parameters.BookName, _marketDataManager);
-            case QuoterType.Multi:
-                if (parameters.BookName == null) throw new ArgumentNullException("bookName");
-                var gatewayForMulti = _orderGatewayRegistry.GetGatewayForInstrument(instrument.InstrumentId);
-                if (gatewayForMulti == null) throw new ArgumentNullException("gateway");
-                return new MultiOrderQuoter(_loggerFactory.CreateLogger<MultiOrderQuoter>(), side, instrument, _orderFactory, gatewayForMulti, parameters.BookName, _marketDataManager, parameters);
             case QuoterType.Layered:
                 if (parameters.BookName == null) throw new ArgumentNullException("bookName");
                 var gatewayForLayered = _orderGatewayRegistry.GetGatewayForInstrument(instrument.InstrumentId);
