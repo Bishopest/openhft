@@ -129,40 +129,55 @@ public partial class Home : ComponentBase, IDisposable
             return;
 
         Logger.LogInformationWithCaller($"User selected instance for Instrument: {instance.InstrumentId} on OMS: {instance.OmsIdentifier}");
-
-        // Unsubscribe from the old selection's market data
-        // if (_selectedInstance != null && _subscribedInstrumentIds.Remove(_selectedInstance.InstrumentId))
-        // {
-        //     await FeedManager.UnsubscribeFromInstrumentAsync(_selectedInstance.InstrumentId);
-        // }
-
         _selectedInstance = instance;
 
-        // Subscribe to the new selection's market data
-        if (_subscribedInstrumentIds.Add(_selectedInstance.InstrumentId))
+        // 1. Determine all instruments that need to be subscribed for this selection.
+        var instrumentsToSubscribe = new HashSet<Instrument>();
+
+        var selectedInstrument = InstrumentRepository.GetById(_selectedInstance.InstrumentId);
+        if (selectedInstrument == null)
         {
-            await FeedManager.SubscribeToInstrumentAsync(_selectedInstance.InstrumentId);
-            var feedInst = InstrumentRepository.GetById(_selectedInstance.InstrumentId);
-            if (feedInst is not null && feedInst.DenominationCurrency == Currency.BTC)
+            Snackbar.Add("Selected instrument not found in repository.", Severity.Error);
+            return;
+        }
+
+        instrumentsToSubscribe.Add(selectedInstrument);
+
+        // 2. Check for FX rate dependencies.
+        if (selectedInstrument.DenominationCurrency != Currency.USDT)
+        {
+            Logger.LogInformationWithCaller($"Instrument {selectedInstrument.Symbol} requires FX conversion. Finding reference instruments.");
+
+            // Find all instruments required for FX conversion paths.
+            foreach (var req in FxRateManagerBase.GetRequiredFxInstruments())
             {
-                Logger.LogInformationWithCaller($"Instrument {feedInst.Symbol} requires BTC/USDT rate. Ensuring reference feed is subscribed");
-
-                // Find the reference instrument used by FxRateManager.
-                var referenceInstrument = InstrumentRepository.GetAll().FirstOrDefault(i =>
-                    i.SourceExchange == GuiFxRateManager.ReferenceExchange &&
-                    i.ProductType == GuiFxRateManager.ReferenceProductType &&
-                    i.BaseCurrency == Currency.BTC &&
-                    i.QuoteCurrency == Currency.USDT);
-
-                if (referenceInstrument == null)
+                // This logic finds any path involving the denomination currency.
+                if (req.Base == selectedInstrument.DenominationCurrency || req.Quote == selectedInstrument.DenominationCurrency)
                 {
-                    Logger.LogWarningWithCaller("Could not find the reference BTC/USDT instrument for FX rate conversion.");
-                }
+                    var referenceInstrument = InstrumentRepository.GetAll().FirstOrDefault(i =>
+                        i.SourceExchange == req.Exchange && i.ProductType == req.ProductType &&
+                        i.BaseCurrency == req.Base && i.QuoteCurrency == req.Quote);
 
-                if (_subscribedInstrumentIds.Add(referenceInstrument.InstrumentId))
-                {
-                    await FeedManager.SubscribeToInstrumentAsync(referenceInstrument.InstrumentId);
+                    if (referenceInstrument != null)
+                    {
+                        Logger.LogInformationWithCaller($"Adding FX dependency to subscription: {referenceInstrument.Symbol}");
+                        instrumentsToSubscribe.Add(referenceInstrument);
+                    }
+                    else
+                    {
+                        Logger.LogWarningWithCaller($"Required FX reference instrument not found for: {req.Base}/{req.Quote}");
+                    }
                 }
+            }
+        }
+
+        // 3. Execute subscriptions for all newly required instruments.
+        foreach (var instrument in instrumentsToSubscribe)
+        {
+            if (_subscribedInstrumentIds.Add(instrument.InstrumentId))
+            {
+                Logger.LogDebug("Sending subscription request for: {Symbol}", instrument.Symbol);
+                await FeedManager.SubscribeToInstrumentAsync(instrument.InstrumentId);
             }
         }
 

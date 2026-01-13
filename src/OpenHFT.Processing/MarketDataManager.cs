@@ -56,12 +56,22 @@ public class MarketDataManager : IMarketDataManager
             }
         }
 
-        var referenceSet = new HashSet<Instrument>();
-        AddReferenceInstrumentsToSet(referenceSet);
-        foreach (var refInst in referenceSet)
+        _logger.LogInformationWithCaller("Installing consumers for required FX rate instruments...");
+        foreach (var req in FxRateManagerBase.GetRequiredFxInstruments())
         {
-            _logger.LogInformationWithCaller($"Subscribing to fx rate reference instrument: {refInst.Symbol} on {refInst.SourceExchange}({refInst.ProductType})");
-            Install(refInst);
+            var instrument = _repository.GetAll().FirstOrDefault(i =>
+                i.SourceExchange == req.Exchange && i.ProductType == req.ProductType &&
+                i.BaseCurrency == req.Base && i.QuoteCurrency == req.Quote);
+
+            if (instrument != null)
+            {
+                _logger.LogInformationWithCaller($"Auto-installing FX reference instrument: {instrument.Symbol}");
+                Install(instrument);
+            }
+            else
+            {
+                _logger.LogWarningWithCaller($"Required FX reference instrument not found: {req.Base}/{req.Quote} on {req.Exchange}/{req.ProductType}");
+            }
         }
     }
 
@@ -265,38 +275,5 @@ public class MarketDataManager : IMarketDataManager
             return consumer.BestBook;
         }
         return null;
-    }
-
-    private void AddReferenceInstrumentsToSet(HashSet<Instrument> set)
-    {
-        var exchange = FxRateManager.ReferenceExchange;
-        var pType = FxRateManager.ReferenceProductType;
-        var currencies = FxRateManager.ReferenceCurrencies;
-
-        for (int i = 0; i < currencies.Count; i++)
-        {
-            for (int j = 0; j < currencies.Count; j++)
-            {
-                if (i == j) continue;
-
-                var baseCurr = currencies[i];
-                var quoteCurr = currencies[j];
-
-                var instrument = _repository.GetAll().Where(inst =>
-                    inst.BaseCurrency == baseCurr &&
-                    inst.QuoteCurrency == quoteCurr &&
-                    inst.SourceExchange == exchange &&
-                    inst.ProductType == pType
-                ).FirstOrDefault();
-
-                if (instrument != null)
-                {
-                    if (set.Add(instrument))
-                    {
-                        _logger.LogDebug($"[Auto-ReSubscribe] Including FX Reference Instrument: {instrument.Symbol}");
-                    }
-                }
-            }
-        }
     }
 }

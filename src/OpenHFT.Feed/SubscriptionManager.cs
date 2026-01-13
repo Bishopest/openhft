@@ -79,15 +79,31 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
             }
         }
 
-        var refKey = (FxRateManager.ReferenceExchange, FxRateManager.ReferenceProductType);
-
-        // 해당 어댑터 키가 없으면 새로 생성 (Config에 없더라도 참조 종목만 구독할 수도 있으므로)
-        if (!instrumentsByAdapter.ContainsKey(refKey))
+        // Automatically add all required FX instruments to the subscription list.
+        _logger.LogInformationWithCaller("Adding required FX rate instruments to subscription list...");
+        foreach (var req in FxRateManagerBase.GetRequiredFxInstruments())
         {
-            instrumentsByAdapter[refKey] = new HashSet<Instrument>();
-        }
+            var instrument = _instrumentRepository.GetAll().FirstOrDefault(i =>
+                i.SourceExchange == req.Exchange && i.ProductType == req.ProductType &&
+                i.BaseCurrency == req.Base && i.QuoteCurrency == req.Quote);
 
-        AddReferenceInstrumentsToSet(instrumentsByAdapter[refKey]);
+            if (instrument != null)
+            {
+                var adapterKey = (instrument.SourceExchange, instrument.ProductType);
+                if (!instrumentsByAdapter.ContainsKey(adapterKey))
+                {
+                    instrumentsByAdapter[adapterKey] = new HashSet<Instrument>();
+                }
+                if (instrumentsByAdapter[adapterKey].Add(instrument))
+                {
+                    _logger.LogInformationWithCaller($"Auto-subscribing to FX reference instrument: {instrument.Symbol}");
+                }
+            }
+            else
+            {
+                _logger.LogWarningWithCaller($"Required FX reference instrument not found: {req.Base}/{req.Quote} on {req.Exchange}/{req.ProductType}");
+            }
+        }
 
         var subscribeTasks = new List<Task>();
         foreach (var entry in instrumentsByAdapter)
@@ -111,39 +127,6 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
 
         await Task.WhenAll(subscribeTasks);
         _logger.LogInformationWithCaller("All subscription requests have been submitted.");
-    }
-
-    private void AddReferenceInstrumentsToSet(HashSet<Instrument> set)
-    {
-        var exchange = FxRateManager.ReferenceExchange;
-        var pType = FxRateManager.ReferenceProductType;
-        var currencies = FxRateManager.ReferenceCurrencies;
-
-        for (int i = 0; i < currencies.Count; i++)
-        {
-            for (int j = 0; j < currencies.Count; j++)
-            {
-                if (i == j) continue;
-
-                var baseCurr = currencies[i];
-                var quoteCurr = currencies[j];
-
-                var instrument = _instrumentRepository.GetAll().Where(inst =>
-                    inst.BaseCurrency == baseCurr &&
-                    inst.QuoteCurrency == quoteCurr &&
-                    inst.SourceExchange == exchange &&
-                    inst.ProductType == pType
-                ).FirstOrDefault();
-
-                if (instrument != null)
-                {
-                    if (set.Add(instrument))
-                    {
-                        _logger.LogDebug($"[Auto-ReSubscribe] Including FX Reference Instrument: {instrument.Symbol}");
-                    }
-                }
-            }
-        }
     }
 
     private void OnAdapterConnectionStateChanged(object? sender, ConnectionStateChangedEventArgs e)
@@ -195,10 +178,16 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
             }
         }
 
-        if (adapter.SourceExchange == FxRateManager.ReferenceExchange &&
-            adapter.ProdType == FxRateManager.ReferenceProductType)
+        foreach (var req in FxRateManagerBase.GetRequiredFxInstruments())
         {
-            AddReferenceInstrumentsToSet(instrumentsToSubscribe);
+            if (req.Exchange == adapter.SourceExchange && req.ProductType == adapter.ProdType)
+            {
+                var instrument = _instrumentRepository.GetAll().FirstOrDefault(i =>
+                    i.BaseCurrency == req.Base && i.QuoteCurrency == req.Quote &&
+                    i.SourceExchange == req.Exchange && i.ProductType == req.ProductType);
+
+                if (instrument != null) instrumentsToSubscribe.Add(instrument);
+            }
         }
 
         if (instrumentsToSubscribe.Any())

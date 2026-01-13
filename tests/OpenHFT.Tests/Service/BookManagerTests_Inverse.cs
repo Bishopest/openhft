@@ -32,7 +32,7 @@ public class BookManagerTests_Inverse
         var testDir = Path.Combine(Path.GetTempPath(), "TempRepoForTests");
         Directory.CreateDirectory(testDir);
         var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,contract_multiplier,minimum_price_variation,lot_size,minimum_order_size
-    3109,bitmex,XBTUSD,perpetualfuture,XBTUSD,USD,1,0.1,100,XBTUSD,100";
+    3109,bitmex,XBTUSD,perpetualfuture,XBT,USD,1,0.1,100,XBTUSD,100";
         File.WriteAllText(Path.Combine(testDir, "instruments.csv"), csvContent);
         var config = new ConfigurationBuilder().AddInMemoryCollection(new[] { new KeyValuePair<string, string>("dataFolder", testDir) }).Build();
         var repo = new InstrumentRepository(new NullLogger<InstrumentRepository>(), config);
