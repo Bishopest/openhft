@@ -38,14 +38,13 @@ public class BithumbOrderGateway : IOrderGateway
         if (instrument is null)
             return new OrderPlacementResult(false, null, "Instrument not found.");
 
-        // 빗썸 규격에 맞는 파라미터 변환
         var payload = new Dictionary<string, object>
         {
             { "market", instrument.Symbol },
             { "side", request.Side == Side.Buy ? "bid" : "ask" },
             { "volume", request.Quantity.ToDecimal().ToString() },
             { "price", request.Price.ToDecimal().ToString() },
-            { "order_type", MapOrderType(request.OrderType) }
+            { "order_type", MapOrderType(request.OrderType, request.Side) }
         };
 
         var result = await _apiClient.SendPrivateRequestAsync<BithumbOrderResponse>(
@@ -115,7 +114,7 @@ public class BithumbOrderGateway : IOrderGateway
         if (!apiResult.IsSuccess) return RestApiResult<OrderStatusReport>.Failure(apiResult.Error);
 
         var data = apiResult.Data;
-        var inst = _instrumentRepository.FindBySymbol(data.Market.Replace("-", ""), this.ProdType, this.SourceExchange);
+        var inst = _instrumentRepository.FindBySymbol(data.Market, this.ProdType, this.SourceExchange);
         if (inst == null) return RestApiResult<OrderStatusReport>.Failure(new RestApiException("Instrument not found."));
 
         // 상세 조회 데이터를 바탕으로 리포트 생성
@@ -181,10 +180,10 @@ public class BithumbOrderGateway : IOrderGateway
         [property: JsonPropertyName("created_at")] string CreatedAt
     );
 
-    private string MapOrderType(OrderType type) => type switch
+    private string MapOrderType(OrderType type, Side side) => type switch
     {
         OrderType.Limit => "limit",
-        OrderType.Market => "market",
+        OrderType.Market => side == Side.Buy ? "price" : "market",
         _ => "limit"
     };
 
