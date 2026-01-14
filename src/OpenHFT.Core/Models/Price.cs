@@ -28,6 +28,9 @@ public readonly struct Price : IEquatable<Price>, IComparable<Price>
 
     private Price(FixedPoint<PriceScale> value) => _value = value;
 
+    // Static methods
+    public static Price Zero => new(FixedPoint<PriceScale>.FromDecimal(0m));
+
     // Factory methods
     public static Price FromDecimal(decimal value) => new(FixedPoint<PriceScale>.FromDecimal(value));
     public static Price FromTicks(long ticks) => new(FixedPoint<PriceScale>.FromTicks(ticks));

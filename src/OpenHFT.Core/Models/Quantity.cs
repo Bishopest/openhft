@@ -25,6 +25,9 @@ public readonly struct Quantity : IEquatable<Quantity>, IComparable<Quantity>
 
     private Quantity(FixedPoint<QuantityScale> value) => _value = value;
 
+    // Static methods
+    public static Quantity Zero => new(FixedPoint<QuantityScale>.FromDecimal(0m));
+
     // Factory methods
     public static Quantity FromDecimal(decimal value) => new(FixedPoint<QuantityScale>.FromDecimal(value));
     public static Quantity FromTicks(long ticks) => new(FixedPoint<QuantityScale>.FromTicks(ticks));
