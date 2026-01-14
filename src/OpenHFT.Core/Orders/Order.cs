@@ -111,10 +111,19 @@ public class Order : IOrder, IOrderUpdatable
                 DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), result.FailureReason);
             OnStatusReportReceived(failureReport);
         }
-        else if (result.InitialReport.HasValue)
+        else
         {
-            // If the gateway returns an immediate report, process it.
-            OnStatusReportReceived(result.InitialReport.Value);
+            if (!string.IsNullOrEmpty(result.OrderId) && string.IsNullOrEmpty(ExchangeOrderId))
+            {
+                _router.MapExchangeIdToClientId(result.OrderId, this.ClientOrderId);
+                ExchangeOrderId = result.OrderId;
+            }
+
+            if (result.InitialReport.HasValue)
+            {
+                // If the gateway returns an immediate report, process it.
+                OnStatusReportReceived(result.InitialReport.Value);
+            }
         }
         // If successful but no immediate report, we wait for the WebSocket stream to provide updates.
     }

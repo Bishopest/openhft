@@ -57,8 +57,8 @@ public class BithumbOrderGateway : IOrderGateway
             return new OrderPlacementResult(false, null, result.Error.Message);
         }
 
-        var initialReport = MapResponseToReport(result.Data, instrument.InstrumentId, request.Side);
-        return new OrderPlacementResult(true, result.Data.OrderId, initialReport: initialReport);
+        // var initialReport = MapResponseToReport(result.Data, instrument.InstrumentId, request.Side);
+        return new OrderPlacementResult(true, result.Data.OrderId);
     }
 
     public Task<OrderModificationResult> SendReplaceOrderAsync(ReplaceOrderRequest request, CancellationToken cancellationToken = default)
@@ -88,20 +88,20 @@ public class BithumbOrderGateway : IOrderGateway
         }
 
         // 취소 접수 성공 리포트 생성
-        var cancelReport = new OrderStatusReport(
-            clientOrderId: 0,
-            exchangeOrderId: result.Data.OrderId,
-            executionId: null,
-            instrumentId: request.InstrumentId,
-            side: Side.Buy, // 취소 리포트이므로 사이드는 크게 중요치 않으나 필요시 주문 객체에서 참조
-            status: OrderStatus.Cancelled,
-            price: Price.FromDecimal(0),
-            quantity: Quantity.FromDecimal(0),
-            leavesQuantity: Quantity.FromDecimal(0),
-            timestamp: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-        );
+        // var cancelReport = new OrderStatusReport(
+        //     clientOrderId: 0,
+        //     exchangeOrderId: result.Data.OrderId,
+        //     executionId: null,
+        //     instrumentId: request.InstrumentId,
+        //     side: Side.Buy, // 취소 리포트이므로 사이드는 크게 중요치 않으나 필요시 주문 객체에서 참조
+        //     status: OrderStatus.Cancelled,
+        //     price: Price.FromDecimal(0),
+        //     quantity: Quantity.FromDecimal(0),
+        //     leavesQuantity: Quantity.FromDecimal(0),
+        //     timestamp: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        // );
 
-        return new OrderModificationResult(true, request.OrderId, report: cancelReport);
+        return new OrderModificationResult(true, request.OrderId);
     }
 
     public async Task<RestApiResult<OrderStatusReport>> FetchOrderStatusAsync(string exchangeOrderId, CancellationToken cancellationToken = default)
