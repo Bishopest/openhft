@@ -24,6 +24,6 @@ public class FxRateManager : FxRateManagerBase
 
     protected override Price? GetMidPrice(int instrumentId)
     {
-        return _marketDataManager.GetBestOrderBook(instrumentId)?.GetMidPrice();
+        return _marketDataManager.GetOrderBook(instrumentId)?.GetMidPrice();
     }
 }

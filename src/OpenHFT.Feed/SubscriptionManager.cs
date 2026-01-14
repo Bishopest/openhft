@@ -185,7 +185,7 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
                 var instrument = _instrumentRepository.GetAll().FirstOrDefault(i =>
                     i.BaseCurrency == req.Base && i.QuoteCurrency == req.Quote &&
                     i.SourceExchange == req.Exchange && i.ProductType == req.ProductType);
-
+                _logger.LogInformationWithCaller($"Auto-subscribing to FX reference instrument: {instrument?.Symbol}");
                 if (instrument != null) instrumentsToSubscribe.Add(instrument);
             }
         }

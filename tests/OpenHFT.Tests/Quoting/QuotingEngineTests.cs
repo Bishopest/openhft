@@ -5,7 +5,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.VisualStudio.TestPlatform.Utilities;
 using Moq;
 using NUnit.Framework;
 using OpenHFT.Core.Configuration;
@@ -17,14 +16,12 @@ using OpenHFT.Feed;
 using OpenHFT.Feed.Adapters;
 using OpenHFT.Feed.Interfaces;
 using OpenHFT.Feed.Models;
-using OpenHFT.Gateway;
 using OpenHFT.Processing;
 using OpenHFT.Quoting;
 using OpenHFT.Quoting.FairValue;
 using OpenHFT.Quoting.Interfaces;
 using OpenHFT.Quoting.Models;
 using OpenHFT.Quoting.Validators;
-using OpenHFT.Tests.Processing;
 
 namespace OpenHFT.Tests.Quoting;
 
@@ -43,9 +40,9 @@ public class QuotingEngineTests
     private string _testDirectory;
     private Instrument _xbtusd;
     private Instrument _btcusdt;
+    private Instrument _krwbtc;
     private IFairValueProvider? _fvProvider;
-
-
+    private decimal _krwToUsdRate = 0.00075m;
 
     [SetUp]
     public void SetUp()
@@ -60,7 +57,8 @@ public class QuotingEngineTests
         Directory.CreateDirectory(_testDirectory);
         var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
 1,BITMEX,XBTUSD,PerpetualFuture,XBT,USD,0.5,1,1,1
-2,BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.01,0.001,1,0.001";
+2,BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.01,0.001,1,0.001
+3,BITHUMB,BTCKRW,Spot,BTC,KRW,1000,0.0001,1,0.0001"; // KRW 종목 추가
         File.WriteAllText(Path.Combine(_testDirectory, "instruments.csv"), csvContent);
 
         var inMemoryConfig = new Dictionary<string, string> { { "dataFolder", _testDirectory } };
@@ -70,8 +68,8 @@ public class QuotingEngineTests
         services.AddSingleton<IInstrumentRepository, InstrumentRepository>();
         var instrumentRepository = new InstrumentRepository(new NullLogger<InstrumentRepository>(), configuration);
         instrumentRepository.StartAsync().Wait();
-        // --- 3. MarketDataManager의 의존성 등록 (Mock 또는 실제) ---
-        // MarketDataManager는 SubscriptionConfig가 필요하므로, 테스트용으로 빈 Config를 등록
+
+        // --- 3. MarketDataManager 및 Core 의존성 ---
         services.AddSingleton(new SubscriptionConfig());
 
         _mockBinanceAdapter = new MockAdapter(new NullLogger<MockAdapter>(), ProductType.PerpetualFuture, instrumentRepository, ExecutionMode.Testnet);
@@ -83,6 +81,7 @@ public class QuotingEngineTests
         services.AddSingleton<IOrderRouter, OrderRouter>();
         services.AddSingleton<IOrderUpdateHandler, OrderUpdateDistributor>();
         services.AddSingleton<IClientIdGenerator, ClientIdGenerator>();
+
         var mockGateway = new Mock<IOrderGateway>();
         var mockGatewayRegistry = new Mock<IOrderGatewayRegistry>();
         mockGatewayRegistry.Setup(r => r.GetGatewayForInstrument(It.IsAny<int>())).Returns(mockGateway.Object);
@@ -91,12 +90,13 @@ public class QuotingEngineTests
         services.AddSingleton<IOrderFactory, OrderFactory>();
         services.AddSingleton<IQuoterFactory, QuoterFactory>();
         services.AddSingleton<IFairValueProviderFactory, FairValueProviderFactory>();
+
         services.AddSingleton(provider =>
-               {
-                   var disruptor = new Disruptor<MarketDataEventWrapper>(() => new MarketDataEventWrapper(), 1024);
-                   disruptor.HandleEventsWith(provider.GetRequiredService<MarketDataDistributor>());
-                   return disruptor;
-               });
+        {
+            var disruptor = new Disruptor<MarketDataEventWrapper>(() => new MarketDataEventWrapper(), 1024);
+            disruptor.HandleEventsWith(provider.GetRequiredService<MarketDataDistributor>());
+            return disruptor;
+        });
 
         services.AddSingleton(provider =>
         {
@@ -112,20 +112,34 @@ public class QuotingEngineTests
         _feedHandler = _serviceProvider.GetRequiredService<IFeedHandler>();
         _orderRouter = _serviceProvider.GetRequiredService<IOrderRouter>();
 
-        // QuotingEngine을 직접 생성
-        var quoterFactory = _serviceProvider.GetRequiredService<IQuoterFactory>();
+        // Instruments 로드
         _xbtusd = instrumentRepository.FindBySymbol("XBTUSD", ProductType.PerpetualFuture, ExchangeEnum.BITMEX)!;
         _btcusdt = instrumentRepository.FindBySymbol("BTCUSDT", ProductType.PerpetualFuture, ExchangeEnum.BINANCE)!;
+        _krwbtc = instrumentRepository.FindBySymbol("BTCKRW", ProductType.Spot, ExchangeEnum.BITHUMB)!;
+
         _marketDataManager.Install(_xbtusd);
         _marketDataManager.Install(_btcusdt);
+        _marketDataManager.Install(_krwbtc);
+
+        // 기본 엔진 설정 (BTCUSDT -> XBTUSD)
+        SetupQuotingEngine(_btcusdt.InstrumentId);
+
+        var disruptor = _serviceProvider.GetRequiredService<Disruptor<MarketDataEventWrapper>>();
+        disruptor.Start();
+    }
+
+    // [변경] 엔진 설정을 재사용 가능하도록 분리
+    private void SetupQuotingEngine(int fvInstrumentId)
+    {
+        var quoterFactory = _serviceProvider.GetRequiredService<IQuoterFactory>();
         _fvProvider = _serviceProvider.GetRequiredService<IFairValueProviderFactory>()
-            .CreateProvider(FairValueModel.Midp, _btcusdt.InstrumentId);
+            .CreateProvider(FairValueModel.Midp, fvInstrumentId);
 
         var parameters = new QuotingParameters(
             _xbtusd.InstrumentId,
             "test",
             FairValueModel.Midp,
-            _btcusdt.InstrumentId,
+            fvInstrumentId,
             10m,
             -10m,
             0.5m,
@@ -136,7 +150,8 @@ public class QuotingEngineTests
             true,
             Quantity.FromDecimal(300),
             Quantity.FromDecimal(300),
-            HittingLogic.AllowAll
+            HittingLogic.AllowAll,
+            0.01m
         );
 
         _bidQuoter = (LogQuoter)quoterFactory.CreateQuoter(parameters, Side.Buy);
@@ -148,75 +163,109 @@ public class QuotingEngineTests
             _serviceProvider.GetRequiredService<IQuoteValidator>()
         );
 
+        var fixedFxRateConverter = new FixedFxConverter(_krwToUsdRate);
         _engine = new QuotingEngine(
             _serviceProvider.GetRequiredService<ILogger<QuotingEngine>>(),
             _xbtusd,
+            _instrumentRepo.GetById(fvInstrumentId), // FV Instrument 주입
             marketMaker,
             _fvProvider,
             parameters,
-            _marketDataManager
+            _marketDataManager,
+            fixedFxRateConverter
         );
 
-        // Factory에서 수행하던 이벤트 연결을 수동으로 수행
         marketMaker.OrderFullyFilled += () => _engine.PauseQuoting(TimeSpan.FromSeconds(3));
-        var disruptor = _serviceProvider.GetRequiredService<Disruptor<MarketDataEventWrapper>>();
-        disruptor.Start();
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        if (Directory.Exists(_testDirectory))
+        {
+            Directory.Delete(_testDirectory, true);
+        }
+        if (_serviceProvider is IDisposable d) d.Dispose();
+    }
+
+    // --- Helper Methods ---
+    private void TriggerRequote(decimal fairValue, int instrumentId = 0)
+    {
+        var targetInstrumentId = instrumentId == 0 ? _btcusdt.InstrumentId : instrumentId;
+        if (_fvProvider is MidpFairValueProvider provider)
+        {
+            var targetInstrument = _instrumentRepo.GetById(targetInstrumentId);
+            var book = new OrderBook(targetInstrument);
+
+            // Create spread around FV
+            var bidPrice = Price.FromDecimal(fairValue - targetInstrument.TickSize.ToDecimal());
+            var askPrice = Price.FromDecimal(fairValue + targetInstrument.TickSize.ToDecimal());
+
+            var updates = new PriceLevelEntryArray();
+            updates[0] = new PriceLevelEntry(Side.Buy, bidPrice.ToDecimal(), 1);
+            updates[1] = new PriceLevelEntry(Side.Sell, askPrice.ToDecimal(), 1);
+            var mdEvent = new MarketDataEvent(1, 0, EventKind.Snapshot, targetInstrumentId, targetInstrument.SourceExchange, 0, 0, 2, updates);
+            book.ApplyEvent(mdEvent);
+
+            provider.Update(book);
+        }
+    }
+
+    [Test]
+    public void Requote_ShouldConvertCurrency_WhenBaseCurrenciesDiffer_KRW_to_USD()
+    {
+        // 1. Arrange: KRW 종목을 FV 소스로 사용하는 엔진 재설정
+        SetupQuotingEngine(_krwbtc.InstrumentId); // BTCKRW -> XBTUSD (USD Quoted)
+        _engine.Start();
+        _engine.Activate();
+
+        // 2. FX Rate 설정 (1 KRW = 0.00075 USD 가정, 환율 1333.33)
+        // FixedFxConverter가 이미 설정되어 있음
+        // 3. Act: KRW FV 발생 (1억 3333만... -> 10만불)
+        decimal krwPrice = 133_333_333m;
+        TriggerRequote(krwPrice, _krwbtc.InstrumentId);
+
+        // 4. Assert
+        _bidQuoter.LatestQuote.Should().NotBeNull();
+
+        // 예상 USD 가격: 133,333,333 * 0.00075 = 99,999.99975
+        // Spread 적용: -10bp -> 99,999.99 * 0.999 = 99,899.99
+        // Tick Rounding (0.5) -> Floor(99,899.99 / 0.5) * 0.5 = 99,899.5
+
+        var usdFv = krwPrice * _krwToUsdRate;
+        var expectedBid = Math.Floor((usdFv * (1 - 0.0010m)) / 0.5m) * 0.5m;
+
+        _bidQuoter.LatestQuote.Value.Price.ToDecimal().Should().Be(expectedBid);
+        TestContext.WriteLine($"KRW FV: {krwPrice}, Converted USD FV: {usdFv}, Quoted Bid: {_bidQuoter.LatestQuote.Value.Price}");
     }
 
     [Test]
     public async Task When_OrderIsFullyFilled_ShouldPauseQuoting_AndThenResume()
     {
-        // --- Arrange ---
         _engine.Start();
         _engine.Activate();
 
-        // 1. 첫 번째 호가를 생성시키기 위해 시장 데이터 주입
-        var testUpdates1 = new PriceLevelEntryArray();
-        testUpdates1[0] = new PriceLevelEntry(Side.Buy, 50000m, 100m);
-        testUpdates1[1] = new PriceLevelEntry(Side.Sell, 3000m, 200m);
-
-        var btcEvent1 = new MarketDataEvent(1, 1, EventKind.Snapshot, _btcusdt.InstrumentId, _btcusdt.SourceExchange, 0, BinanceTopic.DepthUpdate.TopicId, 2, testUpdates1);
-        _mockBinanceAdapter.FireMarketDataEvent(btcEvent1);
-        await Task.Delay(200); // 처리 대기
-
-        // 첫 번째 호가가 LogQuoter에 기록되었는지 확인
+        // 1. 초기 호가 생성
+        TriggerRequote(50000m);
         _bidQuoter.LatestQuote.Should().NotBeNull();
         var initialQuotePrice = _bidQuoter.LatestQuote.Value.Price;
-        // --- Act 1: 전량 체결 시뮬레이션 ---
-        TestContext.WriteLine("Simulating a full fill event...");
 
-        // OrderRouter를 통해 'Filled' 상태의 OrderStatusReport를 직접 주입
+        // 2. Act: 전량 체결 시뮬레이션
+        TestContext.WriteLine("Simulating full fill...");
         _bidQuoter.InvokeOrderFullyFilled();
-        await Task.Delay(200); // 이벤트 전파 대기
+        await Task.Delay(100);
 
-        // --- Assert 1: 호가가 중지되었는지 확인 ---
-
-        TestContext.WriteLine("Triggering another market data update while paused...");
-        var testUpdates2 = new PriceLevelEntryArray();
-        testUpdates2[0] = new PriceLevelEntry(Side.Buy, 50000m, 100m);
-        testUpdates2[1] = new PriceLevelEntry(Side.Sell, 300m, 200m);
-
-        var btcEvent2 = new MarketDataEvent(1, 1, EventKind.Snapshot, _btcusdt.InstrumentId, _btcusdt.SourceExchange, 0, BinanceTopic.DepthUpdate.TopicId, 2, testUpdates2);
-        _mockBinanceAdapter.FireMarketDataEvent(btcEvent2);
-        await Task.Delay(200);
-
+        // 3. Assert: 일시 정지 확인 (새로운 FV에도 호가 변경 안됨)
+        TriggerRequote(55000m); // 가격 급등
         _bidQuoter.LatestQuote.Value.Price.ToDecimal().Should().Be(initialQuotePrice.ToDecimal());
-        TestContext.WriteLine(" -> Quoting is paused as expected.");
+        TestContext.WriteLine(" -> Quoting paused.");
 
-        // --- Act 2 & Assert 2: 쿨다운 후 호가 재개 확인 ---
-        TestContext.WriteLine("Waiting for 3.5 seconds to ensure quoting resumes...");
-        await Task.Delay(3500);
-
-        var testUpdates3 = new PriceLevelEntryArray();
-        testUpdates3[0] = new PriceLevelEntry(Side.Buy, 50000m, 100m);
-        testUpdates3[1] = new PriceLevelEntry(Side.Sell, 30000m, 200m);
-
-        var btcEvent3 = new MarketDataEvent(1, 1, EventKind.Snapshot, _btcusdt.InstrumentId, _btcusdt.SourceExchange, 0, BinanceTopic.DepthUpdate.TopicId, 2, testUpdates3);
-        _mockBinanceAdapter.FireMarketDataEvent(btcEvent3);
-        await Task.Delay(200);
+        // 4. Act: 쿨다운 후 재개 확인
+        await Task.Delay(3100); // 3초 대기
+        TriggerRequote(58000m); // 다시 업데이트
 
         _bidQuoter.LatestQuote.Value.Price.ToDecimal().Should().NotBe(initialQuotePrice.ToDecimal());
-        TestContext.WriteLine(" -> Quoting has resumed as expected.");
+        TestContext.WriteLine(" -> Quoting resumed.");
     }
 
     [Test]
@@ -640,7 +689,7 @@ public class QuotingEngineTests
 
         var engine = new QuotingEngine(
             _serviceProvider.GetRequiredService<ILogger<QuotingEngine>>(),
-            _xbtusd, marketMaker, _fvProvider, parameters, _marketDataManager
+            _xbtusd, _btcusdt, marketMaker, _fvProvider, parameters, _marketDataManager, new NullFxConverter()
         );
 
         engine.Start();

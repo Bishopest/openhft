@@ -15,6 +15,8 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
     private readonly ILogger _logger;
     private readonly IMarketDataManager _marketDataManager;
     private readonly MarketMaker _marketMaker;
+    private readonly IFxConverter _fxConverter;
+    private readonly Instrument _fvInstrument;
     private readonly object _lock = new();
     private IFairValueProvider? _fairValueProvider;
     private QuotingParameters _parameters;
@@ -43,18 +45,22 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
     public QuotingEngine(
         ILogger logger,
         Instrument instrument,
+        Instrument fvInstrument,
         MarketMaker marketMaker,
         IFairValueProvider fairValueProvider,
         QuotingParameters initialParameters,
-        IMarketDataManager marketDataManager)
+        IMarketDataManager marketDataManager,
+        IFxConverter fxConverter)
     {
         _logger = logger;
         QuotingInstrument = instrument;
+        _fvInstrument = fvInstrument;
         _marketMaker = marketMaker;
         _marketMaker.OrderFilled += OnFill;
         _fairValueProvider = fairValueProvider;
         _parameters = initialParameters;
         _marketDataManager = marketDataManager;
+        _fxConverter = fxConverter;
     }
 
     public void Start()
@@ -440,14 +446,27 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
 
         if (fairValueUpdate.FairAskValue.ToTicks() == 0 || fairValueUpdate.FairBidValue.ToTicks() == 0) return;
 
+        var convertedFvUpdate = _fxConverter.Convert(
+            fairValueUpdate,
+            _fvInstrument.QuoteCurrency,
+            QuotingInstrument.QuoteCurrency
+        );
+
+        if (convertedFvUpdate == null)
+        {
+            _logger.LogDebug("FX conversion failed. Skipping requote.");
+            return;
+        }
+
+        var fvAsk = convertedFvUpdate.Value.FairAskValue;
+        var fvBid = convertedFvUpdate.Value.FairBidValue;
+
         // 1. Calculate raw bid/ask prices based on spread.
         // Use Price arithmetic to avoid precision issues with decimal.
-        var askSpreadAmountInDecimal = fairValueUpdate.FairAskValue.ToDecimal() * currentParams.AskSpreadBp * 0.0001m;
-        var bidSpreadAmountInDecimal = fairValueUpdate.FairBidValue.ToDecimal() * currentParams.BidSpreadBp * 0.0001m;
-        var askSpreadAmount = Price.FromDecimal(askSpreadAmountInDecimal);
-        var bidSpreadAmount = Price.FromDecimal(bidSpreadAmountInDecimal);
-        var rawAskPrice = fairValueUpdate.FairAskValue + askSpreadAmount;
-        var rawBidPrice = fairValueUpdate.FairBidValue + bidSpreadAmount;
+        var askSpreadAmount = Price.FromDecimal(fvAsk.ToDecimal() * currentParams.AskSpreadBp * 0.0001m);
+        var bidSpreadAmount = Price.FromDecimal(fvBid.ToDecimal() * currentParams.BidSpreadBp * 0.0001m);
+        var rawAskPrice = fvAsk + askSpreadAmount;
+        var rawBidPrice = fvBid + bidSpreadAmount;
 
         // 2. Round prices to the instrument's tick size.
         var tickSizeInTicks = QuotingInstrument.TickSize.ToTicks();
@@ -482,5 +501,23 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
         {
             _ = _marketMaker.UpdateQuoteTargetAsync(groupedQuotePair);
         }
+    }
+    /// <summary>
+    /// Helper method to check if two currencies are functionally equivalent (e.g., USD and USDT).
+    /// </summary>
+    private bool AreCurrenciesEquivalent(Currency a, Currency b)
+    {
+        if (a == b) return true;
+
+        // Define sets of equivalent currencies.
+        var usdEquivalents = new HashSet<Currency> { Currency.USD, Currency.USDT };
+
+        if (usdEquivalents.Contains(a) && usdEquivalents.Contains(b))
+        {
+            return true;
+        }
+
+        // Add other equivalency groups if needed.
+        return false;
     }
 }

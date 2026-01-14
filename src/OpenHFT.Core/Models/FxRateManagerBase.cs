@@ -35,11 +35,30 @@ public abstract class FxRateManagerBase : IFxRateService
         _instrumentRepository = instrumentRepository;
     }
 
+    public static bool IsEquivalent(Currency a, Currency b)
+    {
+        if (a == b) return true;
+
+        // Group 1: USD Equivalents
+        // Only allocate the set once per call or make it static if needed.
+        // For simplicity and clarity here:
+        if ((a == Currency.USD || a == Currency.USDT) &&
+            (b == Currency.USD || b == Currency.USDT))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     protected abstract Price? GetMidPrice(int instrumentId);
 
     public CurrencyAmount? Convert(CurrencyAmount source, Currency target)
     {
-        if (source.Currency == target) return source;
+        if (IsEquivalent(source.Currency, target))
+        {
+            return new CurrencyAmount(source.Amount, target);
+        }
 
         var path = FindConversionPath(source.Currency, target);
         if (path == null || !path.Any())
@@ -76,7 +95,7 @@ public abstract class FxRateManagerBase : IFxRateService
         while (queue.Any())
         {
             var (current, path) = queue.Dequeue();
-            if (current == target)
+            if (IsEquivalent(current, target))
             {
                 _pathCache.TryAdd((source, target), path);
                 return path;
@@ -86,7 +105,7 @@ public abstract class FxRateManagerBase : IFxRateService
 
             foreach (var fxInst in SupportedInstruments)
             {
-                if (fxInst.Base == current && !visited.Contains(fxInst.Quote))
+                if (IsEquivalent(fxInst.Base, current) && !visited.Contains(fxInst.Quote))
                 {
                     var inst = _instrumentRepository.GetAll().FirstOrDefault(i =>
                         i.BaseCurrency == fxInst.Base && i.QuoteCurrency == fxInst.Quote &&
@@ -99,7 +118,8 @@ public abstract class FxRateManagerBase : IFxRateService
                         visited.Add(fxInst.Quote);
                     }
                 }
-                else if (fxInst.Quote == current && !visited.Contains(fxInst.Base))
+                // If the current currency is equivalent to the instrument's Quote currency:
+                else if (IsEquivalent(fxInst.Quote, current) && !visited.Contains(fxInst.Base))
                 {
                     var inst = _instrumentRepository.GetAll().FirstOrDefault(i =>
                        i.BaseCurrency == fxInst.Base && i.QuoteCurrency == fxInst.Quote &&
