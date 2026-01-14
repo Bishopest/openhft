@@ -9,6 +9,8 @@ using System.Text.Json.Serialization;
 using OpenHFT.Core.Configuration;
 using Microsoft.Extensions.Options;
 using OpenHFT.Feed;
+using Serilog;
+using System.Runtime.InteropServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,7 +48,24 @@ builder.Services.Configure<List<FeedAdapterConfig>>(
 builder.Services.AddSingleton(provider =>
     provider.GetRequiredService<IOptions<List<FeedAdapterConfig>>>().Value
 );
+
+//--- Configure Serilog ---
+// This replaces the default logging provider.
+builder.Host.UseSerilog((context, services, configuration) =>
+{
+    var logPath = GetLogPath(launchProfileName); // Pass the profile name
+
+    configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext()
+        .Enrich.WithProperty("Profile", launchProfileName) // Optional: for console logging
+        .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+        .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{Profile}] {Message:lj}{NewLine}{Exception}")
+        .WriteTo.File(logPath, rollingInterval: RollingInterval.Day);
+});
 var app = builder.Build();
+
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -65,3 +84,24 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+
+// Helper function to determine the log path based on the OS.
+// Copied from the OMS project for consistency.
+string GetLogPath(string profileName)
+{
+    var sanitizedProfileName = string.Join("_", profileName.Split(Path.GetInvalidFileNameChars()));
+    var fileName = $"gui-{sanitizedProfileName}-.log"; // e.g., gui-live-.log
+
+    if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+    {
+        var dir = "/var/log/openhft";
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+        return Path.Combine(dir, fileName);
+    }
+    else
+    {
+        var dir = "logs";
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+        return Path.Combine(dir, fileName);
+    }
+}
