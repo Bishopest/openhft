@@ -32,7 +32,7 @@ public class Hedger : IDisposable
     private Quantity _netPendingHedgeQuantity = Quantity.FromDecimal(0);
 
     private bool _isActive = false;
-    private static readonly HashSet<string> SupportedCurrencies = new() { "BTC", "USDT" };
+    private static readonly HashSet<Currency> SupportedCurrencies = new() { Currency.BTC, Currency.USDT, Currency.KRW };
 
     public bool IsActive => _isActive;
     public HedgingParameters HedgeParameters => _hedgeParameters;
@@ -108,7 +108,7 @@ public class Hedger : IDisposable
         _marketDataManager.UnsubscribeOrderBook(_hedgeInstrument.InstrumentId, subscriptionKey);
     }
 
-    private bool IsValidCurrency(Currency c) => SupportedCurrencies.Contains(c.Symbol.ToUpper());
+    private bool IsValidCurrency(Currency c) => SupportedCurrencies.Contains(c);
 
     // 시장 데이터 수신 핸들러
     public void UpdateHedgeOrderBook(OrderBook ob)
