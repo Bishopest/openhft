@@ -45,7 +45,8 @@ public class QuotingInstanceManagerTests_Integration
         Directory.CreateDirectory(_testDirectory);
         var csvContent = @"instrument_id,market,symbol,type,base_currency,quote_currency,minimum_price_variation,lot_size,contract_multiplier,minimum_order_size
 1,BITMEX,XBTUSD,PerpetualFuture,XBT,USD,0.5,1,1,1
-2,BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.01,0.001,1,0.001";
+2,BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.01,0.001,1,0.001
+3,BITMEX,XBTUSDT,PerpetualFuture,BTC,USDT,0.01,0.001,1,0.001";
         File.WriteAllText(Path.Combine(_testDirectory, "instruments.csv"), csvContent);
 
         var inMemoryConfig = new Dictionary<string, string> { { "dataFolder", _testDirectory } };
@@ -68,6 +69,8 @@ public class QuotingInstanceManagerTests_Integration
         services.AddSingleton<IMarketDataManager, MarketDataManager>();
         _mockFeedHandler = new Mock<IFeedHandler>();
         services.AddSingleton(_mockFeedHandler.Object);
+        var mockFxRateService = new Mock<IFxRateService>();
+        services.AddSingleton(mockFxRateService.Object);
         services.AddSingleton(provider =>
         {
             var disruptor = new Disruptor<MarketDataEventWrapper>(() => new MarketDataEventWrapper(), 1024);
@@ -359,5 +362,80 @@ public class QuotingInstanceManagerTests_Integration
             "the redeployed instance should have the same parameters as before.");
 
         TestContext.WriteLine($"Validation successful: Instance for {bitmexInstrument.Symbol} is active again after reconnection.");
+    }
+
+    [Test]
+    public void OnConnectionRestored_Should_NOT_Redeploy_InstancesThatWereAlreadyInactive()
+    {
+        // --- Arrange ---
+        // 1. Setup two BITMEX instances. One will be active, one will be manually retired (inactive).
+        var bitmexInstrument1 = _instrumentRepo.FindBySymbol("XBTUSD", ProductType.PerpetualFuture, ExchangeEnum.BITMEX)!;
+        var bitmexInstrument2 = _instrumentRepo.FindBySymbol("XBTUSDT", ProductType.PerpetualFuture, ExchangeEnum.BITMEX)!;
+        var binanceInstrument = _instrumentRepo.FindBySymbol("BTCUSDT", ProductType.PerpetualFuture, ExchangeEnum.BINANCE)!;
+
+        // Parameters for the instance that will remain active
+        var activeParams = new QuotingParameters(
+            bitmexInstrument1.InstrumentId, "test_active", FairValueModel.Midp, binanceInstrument.InstrumentId,
+            10m, -10m, 0m, Quantity.FromDecimal(100), 1, QuoterType.Log, QuoterType.Log, true,
+            Quantity.FromDecimal(1m), Quantity.FromDecimal(1m), HittingLogic.AllowAll);
+
+        // We need a second instrument on the same exchange for the inactive instance.
+        // For this test, we'll cheat and use the same instrument ID but with different parameters.
+        // In a real scenario, you'd have another instrument.
+        var inactiveParams = new QuotingParameters(
+            bitmexInstrument2.InstrumentId, // Use a dummy instrument ID for the second instance
+            "test_inactive", FairValueModel.Midp, binanceInstrument.InstrumentId,
+            20m, -20m, 0m, Quantity.FromDecimal(200), 1, QuoterType.Log, QuoterType.Log, true,
+            Quantity.FromDecimal(1m), Quantity.FromDecimal(1m), HittingLogic.AllowAll);
+
+        // 2. Deploy both instances.
+        _manager.UpdateInstanceParameters(activeParams);
+        _manager.UpdateInstanceParameters(activeParams);
+        var activeInstance = _manager.GetInstance(activeParams.InstrumentId);
+
+        _manager.UpdateInstanceParameters(inactiveParams);
+        var inactiveInstance = _manager.GetInstance(inactiveParams.InstrumentId);
+
+        // Verify initial states
+        activeInstance.IsActive.Should().BeTrue("the active instance should start as active.");
+        inactiveInstance!.IsActive.Should().BeFalse("the inactive instance should start as inactive.");
+
+        // --- Act 1: Simulate Connection Loss ---
+        TestContext.WriteLine("Step 1: Simulating connection loss for BITMEX...");
+        _mockFeedHandler.Raise(
+            handler => handler.AdapterConnectionStateChanged += null, this,
+            new ConnectionStateChangedEventArgs(false, ExchangeEnum.BITMEX, "Simulated drop")
+        );
+        Task.Delay(100).Wait();
+
+        // The active instance should now be inactive. The already inactive one remains inactive.
+        activeInstance.IsActive.Should().BeFalse("the active instance should be retired by connection loss.");
+        inactiveInstance.IsActive.Should().BeFalse("the inactive instance should remain inactive.");
+        TestContext.WriteLine("Both instances are now correctly inactive.");
+
+
+        // --- Act 2: Simulate Connection Restoration ---
+        TestContext.WriteLine("Step 2: Simulating connection restoration for BITMEX...");
+        _mockFeedHandler.Raise(
+            handler => handler.AdapterConnectionStateChanged += null, this,
+            new ConnectionStateChangedEventArgs(true, ExchangeEnum.BITMEX, "Connection restored")
+        );
+        Task.Delay(TimeSpan.FromSeconds(6)).Wait(); // Wait for redeployment logic
+
+
+        // --- Assert ---
+        // 5. Verify that ONLY the instance that was active before the drop is redeployed and active again.
+        var redeployedActiveInstance = _manager.GetInstance(activeParams.InstrumentId);
+        var hopefullyStillInactiveInstance = _manager.GetInstance(inactiveParams.InstrumentId);
+
+        redeployedActiveInstance.Should().NotBeNull();
+        redeployedActiveInstance!.IsActive.Should().BeTrue(
+            "the instance that was active before the drop should be automatically reactivated.");
+
+        hopefullyStillInactiveInstance.Should().NotBeNull();
+        hopefullyStillInactiveInstance!.IsActive.Should().BeFalse(
+            "the instance that was manually retired should NOT be reactivated.");
+
+        TestContext.WriteLine("Validation successful: Only the previously active instance was restored.");
     }
 }

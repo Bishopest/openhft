@@ -57,7 +57,7 @@ public class QuotingInstanceManager : IQuotingInstanceManager, IDisposable
             var instancesToRetire = _activeInstances.Values.Where(inst =>
             {
                 var instrument = _instrumentRepository.GetById(inst.CurrentParameters.InstrumentId);
-                return instrument != null && instrument.SourceExchange == e.SourceExchange;
+                return instrument != null && instrument.SourceExchange == e.SourceExchange && inst.IsActive;
             });
 
             foreach (var instance in instancesToRetire)
