@@ -64,7 +64,7 @@
                                                 {
                                                     <tr @onclick="() => OnBookElementRowClick(element)" style="cursor: pointer;">
                                                         <td>@GetSymbolFromId(element.InstrumentId)</td>
-                                                        <td>@element.Size.ToDecimal().ToString("N0")</td>
+                                                        <td>@element.Size.ToDecimal().ToString("N2")</td>
                                                         <td></td>
                                                         <td>@element.AvgPrice.ToDecimal().ToString("N2")</td>
                                                         <td>@element.RealizedPnL.Amount.ToString("N2")</td>
