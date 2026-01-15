@@ -163,12 +163,12 @@ public class BookManager : IBookManager, IHostedService
         if (instrument.DenominationCurrency != Currency.USDT)
         {
             var isInverse = true;
-            if (instrument.SourceExchange == ExchangeEnum.BITMEX && instrument.BaseCurrency != Currency.BTC)
-            {
-                isInverse = false;
-            }
-
+            // except XBTUSD
+            if (instrument.SourceExchange == ExchangeEnum.BITMEX && instrument.BaseCurrency != Currency.BTC) isInverse = false;
+            // except spot
+            if (instrument.ProductType == ProductType.Spot) isInverse = false;
             if (isInverse) realizedPnlDelta *= -1m;
+
             var realizedPnlDeltaInUsdt = _fxRateService.Convert(realizedPnlDelta, Currency.USDT);
             realizedPnlDelta = realizedPnlDeltaInUsdt ?? new CurrencyAmount(0m, Currency.USDT);
         }
