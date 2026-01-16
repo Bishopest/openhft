@@ -73,10 +73,12 @@
             </MudGrid>
             <MudGrid>
                 <MudItem xs="12" sm="6">
-                    <MudNumericField Format="N0" @bind-Value="_model.MaxCumAskFills" Label="Max Cum Ask Fills" Variant="Variant.Outlined" Required="true" Min="0" />
+                    <MudNumericField Format="@GetQuantityFormat()" @bind-Value="_model.MaxCumAskFills" Label="Max Cum Ask Fills" Variant="Variant.Outlined"
+                        Required="true" Step="@(_selectedInstrument?.LotSize.ToDecimal() ?? 0.00000001m)" Min="0" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
-                    <MudNumericField Format="N0" @bind-Value="_model.MaxCumBidFills" Label="Max Cum Bid Fills" Variant="Variant.Outlined" Required="true" Min="0" />
+                    <MudNumericField Format="@GetQuantityFormat()" @bind-Value="_model.MaxCumBidFills" Label="Max Cum Bid Fills" Variant="Variant.Outlined"
+                        Required="true" Step="@(_selectedInstrument?.LotSize.ToDecimal() ?? 0.00000001m)" Min="0" />
                 </MudItem>
             </MudGrid>
             <MudNumericField Format="@GetQuantityFormat()" @bind-Value="_model.Size" Label="Size (Quantity)" Variant="Variant.Outlined"

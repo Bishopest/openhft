@@ -300,7 +300,10 @@ public class BithumbPrivateAdapter : BaseAuthFeedAdapter
                 timestamp: ts
             );
             OnOrderUpdateReceived(report);
-            _logger.LogInformationWithCaller($"Processed new execution for order report => {report}");
+            if (lastQty > 0m)
+            {
+                _logger.LogInformationWithCaller($"Processed new execution for order report => {report}");
+            }
         }
     }
 
