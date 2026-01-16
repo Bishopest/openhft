@@ -96,32 +96,47 @@ public class BithumbPublicAdapter : BaseFeedAdapter
 
     protected override Task DoSubscribeAsync(IDictionary<Instrument, List<ExchangeTopic>> subscriptions, CancellationToken cancellationToken)
     {
-        // 빗썸은 반드시 [ {ticket}, {type}, {format} ] 순서의 JSON 배열이어야 함
-        var requestArray = new List<object>();
+        // Bithumb overwrites subscriptions on each request.
+        // Therefore, we must send the ENTIRE list of current subscriptions every time.
+        // Get the full list of subscriptions from the base class.
+        // This requires access to the _subscriptions field. Let's add a helper in the base class.
+        var allCurrentSubscriptions = base.GetCurrentSubscriptions();
 
-        // A. Ticket Field
-        requestArray.Add(new { ticket = Guid.NewGuid().ToString() });
+        if (!allCurrentSubscriptions.Any())
+        {
+            _logger.LogWarningWithCaller("No subscriptions to send for Bithumb.");
+            return Task.CompletedTask;
+        }
 
-        // B. Type Fields (토픽별로 별도 객체 생성)
-        var topics = subscriptions.SelectMany(kvp => kvp.Value.Select(t => new { kvp.Key.Symbol, Topic = t }))
-                                  .GroupBy(x => x.Topic.EventTypeString);
+        var requestArray = new List<object>
+        {
+            new { ticket = Guid.NewGuid().ToString() }
+        };
+
+        var topics = allCurrentSubscriptions
+            .SelectMany(kvp => kvp.Value.Select(topicId => (kvp.Key.Symbol, TopicId: topicId)))
+            .Select(t =>
+            {
+                TopicRegistry.TryGetTopic(t.TopicId, out var topic);
+                return (t.Symbol, Topic: topic);
+            })
+            .Where(t => t.Topic != null)
+            .GroupBy(x => x.Topic!.EventTypeString);
 
         foreach (var group in topics)
         {
             requestArray.Add(new
             {
                 type = group.Key,
-                codes = group.Select(x => x.Symbol).ToArray()
+                codes = group.Select(x => x.Symbol).Distinct().ToArray()
             });
         }
 
-        // C. Format Field
         requestArray.Add(new { format = "DEFAULT" });
 
-        // 빗썸은 대문자 필드명을 허용하지 않을 수 있으므로 명시적으로 소문자 직렬화
         var json = JsonSerializer.Serialize(requestArray, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
-        _logger.LogInformationWithCaller($"Bithumb Submitting: {json}");
+        _logger.LogInformationWithCaller($"Bithumb re-submitting all topics: {json}");
         return SendMessageAsync(json, cancellationToken);
     }
 

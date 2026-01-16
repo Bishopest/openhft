@@ -131,27 +131,23 @@ public partial class Home : ComponentBase, IDisposable
         Logger.LogInformationWithCaller($"User selected instance for Instrument: {instance.InstrumentId} on OMS: {instance.OmsIdentifier}");
         _selectedInstance = instance;
 
-        // 1. Determine all instruments that need to be subscribed for this selection.
-        var instrumentsToSubscribe = new HashSet<Instrument>();
+        // 1. Determine all instruments that need to be subscribed.
+        var requiredInstrumentIds = new HashSet<int>();
 
         var selectedInstrument = InstrumentRepository.GetById(_selectedInstance.InstrumentId);
         if (selectedInstrument == null)
         {
-            Snackbar.Add("Selected instrument not found in repository.", Severity.Error);
+            Snackbar.Add("Selected instrument not found.", Severity.Error);
             return;
         }
 
-        instrumentsToSubscribe.Add(selectedInstrument);
+        requiredInstrumentIds.Add(selectedInstrument.InstrumentId);
 
         // 2. Check for FX rate dependencies.
         if (selectedInstrument.DenominationCurrency != Currency.USDT)
         {
-            Logger.LogInformationWithCaller($"Instrument {selectedInstrument.Symbol} requires FX conversion. Finding reference instruments.");
-
-            // Find all instruments required for FX conversion paths.
             foreach (var req in FxRateManagerBase.GetRequiredFxInstruments())
             {
-                // This logic finds any path involving the denomination currency.
                 if (req.Base == selectedInstrument.DenominationCurrency || req.Quote == selectedInstrument.DenominationCurrency)
                 {
                     var referenceInstrument = InstrumentRepository.GetAll().FirstOrDefault(i =>
@@ -160,25 +156,20 @@ public partial class Home : ComponentBase, IDisposable
 
                     if (referenceInstrument != null)
                     {
-                        Logger.LogInformationWithCaller($"Adding FX dependency to subscription: {referenceInstrument.Symbol}");
-                        instrumentsToSubscribe.Add(referenceInstrument);
-                    }
-                    else
-                    {
-                        Logger.LogWarningWithCaller($"Required FX reference instrument not found for: {req.Base}/{req.Quote}");
+                        requiredInstrumentIds.Add(referenceInstrument.InstrumentId);
                     }
                 }
             }
         }
 
-        // 3. Execute subscriptions for all newly required instruments.
-        foreach (var instrument in instrumentsToSubscribe)
+        // 3. Find which IDs are genuinely new subscriptions.
+        var newIdsToSubscribe = requiredInstrumentIds.Where(id => _subscribedInstrumentIds.Add(id)).ToList();
+
+        // 4. If there are any new instruments to subscribe to, send a single batch request.
+        if (newIdsToSubscribe.Any())
         {
-            if (_subscribedInstrumentIds.Add(instrument.InstrumentId))
-            {
-                Logger.LogDebug("Sending subscription request for: {Symbol}", instrument.Symbol);
-                await FeedManager.SubscribeToInstrumentAsync(instrument.InstrumentId);
-            }
+            Logger.LogInformationWithCaller($"Sending batch subscription request for Instrument IDs: {string.Join(", ", newIdsToSubscribe)}");
+            await FeedManager.SubscribeToInstrumentsAsync(newIdsToSubscribe);
         }
 
         if (_quotingController != null)

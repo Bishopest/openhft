@@ -8,6 +8,6 @@ public interface IExchangeFeedManager
 {
     event EventHandler<MarketDataEvent> OnMarketDataReceived;
     event EventHandler<ConnectionStateChangedEventArgs>? AdapterConnectionStateChanged;
-    Task SubscribeToInstrumentAsync(int instrumentId);
-    Task UnsubscribeFromInstrumentAsync(int instrumentId);
+    Task SubscribeToInstrumentsAsync(IEnumerable<int> instrumentIds);
+    Task UnsubscribeFromInstrumentsAsync(IEnumerable<int> instrumentIds);
 }

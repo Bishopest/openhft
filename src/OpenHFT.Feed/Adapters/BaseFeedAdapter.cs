@@ -48,7 +48,6 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     public bool IsConnected => _webSocket?.State == WebSocketState.Open;
     public string Status => _webSocket?.State.ToString() ?? "Disconnected";
     private readonly Dictionary<Instrument, HashSet<int>> _subscriptions = new();
-
     public event EventHandler<ConnectionStateChangedEventArgs>? ConnectionStateChanged;
     public event EventHandler<FeedErrorEventArgs>? Error;
     public event EventHandler<MarketDataEvent>? MarketDataReceived;
@@ -572,6 +571,19 @@ public abstract class BaseFeedAdapter : IFeedAdapter
     #endregion
 
     #region Helper & Cleanup Methods
+
+    /// <summary>
+    /// Returns a snapshot of the current subscriptions.
+    /// This is thread-safe.
+    /// </summary>
+    protected IDictionary<Instrument, HashSet<int>> GetCurrentSubscriptions()
+    {
+        lock (_subscriptionLock)
+        {
+            // Return a copy to prevent modification issues.
+            return new Dictionary<Instrument, HashSet<int>>(_subscriptions);
+        }
+    }
 
     private void ResetInactivityTimer()
     {

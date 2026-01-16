@@ -35,95 +35,130 @@ public class ExchangeFeedManager : IExchangeFeedManager, IAsyncDisposable
         _feedAdapterConfigs = feedAdapterConfigs;
     }
 
-    public async Task SubscribeToInstrumentAsync(int instrumentId)
+    public async Task SubscribeToInstrumentsAsync(IEnumerable<int> instrumentIds)
     {
-        var instrument = _instrumentRepository.GetById(instrumentId);
-        if (instrument is null) return;
+        var instruments = instrumentIds
+            .Select(id => _instrumentRepository.GetById(id))
+            .Where(inst => inst != null)
+            .ToList();
 
-        var adapterKey = (instrument.SourceExchange, instrument.ProductType);
+        if (!instruments.Any()) return;
 
-        // 1. Get or create the connection task. This will also create the adapter if it's the first time.
-        var connectionTask = GetOrCreateConnectionTask(adapterKey);
+        var instrumentsByAdapterKey = instruments
+            .GroupBy(inst => (inst!.SourceExchange, inst.ProductType));
 
-        // 2. Await the connection task. This ensures the adapter is connected before proceeding.
-        await connectionTask;
+        var subscriptionTasks = new List<Task>();
 
-        if (_activeAdapters.TryGetValue(adapterKey, out var adapter) && adapter.IsConnected)
+        foreach (var group in instrumentsByAdapterKey)
         {
-            var topics = GetOrderBookTopicsForExchange(instrument.SourceExchange);
-            await adapter.SubscribeAsync(new List<Instrument> { instrument }, topics);
-        }
-        else
-        {
-            _logger.LogWarningWithCaller($"Adapter for {adapterKey.Item1}/{adapterKey.Item2} failed to connect. Cannot subscribe.");
-        }
-    }
+            var adapterKey = group.Key;
+            var instrumentsForAdapter = group.ToList();
 
-    public async Task UnsubscribeFromInstrumentAsync(int instrumentId)
-    {
-        var instrument = _instrumentRepository.GetById(instrumentId);
-        if (instrument is null || !_activeAdapters.TryGetValue((instrument.SourceExchange, instrument.ProductType), out var adapter))
-            return;
-
-        if (!adapter.IsConnected)
-        {
-            _logger.LogWarningWithCaller($"Adapter for {instrument.SourceExchange}/{instrument.ProductType} is not connected. Cannot unsubscribe.");
-            return;
-        }
-        var topics = GetOrderBookTopicsForExchange(instrument.SourceExchange);
-        await adapter.UnsubscribeAsync(new List<Instrument> { instrument }, topics);
-    }
-
-    private Task GetOrCreateConnectionTask((ExchangeEnum, ProductType) adapterKey)
-    {
-        return _connectionTasks.GetOrAdd(adapterKey, key =>
-        {
-            var (exchange, productType) = key;
-            var config = _feedAdapterConfigs.FirstOrDefault(c => c.Exchange == exchange && c.ProductType == productType);
-            if (config is null)
+            Func<Task> subscribeAction = async () =>
             {
-                _logger.LogWarningWithCaller($"No configuration for {exchange}/{productType}. Cannot create adapter.");
-                return Task.CompletedTask; // Return a completed (failed) task
-            }
-
-            IFeedAdapter newAdapter = exchange switch
-            {
-                ExchangeEnum.BINANCE => new BinanceAdapter(
-                    _serviceProvider.GetRequiredService<ILogger<BinanceAdapter>>(),
-                    productType,
-                    _instrumentRepository,
-                    config.ExecutionMode,
-                    new BinanceRestApiClient(
-                        _serviceProvider.GetRequiredService<ILogger<BinanceRestApiClient>>(),
-                        _instrumentRepository,
-                        _serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BinanceRestApiClient)),
-                        productType,
-                        config.ExecutionMode)
-                ),
-                ExchangeEnum.BITMEX => new BitmexAdapter(
-                    _serviceProvider.GetRequiredService<ILogger<BitmexAdapter>>(),
-                    productType,
-                    _instrumentRepository,
-                    config.ExecutionMode
-                ),
-                ExchangeEnum.BITHUMB => new BithumbPublicAdapter(
-                    _serviceProvider.GetRequiredService<ILogger<BithumbPublicAdapter>>(),
-                    productType,
-                    _instrumentRepository,
-                    config.ExecutionMode
-                ),
-                _ => throw new NotSupportedException($"Adapter for {exchange} not supported.")
+                var adapter = await GetOrCreateConnectionTask(adapterKey);
+                if (adapter != null && adapter.IsConnected)
+                {
+                    var topics = GetOrderBookTopicsForExchange(adapterKey.Item1);
+                    _logger.LogInformationWithCaller($"Subscribing to {instrumentsForAdapter.Count} instruments on {adapterKey}");
+                    await adapter.SubscribeAsync(instrumentsForAdapter, topics);
+                }
+                else
+                {
+                    _logger.LogWarningWithCaller($"Adapter for {adapterKey} not ready. Cannot subscribe.");
+                }
             };
 
-            // Store the adapter instance immediately
-            _activeAdapters[key] = newAdapter;
-            newAdapter.MarketDataReceived += (sender, e) => OnMarketDataReceived?.Invoke(sender, e);
+            subscriptionTasks.Add(subscribeAction());
+        }
+
+        await Task.WhenAll(subscriptionTasks);
+    }
+
+    public async Task UnsubscribeFromInstrumentsAsync(IEnumerable<int> instrumentIds)
+    {
+        var instruments = instrumentIds
+            .Select(id => _instrumentRepository.GetById(id))
+            .Where(inst => inst != null)
+            .ToList();
+
+        if (!instruments.Any()) return;
+
+        var instrumentsByAdapterKey = instruments
+            .GroupBy(inst => (inst!.SourceExchange, inst.ProductType));
+
+        var unsubscriptionTasks = new List<Task>();
+
+        foreach (var group in instrumentsByAdapterKey)
+        {
+            var adapterKey = group.Key;
+            var instrumentsForAdapter = group.ToList();
+
+            if (_activeAdapters.TryGetValue(adapterKey, out var adapter) && adapter.IsConnected)
+            {
+                var topics = GetOrderBookTopicsForExchange(adapterKey.Item1);
+                unsubscriptionTasks.Add(adapter.UnsubscribeAsync(instrumentsForAdapter, topics));
+            }
+        }
+
+        await Task.WhenAll(unsubscriptionTasks);
+    }
+
+    private async Task<IFeedAdapter?> GetOrCreateConnectionTask((ExchangeEnum, ProductType) adapterKey)
+    {
+        if (_activeAdapters.TryGetValue(adapterKey, out var existingAdapter))
+        {
+            return existingAdapter;
+        }
+
+        var (exchange, productType) = adapterKey;
+        var config = _feedAdapterConfigs.FirstOrDefault(c => c.Exchange == exchange && c.ProductType == productType);
+        if (config is null)
+        {
+            _logger.LogWarningWithCaller($"No configuration for {exchange}/{productType}. Cannot create adapter.");
+            return null;
+        }
+
+        IFeedAdapter newAdapter = exchange switch
+        {
+            ExchangeEnum.BINANCE => new BinanceAdapter(
+                _serviceProvider.GetRequiredService<ILogger<BinanceAdapter>>(),
+                productType,
+                _instrumentRepository,
+                config.ExecutionMode,
+                new BinanceRestApiClient(
+                    _serviceProvider.GetRequiredService<ILogger<BinanceRestApiClient>>(),
+                    _instrumentRepository,
+                    _serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BinanceRestApiClient)),
+                    productType,
+                    config.ExecutionMode)
+            ),
+            ExchangeEnum.BITMEX => new BitmexAdapter(
+                _serviceProvider.GetRequiredService<ILogger<BitmexAdapter>>(),
+                productType,
+                _instrumentRepository,
+                config.ExecutionMode
+            ),
+            ExchangeEnum.BITHUMB => new BithumbPublicAdapter(
+                _serviceProvider.GetRequiredService<ILogger<BithumbPublicAdapter>>(),
+                productType,
+                _instrumentRepository,
+                config.ExecutionMode
+            ),
+            _ => throw new NotSupportedException($"Adapter for {exchange} not supported.")
+        };
+
+        if (_activeAdapters.TryAdd(adapterKey, newAdapter))
+        {
+            newAdapter.MarketDataReceived += HandleAdapterMarketData;
             newAdapter.ConnectionStateChanged += OnAdapterConnectionStateChanged;
 
             _logger.LogInformationWithCaller($"Connecting to {exchange}/{productType} adapter...");
-            // Return the connection task itself, so it can be awaited.
-            return newAdapter.ConnectAsync();
-        });
+            await newAdapter.ConnectAsync();
+            return newAdapter;
+        }
+
+        return _activeAdapters[adapterKey];
     }
 
     private void HandleAdapterMarketData(object? sender, MarketDataEvent marketDataEvent)
