@@ -142,10 +142,6 @@ public class OrderRouter : IOrderRouter
             );
             RouteReport(in resolvedReport);
         }
-        else
-        {
-            _logger.LogWarningWithCaller($"Received report for unknown ExchangeOrderId: {report.ExchangeOrderId}. Cannot route.");
-        }
     }
 
     public void RouteReport(in OrderStatusReport report)

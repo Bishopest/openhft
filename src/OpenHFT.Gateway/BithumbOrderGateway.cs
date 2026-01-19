@@ -87,20 +87,6 @@ public class BithumbOrderGateway : IOrderGateway
             return new OrderModificationResult(false, request.OrderId, result.Error.Message);
         }
 
-        // 취소 접수 성공 리포트 생성
-        // var cancelReport = new OrderStatusReport(
-        //     clientOrderId: 0,
-        //     exchangeOrderId: result.Data.OrderId,
-        //     executionId: null,
-        //     instrumentId: request.InstrumentId,
-        //     side: Side.Buy, // 취소 리포트이므로 사이드는 크게 중요치 않으나 필요시 주문 객체에서 참조
-        //     status: OrderStatus.Cancelled,
-        //     price: Price.FromDecimal(0),
-        //     quantity: Quantity.FromDecimal(0),
-        //     leavesQuantity: Quantity.FromDecimal(0),
-        //     timestamp: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-        // );
-
         return new OrderModificationResult(true, request.OrderId);
     }
 

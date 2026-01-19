@@ -124,6 +124,11 @@ public class Order : IOrder, IOrderUpdatable
                 // If the gateway returns an immediate report, process it.
                 OnStatusReportReceived(result.InitialReport.Value);
             }
+            else if (Status == OrderStatus.NewRequest)
+            {
+                var newReport = CreateReport(OrderStatus.New, exchangeId: result.OrderId!);
+                OnStatusReportReceived(newReport);
+            }
         }
         // If successful but no immediate report, we wait for the WebSocket stream to provide updates.
     }
@@ -212,10 +217,18 @@ public class Order : IOrder, IOrderUpdatable
                 Status = origStatus;
             }
         }
-        else if (result.Report.HasValue)
+        else
         {
-            // If the gateway returns an immediate report, process it.
-            OnStatusReportReceived(result.Report.Value);
+            if (result.Report.HasValue)
+            {
+                // If the gateway returns an immediate report, process it.
+                OnStatusReportReceived(result.Report.Value);
+            }
+            else if (Status == OrderStatus.CancelRequest)
+            {
+                var report = CreateReport(OrderStatus.Cancelled, exchangeId: result.OrderId!);
+                OnStatusReportReceived(report);
+            }
         }
         // On success, we wait for a WebSocket update to confirm the cancellation.
     }
@@ -326,6 +339,22 @@ public class Order : IOrder, IOrderUpdatable
                     break;
             }
         }
+    }
+
+    private OrderStatusReport CreateReport(OrderStatus newStatus, string exchangeId)
+    {
+        return new OrderStatusReport(
+            ClientOrderId,
+            exchangeId,
+            null,
+            InstrumentId,
+            Side,
+            newStatus,
+            this.Price,
+            this.Quantity,
+            this.LeavesQuantity,
+            LastUpdateTime
+        );
     }
 
     /// <summary>
