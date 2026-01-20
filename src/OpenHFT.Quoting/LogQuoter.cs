@@ -31,7 +31,7 @@ public class LogQuoter : IQuoter
     /// </summary>
     public Quote? LatestQuote { get; private set; }
 
-    public Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, CancellationToken cancellationToken = default)
+    public Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, Quantity? availablePosition, CancellationToken cancellationToken = default)
     {
         LatestQuote = newQuote;
         _logger.LogInformationWithCaller($"Shooting for quote: {newQuote}");

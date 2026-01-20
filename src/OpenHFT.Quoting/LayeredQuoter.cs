@@ -66,7 +66,7 @@ public class LayeredQuoter : IQuoter, IDisposable
         return _cachedOrderBook;
     }
 
-    public async Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, CancellationToken cancellationToken = default)
+    public async Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, Quantity? availablePosition, CancellationToken cancellationToken = default)
     {
 
         try

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using NUnit.Framework;
+using OpenHFT.Core.Books;
 using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
@@ -35,6 +36,8 @@ public class QuotingEngineTests
     private IInstrumentRepository _instrumentRepo;
     private IMarketDataManager _marketDataManager;
     private MockAdapter _mockBinanceAdapter; // For FV source data
+    private Mock<IBookManager> _mockBookManager;
+    private Mock<IOrderFactory> _mockOrderFactory;
     private IOrderRouter _orderRouter;
     private IFeedHandler _feedHandler;
     private string _testDirectory;
@@ -76,6 +79,11 @@ public class QuotingEngineTests
         services.AddSingleton<IFeedAdapter>(_mockBinanceAdapter);
         services.AddSingleton<IFeedAdapterRegistry, FeedAdapterRegistry>();
         services.AddSingleton<IFeedHandler, FeedHandler>();
+        _mockBookManager = new Mock<IBookManager>();
+        // Default setup: return an empty BookElement so it's not null.
+        _mockBookManager.Setup(b => b.GetBookElement(It.IsAny<string>(), It.IsAny<int>()))
+                        .Returns(default(BookElement)); // default for struct is a zeroed-out instance
+        services.AddSingleton(_mockBookManager.Object);
         services.AddSingleton<MarketDataDistributor>();
         services.AddSingleton<IMarketDataManager, MarketDataManager>();
         services.AddSingleton<IOrderRouter, OrderRouter>();
@@ -87,7 +95,9 @@ public class QuotingEngineTests
         mockGatewayRegistry.Setup(r => r.GetGatewayForInstrument(It.IsAny<int>())).Returns(mockGateway.Object);
         services.AddSingleton(mockGatewayRegistry.Object);
         services.AddSingleton<IQuoteValidator, DefaultQuoteValidator>();
-        services.AddSingleton<IOrderFactory, OrderFactory>();
+        _mockOrderFactory = new Mock<IOrderFactory>();
+        services.AddSingleton(_mockOrderFactory);
+        services.AddSingleton(_mockOrderFactory.Object);
         services.AddSingleton<IQuoterFactory, QuoterFactory>();
         services.AddSingleton<IFairValueProviderFactory, FairValueProviderFactory>();
 
@@ -160,7 +170,8 @@ public class QuotingEngineTests
         var marketMaker = new MarketMaker(
             _serviceProvider.GetRequiredService<ILogger<MarketMaker>>(),
             _xbtusd, _bidQuoter, _askQuoter,
-            _serviceProvider.GetRequiredService<IQuoteValidator>()
+            _serviceProvider.GetRequiredService<IQuoteValidator>(),
+            _mockBookManager.Object
         );
 
         var fixedFxRateConverter = new FixedFxConverter(_krwToUsdRate);
@@ -176,6 +187,42 @@ public class QuotingEngineTests
         );
 
         marketMaker.OrderFullyFilled += () => _engine.PauseQuoting(TimeSpan.FromSeconds(3));
+    }
+
+    // Helper method to create a standard QuotingEngine for tests
+    private (QuotingEngine engine, MarketMaker mm, IQuoter bidQuoter, IQuoter askQuoter, MidpFairValueProvider fvProvider)
+        CreateTestEngine(QuotingParameters parameters)
+    {
+        var quoterFactory = _serviceProvider.GetRequiredService<IQuoterFactory>();
+        var bidQuoter = quoterFactory.CreateQuoter(parameters, Side.Buy);
+        var askQuoter = quoterFactory.CreateQuoter(parameters, Side.Sell);
+
+        var instrument = _instrumentRepo.GetById(parameters.InstrumentId)!;
+
+        var marketMaker = new MarketMaker(
+            new NullLogger<MarketMaker>(), instrument, bidQuoter, askQuoter,
+            _serviceProvider.GetRequiredService<IQuoteValidator>(),
+            _mockBookManager.Object
+        );
+        marketMaker.UpdateParameters(parameters);
+
+        var fvProvider = new MidpFairValueProvider(
+            new NullLogger<MidpFairValueProvider>(),
+            parameters.FairValueSourceInstrumentId
+        );
+
+        var fixedFxRateConverter = new FixedFxConverter(_krwToUsdRate);
+        var engine = new QuotingEngine(
+            new NullLogger<QuotingEngine>(), instrument,
+            _instrumentRepo.GetById(parameters.FairValueSourceInstrumentId)!,
+            marketMaker, fvProvider, parameters,
+            _marketDataManager,
+            fixedFxRateConverter
+        );
+
+        marketMaker.OrderFilled += engine.OnFill;
+
+        return (engine, marketMaker, bidQuoter, askQuoter, fvProvider);
     }
 
     [TearDown]
@@ -684,7 +731,8 @@ public class QuotingEngineTests
         var marketMaker = new MarketMaker(
             _serviceProvider.GetRequiredService<ILogger<MarketMaker>>(),
             _xbtusd, bidQuoter, askQuoter,
-            _serviceProvider.GetRequiredService<IQuoteValidator>()
+            _serviceProvider.GetRequiredService<IQuoteValidator>(),
+            _mockBookManager.Object
         );
 
         var engine = new QuotingEngine(
@@ -858,6 +906,91 @@ public class QuotingEngineTests
         processedFills[0].ExecutionId.Should().Be("ExecForBuffered", "the processed fill should be from Order2.");
 
         TestContext.WriteLine("SUCCESS: The late fill for the finalized order was correctly ignored.");
+    }
+
+    [Test]
+    public async Task UpdateQuoteAsync_ForSpotSell_ShouldLimitSizeToAvailablePosition()
+    {
+        // --- Arrange ---
+        // 1. We want to quote the BTC/KRW spot market.
+        var parameters = new QuotingParameters(
+            _krwbtc.InstrumentId, "my_spot_book", FairValueModel.Midp, _btcusdt.InstrumentId,
+            10m, -10m, 0m, Quantity.FromDecimal(10m), // Target size is 10
+            1, QuoterType.Single, QuoterType.Single, false,
+            Quantity.FromDecimal(1m), Quantity.FromDecimal(1m), HittingLogic.AllowAll
+        );
+
+        // 2. Setup the IBookManager mock to return a BookElement with a position of 2.5 BTC.
+        var availablePosition = Quantity.FromDecimal(2.5m);
+        var bookElement = new BookElement(
+            parameters.BookName,
+            parameters.InstrumentId,
+            Price.Zero,
+            availablePosition, // Current position size
+            new CurrencyAmount(0m, Currency.KRW),
+            new CurrencyAmount(0m, Currency.KRW),
+            0
+        );
+        _mockBookManager.Setup(b => b.GetBookElement(parameters.BookName, parameters.InstrumentId))
+                        .Returns(bookElement);
+
+        // --- Mocking the Order Creation Process ---
+        var mockAskOrder = new Mock<IOrder>();
+        var mockOrderFactory = _serviceProvider.GetRequiredService<Mock<IOrderFactory>>(); // Get the mock from DI
+
+        mockOrderFactory
+        .Setup(f => f.Create(
+            _krwbtc.InstrumentId,
+            Side.Sell, // Be specific about the side
+            parameters.BookName,
+            It.IsAny<OrderSource>(), AlgoOrderType.None))
+        .Returns(mockAskOrder.Object);
+
+        mockOrderFactory
+        .Setup(f => f.Create(It.IsAny<int>(), Side.Buy, It.IsAny<string>(), It.IsAny<OrderSource>(), AlgoOrderType.None))
+        .Returns(() => new Mock<IOrder>().Object); // Return a new dummy mock for other calls
+
+        mockAskOrder.Setup(o => o.SubmitAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        // 3. Create the engine components.
+        var (engine, mm, bidQuoter, askQuoter, fvProvider) = CreateTestEngine(parameters);
+        var singleAskQuoter = (SingleOrderQuoter)askQuoter;
+
+        engine.Start();
+        engine.Activate();
+
+        // Define a target quote pair.
+        var targetQuotePair = new QuotePair(
+            _krwbtc.InstrumentId,
+            new Quote(Price.FromDecimal(90_000_000), parameters.Size), // Bid
+            new Quote(Price.FromDecimal(91_000_000), parameters.Size),
+            100L,
+            false  // Ask (Target size = 10)
+        );
+
+        // --- Act ---
+        // 4. Call the MarketMaker, which will in turn call the Ask Quoter with the available position.
+        await mm.ExecuteQuoteUpdateAsync(targetQuotePair);
+
+        // --- Assert ---
+        // 1. Verify that the OrderFactory was called exactly once to create a new order.
+        mockOrderFactory.Verify(f => f.Create(
+            _krwbtc.InstrumentId,       // Correct instrument
+            Side.Sell,                  // Correct side
+            parameters.BookName,        // Correct book name
+            OrderSource.NonManual,       // Correct source
+            AlgoOrderType.None          // Correct order type
+        ), Times.Once());
+
+        // 2. Verify that the properties of the created mockOrder were set correctly by the OrderBuilder.
+        // This is the most crucial part of the test.
+        mockAskOrder.VerifySet(o => o.Price = It.IsAny<Price>(), Times.Once, "Price should be set.");
+
+        // We expect the Quantity to be set to the available position (2.5), NOT the target size (10).
+        mockAskOrder.VerifySet(o => o.Quantity = availablePosition, Times.Once,
+            "Quantity should be limited to the available position.");
+
+        TestContext.WriteLine($"Successfully verified that Spot Sell order size was limited to {availablePosition.ToDecimal()}");
     }
 
     private void TriggerRequote(decimal fairValue)

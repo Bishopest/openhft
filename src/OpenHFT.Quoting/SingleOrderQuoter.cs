@@ -71,14 +71,40 @@ public class SingleOrderQuoter : IQuoter
         _hittingLogic = parameters.HittingLogic;
     }
 
-    public async Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, CancellationToken cancellationToken = default)
+    public async Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, Quantity? availablePosition, CancellationToken cancellationToken = default)
     {
         try
         {
-            var effectivePrice = ApplyHittingLogic(newQuote.Price);
-            var effectiveQuote = effectivePrice == newQuote.Price
-                ? newQuote
-                : new Quote(effectivePrice, newQuote.Size);
+            var finalQuote = newQuote;
+
+            if (_side == Side.Sell && _instrument.ProductType == ProductType.Spot)
+            {
+                var targetSize = newQuote.Size;
+                var availableSize = availablePosition ?? Quantity.Zero;
+
+                // Use the smaller of the two: the requested size or the available balance.
+                var finalSize = targetSize > availableSize ? availableSize : targetSize;
+
+                if (finalSize.ToDecimal() < _instrument.MinOrderSize.ToDecimal())
+                {
+                    _logger.LogDebug("({Side}) Adjusted sell size {Size} is below min order size. Cancelling any active quote.", _side, finalSize);
+                    await CancelQuoteAsync(cancellationToken);
+                    return;
+                }
+
+                if (finalSize != targetSize)
+                {
+                    _logger.LogDebug("({Side}) Limiting Spot Sell order size from {TargetSize} to available position {AvailableSize}.",
+                        _side, targetSize, finalSize);
+                }
+
+                finalQuote = new Quote(newQuote.Price, finalSize);
+            }
+
+            var effectivePrice = ApplyHittingLogic(finalQuote.Price);
+            var effectiveQuote = effectivePrice == finalQuote.Price
+                ? finalQuote
+                : new Quote(effectivePrice, finalQuote.Size);
 
             LatestQuote = effectiveQuote;
 

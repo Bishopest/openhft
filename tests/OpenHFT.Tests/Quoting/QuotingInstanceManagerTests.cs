@@ -20,6 +20,7 @@ using OpenHFT.Core.Orders;
 using Disruptor.Dsl;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenHFT.Gateway;
+using OpenHFT.Core.Books;
 
 namespace OpenHFT.Tests.Quoting;
 
@@ -30,6 +31,7 @@ public class QuotingInstanceManagerTests_Integration
     private IQuotingInstanceManager _manager;
     private IInstrumentRepository _instrumentRepo;
     private string _testDirectory;
+    private Mock<IBookManager> _mockBookManager;
     private Mock<IFeedHandler> _mockFeedHandler;
 
     [SetUp]
@@ -69,6 +71,11 @@ public class QuotingInstanceManagerTests_Integration
         services.AddSingleton<IMarketDataManager, MarketDataManager>();
         _mockFeedHandler = new Mock<IFeedHandler>();
         services.AddSingleton(_mockFeedHandler.Object);
+        _mockBookManager = new Mock<IBookManager>();
+        // Default setup: return an empty BookElement so it's not null.
+        _mockBookManager.Setup(b => b.GetBookElement(It.IsAny<string>(), It.IsAny<int>()))
+                        .Returns(default(BookElement)); // default for struct is a zeroed-out instance
+        services.AddSingleton(_mockBookManager.Object);
         var mockFxRateService = new Mock<IFxRateService>();
         services.AddSingleton(mockFxRateService.Object);
         services.AddSingleton(provider =>

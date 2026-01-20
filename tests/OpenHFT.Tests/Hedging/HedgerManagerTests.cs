@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using NUnit.Framework;
+using OpenHFT.Core.Books;
 using OpenHFT.Core.Configuration;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
@@ -70,6 +71,11 @@ public class HedgerManagerTests
         services.AddSingleton<IMarketDataManager, MarketDataManager>();
         _mockFeedHandler = new Mock<IFeedHandler>();
         services.AddSingleton(_mockFeedHandler.Object);
+        var mockBookManager = new Mock<IBookManager>();
+        // Default setup: return an empty BookElement so it's not null.
+        mockBookManager.Setup(b => b.GetBookElement(It.IsAny<string>(), It.IsAny<int>()))
+                       .Returns(default(BookElement)); // default for struct is a zeroed-out instance
+        services.AddSingleton(mockBookManager.Object);
         services.AddSingleton(provider =>
         {
             var disruptor = new Disruptor<MarketDataEventWrapper>(() => new MarketDataEventWrapper(), 1024);

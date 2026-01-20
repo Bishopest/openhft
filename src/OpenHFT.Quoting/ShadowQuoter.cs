@@ -39,7 +39,7 @@ public class ShadowQuoter : IQuoter
 
     public void UpdateParameters(QuotingParameters parameters) { /* Shadow는 별도 HittingLogic 미사용 (자체 로직) */ }
 
-    public async Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, CancellationToken cancellationToken = default)
+    public async Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, Quantity? availablePosition, CancellationToken cancellationToken = default)
     {
         LatestQuote = newQuote;
 
@@ -68,17 +68,40 @@ public class ShadowQuoter : IQuoter
         // 3. 바로 체결 가능한 가격일 때만 주문 전송
         if (isMarketable)
         {
-            await ExecuteShadowOrderAsync(newQuote, cancellationToken);
+            await ExecuteShadowOrderAsync(newQuote, availablePosition, cancellationToken);
         }
     }
 
-    private async Task ExecuteShadowOrderAsync(Quote quote, CancellationToken cancellationToken)
+    private async Task ExecuteShadowOrderAsync(Quote quote, Quantity? availablePosition, CancellationToken cancellationToken)
     {
+        var finalSize = quote.Size;
+
+        if (_side == Side.Sell && _instrument.ProductType == ProductType.Spot)
+        {
+            var availableSize = availablePosition ?? Quantity.Zero;
+
+            // If the available balance is smaller than our target size, use the balance.
+            if (availableSize < finalSize)
+            {
+                _logger.LogInformationWithCaller($"({_side}) ShadowQuoter limiting Spot Sell size from {finalSize} to available {availableSize}.");
+                finalSize = availableSize;
+            }
+
+            // If the final size is too small, abort the execution.
+            if (finalSize.ToDecimal() < _instrument.MinOrderSize.ToDecimal())
+            {
+                _logger.LogWarningWithCaller($"({_side}) ShadowQuoter adjusted size {finalSize} is below min order size. Aborting execution.");
+                return;
+            }
+        }
+
+        var finalQuote = new Quote(quote.Price, finalSize);
+
         var orderBuilder = new OrderBuilder(_orderFactory, _instrument.InstrumentId, _side, _bookName, OrderSource.NonManual);
 
         var newOrder = orderBuilder
-            .WithPrice(quote.Price)
-            .WithQuantity(quote.Size)
+            .WithPrice(finalQuote.Price)
+            .WithQuantity(finalQuote.Size)
             .WithOrderType(OrderType.Limit)
             .WithPostOnly(false) // Shadow는 Taker이므로 반드시 false
             .WithStatusChangedHandler(OnOrderStatusChanged)

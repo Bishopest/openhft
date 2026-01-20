@@ -1,6 +1,7 @@
 using System;
 using Microsoft.Extensions.Logging;
 using OpenHFT.Core.Instruments;
+using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
 using OpenHFT.Core.Utils;
 using OpenHFT.Quoting.Interfaces;
@@ -19,6 +20,7 @@ public sealed class MarketMaker
     private readonly IQuoter _bidQuoter;
     private readonly IQuoter _askQuoter;
     private readonly IQuoteValidator _quoteValidator;
+    private readonly IBookManager _bookManager;
     private readonly object _statusLock = new();
 
     private IQuotingStateProvider? _quotingStateProvider;
@@ -27,6 +29,8 @@ public sealed class MarketMaker
     private QuotePair? _nextTargetQuotePair;
     // 0 = Idle, 1 = In Progress
     private int _isActionInProgress = 0;
+    private QuotingParameters _parameters;
+    public QuotingParameters CurrentParameters => _parameters;
 
     // Event to notify the engine
     public event Action? OrderFullyFilled;
@@ -49,7 +53,8 @@ public sealed class MarketMaker
         Instrument instrument,
         IQuoter bidQuoter,
         IQuoter askQuoter,
-        IQuoteValidator quoteValidator)
+        IQuoteValidator quoteValidator,
+        IBookManager bookManager)
     {
         _logger = logger;
         _instrument = instrument;
@@ -60,6 +65,7 @@ public sealed class MarketMaker
         _askQuoter.OrderFullyFilled += OnQuoterFullyFilled;
         _askQuoter.OrderFilled += OnQuoterFilled;
         _quoteValidator = quoteValidator;
+        _bookManager = bookManager;
         _quoteStatus = new TwoSidedQuoteStatus(instrument.InstrumentId, QuoteStatus.Held, QuoteStatus.Held);
     }
 
@@ -70,6 +76,9 @@ public sealed class MarketMaker
 
     public void UpdateParameters(QuotingParameters parameters)
     {
+        if (parameters.Equals(_parameters)) return;
+
+        _parameters = parameters;
         _bidQuoter.UpdateParameters(parameters);
         _askQuoter.UpdateParameters(parameters);
     }
@@ -156,13 +165,25 @@ public sealed class MarketMaker
         // 2. Update and publish the new status.
         UpdateStatus(pairedStatus);
 
-        // 3. Create and execute the necessary actions for each side concurrently.
+        // 3. Get available position for the Sell side(from book)
+        Quantity? askAvailablePosition = null;
+        if (_instrument.ProductType == ProductType.Spot)
+        {
+            var bookElement = _bookManager.GetBookElement(_parameters.BookName, _instrument.InstrumentId);
+            // If the element exists and has a positive size, that's our available balance.
+            if (bookElement.Size.ToDecimal() > 0)
+            {
+                askAvailablePosition = bookElement.Size;
+            }
+        }
+
+        // 4. Create and execute the necessary actions for each side concurrently.
         var bidActionTask = (pairedStatus.BidStatus == QuoteStatus.Live && target.Bid is not null)
-            ? _bidQuoter.UpdateQuoteAsync(target.Bid.Value, target.IsPostOnly)
+            ? _bidQuoter.UpdateQuoteAsync(target.Bid.Value, target.IsPostOnly, null)
             : _bidQuoter.CancelQuoteAsync();
 
         var askActionTask = (pairedStatus.AskStatus == QuoteStatus.Live && target.Ask is not null)
-            ? _askQuoter.UpdateQuoteAsync(target.Ask.Value, target.IsPostOnly)
+            ? _askQuoter.UpdateQuoteAsync(target.Ask.Value, target.IsPostOnly, askAvailablePosition)
             : _askQuoter.CancelQuoteAsync();
 
         try

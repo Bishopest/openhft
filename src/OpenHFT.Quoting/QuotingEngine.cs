@@ -154,8 +154,7 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
 
             if (newParameters.Equals(_parameters)) return;
 
-            _logger.LogInformation("Updating tunable parameters for {Symbol}: {NewParams}",
-                QuotingInstrument.Symbol, newParameters);
+            _logger.LogInformationWithCaller($"Updating tunable parameters for {QuotingInstrument.Symbol}: {newParameters}");
             _parameters = newParameters;
             _marketMaker.UpdateParameters(newParameters);
         }

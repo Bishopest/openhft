@@ -26,9 +26,12 @@ public interface IQuoter
     /// </summary>
     /// <param name="newQuote">The target quote containing the new price and size.</param>
     /// <param name="isPostOnly">if true, order should be made with true postonly flag</param>
+    /// <param name="availablePosition">
+    /// For Spot Sell orders, this provides the current available balance to limit the order size.
+    /// For other cases, this can be null.
     /// <param name="cancellationToken">A token to signal the cancellation of the operation.</param>
     /// <returns>A task that represents the asynchronous update operation.</returns>
-    Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, CancellationToken cancellationToken = default);
+    Task UpdateQuoteAsync(Quote newQuote, bool isPostOnly, Quantity? availablePosition, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Cancels any active quote currently managed by this quoter.
