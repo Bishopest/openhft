@@ -16,4 +16,9 @@ public class BookDbContext : DbContext
     protected override void OnConfiguring(DbContextOptionsBuilder options)
         => options.UseSqlite($"Data Source={_dbPath}");
 
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<BookElementDbo>()
+            .HasKey(be => new { be.BookName, be.InstrumentId });
+    }
 }

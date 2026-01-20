@@ -49,7 +49,7 @@ public class SqliteBookRepository : IBookRepository
         {
             await using var db = new BookDbContext(_databaseFile);
 
-            var existing = await db.BookElements.FindAsync(element.InstrumentId);
+            var existing = await db.BookElements.FindAsync(element.BookName, element.InstrumentId);
             var dbo = BookElementDbo.FromBookElement(element);
 
             if (existing != null)

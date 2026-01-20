@@ -11,9 +11,7 @@ namespace OpenHFT.Core.DataBase;
 /// </summary>
 public class BookElementDbo
 {
-    [Key] // InstrumentId is the natural primary key for this table.
     public int InstrumentId { get; set; }
-
     public string BookName { get; set; } = string.Empty;
     public decimal AvgPrice { get; set; }
     public decimal Size { get; set; }
