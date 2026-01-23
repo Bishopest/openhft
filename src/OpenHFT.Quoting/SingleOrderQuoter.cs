@@ -317,7 +317,7 @@ public class SingleOrderQuoter : IQuoter
             _activeOrder = newOrder;
         }
 
-        _logger.LogInformationWithCaller($"({_side}) Submitting new order {newOrder.ClientOrderId} for quote: {quote}");
+        _logger.LogDebug($"({_side}) Submitting new order {newOrder.ClientOrderId} for quote: {quote}");
 
         // Delegate the actual submission to the order object itself.
         await newOrder.SubmitAsync(cancellationToken).ConfigureAwait(false);
@@ -372,7 +372,7 @@ public class SingleOrderQuoter : IQuoter
                 return;
             }
 
-            _logger.LogInformationWithCaller($"({_side}) Order {_activeOrder.ClientOrderId} reached terminal state {finalReport.Status}. Clearing active order.");
+            _logger.LogDebug($"({_side}) Order {_activeOrder.ClientOrderId} reached terminal state {finalReport.Status}. Clearing active order.");
 
             // fully filled process
             if (finalReport.Status == OrderStatus.Filled)
