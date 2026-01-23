@@ -170,10 +170,25 @@ public sealed class MarketMaker
         if (_instrument.ProductType == ProductType.Spot)
         {
             var bookElement = _bookManager.GetBookElement(_parameters.BookName, _instrument.InstrumentId);
+
             // If the element exists and has a positive size, that's our available balance.
-            if (bookElement.SizeAccum.ToDecimal() > 0)
+            var currentPosition = bookElement.SizeAccum;
+            if (currentPosition.ToDecimal() > 0)
             {
-                askAvailablePosition = bookElement.SizeAccum;
+                var lotSize = _instrument.LotSize.ToDecimal();
+
+                if (lotSize > 0)
+                {
+                    // Floor the position to the nearest lot size.
+                    // Example: Position=2.505, LotSize=0.01 -> floor(2.505 / 0.01) * 0.01 = floor(250.5) * 0.01 = 250 * 0.01 = 2.50
+                    var flooredPositionDecimal = Math.Floor(currentPosition.ToDecimal() / lotSize) * lotSize;
+                    askAvailablePosition = Quantity.FromDecimal(Math.Max(0, flooredPositionDecimal));
+                }
+                else
+                {
+                    // If LotSize is 0, just use the raw position (or handle as an error).
+                    askAvailablePosition = currentPosition;
+                }
             }
         }
 
