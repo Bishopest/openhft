@@ -263,11 +263,15 @@ public class Program
                                     if (specificApiClient == null)
                                         throw new InvalidOperationException($"BithumbRestApiClient for {productType} not found.");
 
-                                    return new BithumbOrderGateway(
+                                    var realGateway = new BithumbOrderGateway(
                                         provider.GetRequiredService<ILogger<BithumbOrderGateway>>(),
                                         specificApiClient,
                                         provider.GetRequiredService<IInstrumentRepository>(),
                                         productType);
+                                    var logger = provider.GetRequiredService<ILogger<ThrottlingGatewayDecorator>>();
+                                    var perSecondConfig = new RateLimiterConfig(Limit: 130, Window: TimeSpan.FromSeconds(1));
+                                    var perMinuteConfig = new RateLimiterConfig(Limit: 10000, Window: TimeSpan.FromMinutes(1));
+                                    return new ThrottlingGatewayDecorator(realGateway, logger, perSecondConfig, perMinuteConfig);
                                 });
                                 services.AddSingleton<IFeedAdapter>(provider =>
                                 {
