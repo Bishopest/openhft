@@ -37,6 +37,9 @@ public readonly struct CurrencyAmount : IEquatable<CurrencyAmount>
     public static CurrencyAmount FromDecimal(decimal amount, Currency currency) =>
         new(amount, currency);
 
+    public static CurrencyAmount Zero(Currency currency) =>
+        new(decimal.Zero, currency);
+
     // --- Operator Overloading (Optional, but useful for addition/subtraction) ---
 
     /// <summary>
