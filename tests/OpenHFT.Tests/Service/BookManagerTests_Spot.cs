@@ -101,7 +101,7 @@ public class BookManagerTests_Spot
         // _elements에 현재 테스트의 Instrument에 대한 초기 BookElement만 추가합니다.
         var elementsField = typeof(BookManager).GetField("_elements", BindingFlags.NonPublic | BindingFlags.Instance);
         var elementsDict = elementsField.GetValue(_bookManager) as System.Collections.Concurrent.ConcurrentDictionary<(string BookName, int InstrumentId), BookElement>;
-        elementsDict[(TestBookName, _instrument.InstrumentId)] = new BookElement(TestBookName, _instrument.InstrumentId, Price.FromDecimal(0m), Quantity.FromDecimal(0m), CurrencyAmount.FromDecimal(0m, Currency.USDT), CurrencyAmount.FromDecimal(0m, Currency.USDT), 0);
+        elementsDict[(TestBookName, _instrument.InstrumentId)] = BookElement.CreateEmpty(TestBookName, _instrument.InstrumentId);
     }
 
     [TearDown]

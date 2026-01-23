@@ -24,6 +24,7 @@ public class BookManagerTests_Linear
     private Mock<IOrderRouter> _mockOrderRouter;
     private ServiceProvider _serviceProvider = null!;
     private BookManager _bookManager;
+    private Mock<IFxRateService> _mockFxRateService;
     private readonly Instrument _instrument;
     private const string TestBookName = "BTC";
     private InstrumentRepository _repository;
@@ -54,7 +55,7 @@ public class BookManagerTests_Linear
 
         var mockOrderRouter = new Mock<IOrderRouter>();
         var mockBookRepository = new Mock<IBookRepository>();
-        var mockFxRateService = new Mock<IFxRateService>();
+        _mockFxRateService = new Mock<IFxRateService>();
 
         // IInstrumentRepository는 Mocking하여 테스트 격리성을 높입니다.
         var mockRepo = new Mock<IInstrumentRepository>();
@@ -62,7 +63,7 @@ public class BookManagerTests_Linear
 
         services.AddSingleton(mockOrderRouter.Object);
         services.AddSingleton(mockRepo.Object);
-        services.AddSingleton(mockFxRateService.Object);
+        services.AddSingleton(_mockFxRateService.Object);
 
         _serviceProvider = services.BuildServiceProvider();
         // ------------------------------------
@@ -96,13 +97,34 @@ public class BookManagerTests_Linear
             mockBookRepository.Object,
             configuration,
             mockOptions.Object,
-            mockFxRateService.Object
+            _mockFxRateService.Object
         );
 
         // _elements에 현재 테스트의 Instrument에 대한 초기 BookElement만 추가합니다.
         var elementsField = typeof(BookManager).GetField("_elements", BindingFlags.NonPublic | BindingFlags.Instance);
         var elementsDict = elementsField.GetValue(_bookManager) as System.Collections.Concurrent.ConcurrentDictionary<(string BookName, int InstrumentId), BookElement>;
-        elementsDict[(TestBookName, _instrument.InstrumentId)] = new BookElement(TestBookName, _instrument.InstrumentId, Price.FromDecimal(0m), Quantity.FromDecimal(0m), CurrencyAmount.FromDecimal(0m, _instrument.DenominationCurrency), CurrencyAmount.FromDecimal(0m, Currency.USDT), 0);
+        elementsDict[(TestBookName, _instrument.InstrumentId)] = BookElement.CreateEmpty(TestBookName, _instrument.InstrumentId);
+    }
+
+    private void SetupFxRate(decimal rate, Currency target)
+    {
+        // rate: BTC/USDT price (50000)
+        // Convert(amount, target) Logic simulation
+        _mockFxRateService.Setup(s => s.Convert(It.IsAny<CurrencyAmount>(), target))
+            .Returns<CurrencyAmount, Currency>((source, tgt) =>
+            {
+                if (source.Currency == tgt) return source;
+
+                decimal converted = 0m;
+                // BTC -> USDT (Multiply)
+                if (source.Currency == Currency.BTC && tgt == Currency.USDT)
+                    converted = source.Amount * rate;
+                // USDT -> BTC (Divide)
+                else if (source.Currency == Currency.USDT && tgt == Currency.BTC)
+                    converted = source.Amount / rate;
+
+                return new CurrencyAmount(converted, tgt);
+            });
     }
 
     [TearDown]
@@ -128,6 +150,9 @@ public class BookManagerTests_Linear
         var fill = new Fill(_instrument.InstrumentId, "test", 1, "exo1", "exec1", Side.Buy,
                             Price.FromDecimal(100m), Quantity.FromDecimal(10m), 0);
 
+
+        SetupFxRate(50000m, Currency.USDT);
+
         // Act
         SimulateFill(fill);
 
@@ -144,6 +169,7 @@ public class BookManagerTests_Linear
     public void OnOrderFilled_WithAdditionalBuy_ShouldUpdateAveragePrice()
     {
         // Arrange
+        SetupFxRate(50000m, Currency.USDT);
         var fill1 = new Fill(_instrument.InstrumentId, "test", 1, "exo1", "exec1", Side.Buy, Price.FromDecimal(100m), Quantity.FromDecimal(10m), 0);
         SimulateFill(fill1);
 
@@ -164,6 +190,7 @@ public class BookManagerTests_Linear
     public void OnOrderFilled_WithPartialSell_ShouldCalculateRealizedPnl()
     {
         // Arrange
+        SetupFxRate(50000m, Currency.USDT);
         var fill1 = new Fill(_instrument.InstrumentId, "test", 1, "exo1", "exec1", Side.Buy, Price.FromDecimal(100m), Quantity.FromDecimal(10m), 0);
         SimulateFill(fill1);
 
@@ -191,6 +218,7 @@ public class BookManagerTests_Linear
         // PnL (549.15 - 549.5) * 1010000 * 0.00001 = -3.5m
 
         // Act
+        SetupFxRate(50000m, Currency.USDT);
         SimulateFill(fill1);
         SimulateFill(fill2);
         SimulateFill(fill3);
@@ -211,6 +239,7 @@ public class BookManagerTests_Linear
     public void OnOrderFilled_WithPositionFlipFromLongToShort_ShouldUpdateCorrectly()
     {
         // Arrange
+        SetupFxRate(50000m, Currency.USDT);
         var fill1 = new Fill(_instrument.InstrumentId, "test", 1, "exo1", "exec1", Side.Buy, Price.FromDecimal(100m), Quantity.FromDecimal(10m), 0);
         SimulateFill(fill1);
 

@@ -171,9 +171,9 @@ public sealed class MarketMaker
         {
             var bookElement = _bookManager.GetBookElement(_parameters.BookName, _instrument.InstrumentId);
             // If the element exists and has a positive size, that's our available balance.
-            if (bookElement.Size.ToDecimal() > 0)
+            if (bookElement.SizeAccum.ToDecimal() > 0)
             {
-                askAvailablePosition = bookElement.Size;
+                askAvailablePosition = bookElement.SizeAccum;
             }
         }
 

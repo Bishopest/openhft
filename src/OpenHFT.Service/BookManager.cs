@@ -90,16 +90,7 @@ public class BookManager : IBookManager, IHostedService
             if (!_elements.TryGetValue(key, out var currentElement))
             {
                 // 초기 BookElement 생성 (Zero State)
-                currentElement = new BookElement(
-                    fill.BookName,
-                    fill.InstrumentId,
-                    Price.FromDecimal(0m),
-                    Quantity.FromDecimal(0m),
-                    CurrencyAmount.FromDecimal(0m, Currency.USDT),
-                    CurrencyAmount.FromDecimal(0m, Currency.USDT), // Volume is usually in USDT or base currency
-                    0 // LastUpdateTime
-                );
-
+                currentElement = BookElement.CreateEmpty(fill.BookName, fill.InstrumentId);
                 _logger.LogInformationWithCaller($"Creating new BookElement for {key} triggered by fill.");
             }
 
@@ -127,39 +118,80 @@ public class BookManager : IBookManager, IHostedService
             return currentElement;
         }
 
-        var fillQtyDecimal = fill.Quantity.ToDecimal();
-        var fillPriceDecimal = fill.Price.ToDecimal();
-        // Determine the direction of the fill relative to the position
-        var effectiveFillQtyDecimal = fill.Side == Side.Buy ? fillQtyDecimal : -fillQtyDecimal;
-        var currentQtyDecimal = currentElement.Size.ToDecimal();
-        var currentAvgPriceDecimal = currentElement.AvgPrice.ToDecimal();
+        var effectiveFillQty = fill.Side == Side.Buy ? fill.Quantity : Quantity.FromDecimal(fill.Quantity.ToDecimal() * -1);
 
-        decimal newQtyDecimal;
-        decimal newAvgPriceDecimal;
-        CurrencyAmount realizedPnlDelta = CurrencyAmount.FromDecimal(0m, Currency.USDT);
+        // --- 1. Calculate new CUMULATIVE position ---
+        var (newSizeAccum, newAvgPriceAccum, pnlDeltaAccum) = CalculateNewPosition(
+            currentElement.SizeAccum, currentElement.AvgPriceAccum,
+            effectiveFillQty, fill.Price, instrument
+        );
 
-        newQtyDecimal = currentQtyDecimal + effectiveFillQtyDecimal;
+        // --- 2. Calculate new SESSION position ---
+        var (newSizeSession, newAvgPriceSession, pnlDeltaSession) = CalculateNewPosition(
+            currentElement.Size, currentElement.AvgPrice,
+            effectiveFillQty, fill.Price, instrument
+        );
 
-        const decimal Epsilon = 0.00000001m;
-        bool isCurrentQtyFlat = Math.Abs(currentQtyDecimal) < Epsilon;
-        bool isNewQtyFlat = Math.Abs(newQtyDecimal) < Epsilon;
+        // --- 3. Calculate and convert VOLUME ---
+        var volume = instrument.ValueInDenominationCurrency(fill.Price, fill.Quantity);
+        var volumeInUsdt = _fxRateService.Convert(volume, Currency.USDT) ?? CurrencyAmount.Zero(Currency.USDT);
 
+        // --- 4. Convert PnL to a common currency (USDT) ---
+        var pnlAccumInUsdt = _fxRateService.Convert(pnlDeltaAccum, Currency.USDT) ?? CurrencyAmount.Zero(Currency.USDT);
+        var pnlSessionInUsdt = _fxRateService.Convert(pnlDeltaSession, Currency.USDT) ?? CurrencyAmount.Zero(Currency.USDT);
+
+        // --- 5. Create the new, updated BookElement ---
+        return new BookElement(
+            bookName: currentElement.BookName,
+            instrumentId: currentElement.InstrumentId,
+            lastUpdateTime: fill.Timestamp,
+
+            // Session values
+            avgPrice: newAvgPriceSession,
+            size: newSizeSession,
+            realizedPnL: currentElement.RealizedPnL + pnlSessionInUsdt,
+            volume: currentElement.Volume + volumeInUsdt,
+
+            // Cumulative values
+            avgPriceAccum: newAvgPriceAccum,
+            sizeAccum: newSizeAccum,
+            realizedPnLAccum: currentElement.RealizedPnLAccum + pnlAccumInUsdt,
+            volumeAccum: currentElement.VolumeAccum + volumeInUsdt
+        );
+    }
+
+    /// <summary>
+    /// A reusable helper that calculates new position size, average price, and realized PnL delta.
+    /// This is a pure function.
+    /// </summary>
+    private (Quantity newSize, Price newAvgPrice, CurrencyAmount realizedPnlDelta) CalculateNewPosition(
+        Quantity currentSize, Price currentAvgPrice, Quantity effectiveFillQty, Price fillPrice, Instrument instrument)
+    {
+        var currentQtyDec = currentSize.ToDecimal();
+        var fillQtyDec = effectiveFillQty.ToDecimal();
+        var newQtyDec = currentQtyDec + fillQtyDec;
+
+        decimal newAvgPriceDec;
+        CurrencyAmount pnlDelta = CurrencyAmount.Zero(instrument.DenominationCurrency);
+
+        const decimal Epsilon = 1e-9m;
         // realized pnl calculation
-        if (Math.Sign(currentQtyDecimal) != Math.Sign(newQtyDecimal))
+        if (Math.Sign(currentQtyDec) != Math.Sign(newQtyDec))
         {
-            realizedPnlDelta = instrument.ValueInDenominationCurrency(fill.Price, currentElement.Size) - instrument.ValueInDenominationCurrency(currentElement.AvgPrice, currentElement.Size);
+            pnlDelta = instrument.ValueInDenominationCurrency(fillPrice, currentSize) - instrument.ValueInDenominationCurrency(currentAvgPrice, currentSize);
         }
         else
         {
-            var qtyDiffDecimal = Math.Abs(currentQtyDecimal) - Math.Abs(newQtyDecimal);
+            var qtyDiffDecimal = Math.Abs(currentQtyDec) - Math.Abs(newQtyDec);
             var qtyDiff = Quantity.FromDecimal(qtyDiffDecimal);
             if (qtyDiffDecimal > 0)
             {
-                realizedPnlDelta = instrument.ValueInDenominationCurrency(fill.Price, qtyDiff) - instrument.ValueInDenominationCurrency(currentElement.AvgPrice, qtyDiff);
-                realizedPnlDelta *= Math.Sign(newQtyDecimal);
+                pnlDelta = instrument.ValueInDenominationCurrency(fillPrice, qtyDiff) - instrument.ValueInDenominationCurrency(currentAvgPrice, qtyDiff);
+                pnlDelta *= Math.Sign(newQtyDec);
             }
         }
-        // convert into usdt
+
+        // inverse instrument 
         if (instrument.DenominationCurrency != Currency.USDT)
         {
             var isInverse = true;
@@ -167,61 +199,29 @@ public class BookManager : IBookManager, IHostedService
             if (instrument.SourceExchange == ExchangeEnum.BITMEX && instrument.BaseCurrency != Currency.BTC) isInverse = false;
             // except spot
             if (instrument.ProductType == ProductType.Spot) isInverse = false;
-            if (isInverse) realizedPnlDelta *= -1m;
-
-            var realizedPnlDeltaInUsdt = _fxRateService.Convert(realizedPnlDelta, Currency.USDT);
-            realizedPnlDelta = realizedPnlDeltaInUsdt ?? new CurrencyAmount(0m, Currency.USDT);
+            if (isInverse) pnlDelta *= -1m;
         }
 
-        // avg price calculation
-        if (isNewQtyFlat)
+        if (Math.Abs(newQtyDec) < Epsilon) // Position is now flat
         {
-            // 1. 포지션이 청산되면 평균 단가는 0
-            newAvgPriceDecimal = 0m;
+            newAvgPriceDec = 0;
         }
-        else if (isCurrentQtyFlat || Math.Sign(currentQtyDecimal) != Math.Sign(newQtyDecimal))
+        else if (Math.Abs(currentQtyDec) < Epsilon || Math.Sign(currentQtyDec) != Math.Sign(newQtyDec)) // Position is new or flipped
         {
-            newAvgPriceDecimal = fillPriceDecimal;
+            newAvgPriceDec = fillPrice.ToDecimal();
         }
-        else
+        else if (Math.Abs(newQtyDec) > Math.Abs(currentQtyDec)) // Position increased
         {
-            if (Math.Abs(currentQtyDecimal) < Math.Abs(newQtyDecimal))
-            {
-                // 3. 포지션이 증가하면 가중 평균 계산 (같은 방향 추가)
-                var currentValue = instrument.ValueInDenominationCurrency(currentElement.AvgPrice, currentElement.Size);
-                var newValue = instrument.ValueInDenominationCurrency(fill.Price, Quantity.FromDecimal(effectiveFillQtyDecimal));
-                newAvgPriceDecimal = instrument.PriceFromValue(currentValue + newValue, Quantity.FromDecimal(newQtyDecimal)).ToDecimal();
-            }
-            else
-            {
-                // 4. 포지션이 감소하면 (Close-out 또는 Partial Close) 기존 평균 유지
-                newAvgPriceDecimal = currentAvgPriceDecimal;
-            }
+            var currentValue = instrument.ValueInDenominationCurrency(currentAvgPrice, currentSize);
+            var fillValue = instrument.ValueInDenominationCurrency(fillPrice, effectiveFillQty);
+            newAvgPriceDec = instrument.PriceFromValue(currentValue + fillValue, Quantity.FromDecimal(newQtyDec)).ToDecimal();
+        }
+        else // Position reduced but not flipped
+        {
+            newAvgPriceDec = currentAvgPrice.ToDecimal();
         }
 
-        var volume = instrument.ValueInDenominationCurrency(fill.Price, fill.Quantity);
-        if (volume.Currency != Currency.USDT)
-        {
-            var volumeInUsdt = _fxRateService.Convert(volume, Currency.USDT);
-            if (volumeInUsdt is null)
-            {
-                _logger.LogWarningWithCaller($"Can not convert volume in {volume.Currency} into USDT. Zero volume added");
-                volume = new CurrencyAmount(0m, Currency.USDT);
-            }
-            else
-            {
-                volume = volumeInUsdt.Value;
-            }
-        }
-        var newBookelement = new BookElement(currentElement.BookName,
-                                            currentElement.InstrumentId,
-                                            Price.FromDecimal(newAvgPriceDecimal),
-                                            Quantity.FromDecimal(newQtyDecimal),
-                                            currentElement.RealizedPnL + realizedPnlDelta,
-                                            currentElement.Volume + volume,
-                                            fill.Timestamp
-                                            );
-        return newBookelement;
+        return (Quantity.FromDecimal(newQtyDec), Price.FromDecimal(newAvgPriceDec), pnlDelta);
     }
 
     private async Task RestoreBookStateAsync()
@@ -231,8 +231,18 @@ public class BookManager : IBookManager, IHostedService
 
         foreach (var element in savedElements)
         {
+            // The element from DB contains the CUMULATIVE state.
+            // The SESSION state for the new run starts at zero.
             var key = (element.BookName, element.InstrumentId);
-            _elements[key] = element;
+
+            // Re-create the BookElement, effectively calling CreateWithBasePosition logic.
+            _elements[key] = new BookElement(
+                element.BookName,
+                element.InstrumentId,
+                element.LastUpdateTime,
+                Price.Zero, Quantity.Zero, CurrencyAmount.Zero(Currency.USDT), CurrencyAmount.Zero(Currency.USDT), // Session starts zero
+                element.AvgPriceAccum, element.SizeAccum, element.RealizedPnLAccum, element.VolumeAccum // Cumulative is restored
+            );
         }
     }
 

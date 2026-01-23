@@ -95,9 +95,7 @@ public class QuotingEngineTests
         mockGatewayRegistry.Setup(r => r.GetGatewayForInstrument(It.IsAny<int>())).Returns(mockGateway.Object);
         services.AddSingleton(mockGatewayRegistry.Object);
         services.AddSingleton<IQuoteValidator, DefaultQuoteValidator>();
-        _mockOrderFactory = new Mock<IOrderFactory>();
-        services.AddSingleton(_mockOrderFactory);
-        services.AddSingleton(_mockOrderFactory.Object);
+        services.AddSingleton<IOrderFactory, OrderFactory>();
         services.AddSingleton<IQuoterFactory, QuoterFactory>();
         services.AddSingleton<IFairValueProviderFactory, FairValueProviderFactory>();
 
@@ -792,7 +790,6 @@ public class QuotingEngineTests
         _orderRouter.RouteReport(lateFillReport);
         await Task.Delay(100); // Allow processing.
 
-
         // --- Assert ---
         receivedFill.Should().NotBeNull("The late fill event should have been received by the QuotingEngine.");
         receivedFill.Value.ExecutionId.Should().Be("LateExec123", "The details of the late fill should be correct.");
@@ -922,35 +919,9 @@ public class QuotingEngineTests
 
         // 2. Setup the IBookManager mock to return a BookElement with a position of 2.5 BTC.
         var availablePosition = Quantity.FromDecimal(2.5m);
-        var bookElement = new BookElement(
-            parameters.BookName,
-            parameters.InstrumentId,
-            Price.Zero,
-            availablePosition, // Current position size
-            new CurrencyAmount(0m, Currency.KRW),
-            new CurrencyAmount(0m, Currency.KRW),
-            0
-        );
+        var bookElement = BookElement.CreateWithBasePosition(parameters.BookName, parameters.InstrumentId, Quantity.FromDecimal(2.5m), Price.FromDecimal(10000m));
         _mockBookManager.Setup(b => b.GetBookElement(parameters.BookName, parameters.InstrumentId))
                         .Returns(bookElement);
-
-        // --- Mocking the Order Creation Process ---
-        var mockAskOrder = new Mock<IOrder>();
-        var mockOrderFactory = _serviceProvider.GetRequiredService<Mock<IOrderFactory>>(); // Get the mock from DI
-
-        mockOrderFactory
-        .Setup(f => f.Create(
-            _krwbtc.InstrumentId,
-            Side.Sell, // Be specific about the side
-            parameters.BookName,
-            It.IsAny<OrderSource>(), AlgoOrderType.None))
-        .Returns(mockAskOrder.Object);
-
-        mockOrderFactory
-        .Setup(f => f.Create(It.IsAny<int>(), Side.Buy, It.IsAny<string>(), It.IsAny<OrderSource>(), AlgoOrderType.None))
-        .Returns(() => new Mock<IOrder>().Object); // Return a new dummy mock for other calls
-
-        mockAskOrder.Setup(o => o.SubmitAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         // 3. Create the engine components.
         var (engine, mm, bidQuoter, askQuoter, fvProvider) = CreateTestEngine(parameters);
@@ -972,24 +943,11 @@ public class QuotingEngineTests
         // 4. Call the MarketMaker, which will in turn call the Ask Quoter with the available position.
         await mm.ExecuteQuoteUpdateAsync(targetQuotePair);
 
+        var askOrder = _orderRouter.GetActiveOrders().FirstOrDefault(ord => ord.Side == Side.Sell);
         // --- Assert ---
-        // 1. Verify that the OrderFactory was called exactly once to create a new order.
-        mockOrderFactory.Verify(f => f.Create(
-            _krwbtc.InstrumentId,       // Correct instrument
-            Side.Sell,                  // Correct side
-            parameters.BookName,        // Correct book name
-            OrderSource.NonManual,       // Correct source
-            AlgoOrderType.None          // Correct order type
-        ), Times.Once());
-
-        // 2. Verify that the properties of the created mockOrder were set correctly by the OrderBuilder.
-        // This is the most crucial part of the test.
-        mockAskOrder.VerifySet(o => o.Price = It.IsAny<Price>(), Times.Once, "Price should be set.");
-
-        // We expect the Quantity to be set to the available position (2.5), NOT the target size (10).
-        mockAskOrder.VerifySet(o => o.Quantity = availablePosition, Times.Once,
-            "Quantity should be limited to the available position.");
-
+        askOrder.Should().NotBeNull();
+        askOrder.Quantity.Should().Be(availablePosition);
+        askOrder.Price.Should().Be(Price.FromDecimal(91_000_000));
         TestContext.WriteLine($"Successfully verified that Spot Sell order size was limited to {availablePosition.ToDecimal()}");
     }
 

@@ -4,80 +4,95 @@
 @using OpenHFT.Core.Models
 @using OpenHFT.GUI.Components.Shared
 
-<PageTitle>Book</PageTitle>
+<PageTitle>Books</PageTitle>
 
-<MudGrid Spacing="4" Style="height: 90vh;">
+<MudGrid Spacing="4" Style="height: calc(100vh - 64px - 48px);"> @* Adjust height based on your layout *@
     <MudItem xs="12" md="9">
-        <MudPaper Class="pa-4 d-flex flex-column flex-grow-1" Elevation="2" Style="height: 90vh;">
+        <MudPaper Class="pa-4 d-flex flex-column" Elevation="2" Style="height: 100%;">
             <MudText Typo="Typo.h4" GutterBottom="true">Books</MudText>
             
             <div class="flex-grow-1" style="overflow-y: auto; min-height: 0;">
-                <MudTable Items="@_bookNames" T="string" Hover="true" OnRowClick="OnBookRowClick">
+                <MudTable Items="@_bookNames" T="string" Hover="true" OnRowClick="OnBookRowClick" Breakpoint="Breakpoint.Sm">
                     <HeaderContent>
-                        <MudTh>Book Name</MudTh>
-                        <MudTh>Net Value (USDT)</MudTh>
-                        <MudTh>Total Realized PnL</MudTh>
-                        <MudTh>Total Volume (USDT)</MudTh>
+                        <MudTh Style="width: 5%;"></MudTh> @* Expander Icon Column *@
+                        <MudTh Style="width: 30%;">Book Name</MudTh>
+                        <MudTh Style="width: 35%;">Session PnL</MudTh>
+                        <MudTh Style="width: 35%;">Session Volume (USDT)</MudTh>
                     </HeaderContent>
                     <RowTemplate>
+                        <MudTd>
+                            <MudIconButton Icon="@(_expandedBooks.Contains(context) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" 
+                                           Size="Size.Small" OnClick="@(() => ToggleExpand(context))" />
+                        </MudTd>
                         <MudTd DataLabel="Book Name">
-                        <MudIcon Icon="@(_expandedBooks.Contains(context) ? Icons.Material.Filled.KeyboardArrowDown : Icons.Material.Filled.KeyboardArrowRight)" 
-                                    Class="mr-3" Size="Size.Small"/>
-                            @context
+                            <MudText Typo="Typo.body1">@context</MudText>
                         </MudTd>
-                        <MudTd DataLabel="Net Value (USDT)">
-                        </MudTd>
-                        <MudTd DataLabel="Total Realized PnL">
-                            @* Calculate total PnL for the book *@
+                        <MudTd DataLabel="Session PnL">
                             @{
-                                var pnl = BookCache.GetElementsByBookName(context).Sum(e => e.RealizedPnL.Amount);
+                                var sessionPnl = BookCache.GetElementsByBookName(context).Sum(e => e.RealizedPnL.Amount);
                             }
-                            <span class="@(pnl >= 0 ? "mud-theme-success-text" : "mud-theme-error-text")">@pnl.ToString("N2")</span>
+                            <MudChip T="string" Label="true" Color="@(sessionPnl >= 0 ? Color.Success : Color.Error)" Size="Size.Small">
+                                @sessionPnl.ToString("N2")
+                            </MudChip>
                         </MudTd>
-                        <MudTd DataLabel="Total Volume (USDT)">
+                        <MudTd DataLabel="Session Volume (USDT)">
                             @BookCache.GetElementsByBookName(context).Sum(e => e.Volume.Amount).ToString("N0")
                         </MudTd>
                     </RowTemplate>
                     
-                    @* --- THIS IS THE EXPANDABLE ROW TEMPLATE --- *@
                     <ChildRowContent>
                         @if (_expandedBooks.Contains(context))
                         {
-                        <MudTr>
-                            <td colspan="4">
-                                <MudCard Outlined="true">
-                                    <MudCardContent>
-                                        <MudSimpleTable Dense="true" Hover="true">
-                                            <thead>
-                                                <tr>
-                                                    <th>Instrument</th>
-                                                    <th>Size</th>
-                                                    <th>Value(USDT)</th>
-                                                    <th>Avg. Entry Price</th>
-                                                    <th>Realized PnL</th>
-                                                    <th>Unrealized PnL</th>
-                                                    <th>Volume (USDT)</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach (var element in BookCache.GetElementsByBookName(context).OrderBy(e => GetSymbolFromId(e.InstrumentId)))
-                                                {
-                                                    <tr @onclick="() => OnBookElementRowClick(element)" style="cursor: pointer;">
-                                                        <td>@GetSymbolFromId(element.InstrumentId)</td>
-                                                        <td>@element.Size.ToDecimal().ToString("N2")</td>
-                                                        <td></td>
-                                                        <td>@element.AvgPrice.ToDecimal().ToString("N2")</td>
-                                                        <td>@element.RealizedPnL.Amount.ToString("N2")</td>
-                                                        <td></td>
-                                                        <td>@element.Volume.Amount.ToString("N0")</td>
+                            <MudTr>
+                                <td colspan="5">
+                                    <MudCard Elevation="0" Class="ma-2">
+                                        <MudCardContent Class="pa-0">
+                                            <MudSimpleTable Dense="true" Hover="true" Class="book-element-table">
+                                                <thead>
+                                                    <tr>
+                                                        @* --- SESSION METRICS --- *@
+                                                        <th colspan="5" class="group-header session-header">Session</th>
+                                                        @* --- ACCUMULATED METRICS --- *@
+                                                        <th colspan="4" class="group-header accum-header">Cumulative</th>
                                                     </tr>
-                                                }
-                                            </tbody>
-                                        </MudSimpleTable>
-                                    </MudCardContent>
-                                </MudCard>
-                            </td>
-                        </MudTr>
+                                                    <tr>
+                                                        @* Session *@
+                                                        <th>Instrument</th>
+                                                        <th>Session Size</th>
+                                                        <th>Session Avg Price</th>
+                                                        <th>Session PnL</th>
+                                                        <th>Session Volume</th>
+                                                        @* Cumulative *@
+                                                        <th>Total Size</th>
+                                                        <th>Total Avg Price</th>
+                                                        <th>Total PnL</th>
+                                                        <th>Total Volume</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var element in BookCache.GetElementsByBookName(context).OrderBy(e => GetSymbolFromId(e.InstrumentId)))
+                                                    {
+                                                        <tr @onclick="() => OnBookElementRowClick(element)" style="cursor: pointer;">
+                                                            @* --- Session Data --- *@
+                                                            <td>@GetSymbolFromId(element.InstrumentId)</td>
+                                                            <td class="@(element.Size.ToDecimal() >= 0 ? "long-text" : "short-text")">@element.Size.ToDecimal().ToString("N4")</td>
+                                                            <td>@element.AvgPrice.ToDecimal().ToString("N2")</td>
+                                                            <td class="@(element.RealizedPnL.Amount >= 0 ? "profit-text" : "loss-text")">@element.RealizedPnL.Amount.ToString("N2")</td>
+                                                            <td>@element.Volume.Amount.ToString("N0")</td>
+                                                            
+                                                            @* --- Cumulative Data --- *@
+                                                            <td class="@(element.SizeAccum.ToDecimal() >= 0 ? "long-text" : "short-text")">@element.SizeAccum.ToDecimal().ToString("N4")</td>
+                                                            <td>@element.AvgPriceAccum.ToDecimal().ToString("N2")</td>
+                                                            <td class="@(element.RealizedPnLAccum.Amount >= 0 ? "profit-text" : "loss-text")">@element.RealizedPnLAccum.Amount.ToString("N2")</td>
+                                                            <td>@element.VolumeAccum.Amount.ToString("N0")</td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </MudSimpleTable>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </td>
+                            </MudTr>
                         }
                     </ChildRowContent>
                 </MudTable>
@@ -88,3 +103,35 @@
         <ManualOrderController @ref="_manualOrderController" />
     </MudItem>
 </MudGrid>
+
+@* Add some CSS for better styling *@
+<style>
+    .book-element-table .group-header {
+        text-align: center;
+        font-weight: bold;
+        padding: 6px;
+    }
+    .book-element-table .session-header {
+        background-color: rgba(var(--mud-palette-primary-rgb), 0.1);
+        border-bottom: 2px solid var(--mud-palette-primary);
+    }
+    .book-element-table .accum-header {
+        background-color: rgba(var(--mud-palette-secondary-rgb), 0.1);
+        border-bottom: 2px solid var(--mud-palette-secondary);
+    }
+    
+    .long-text {
+        color: var(--mud-palette-success);
+        font-weight: 500;
+    }
+    .short-text {
+        color: var(--mud-palette-error);
+        font-weight: 500;
+    }
+    .profit-text {
+        color: var(--mud-palette-success);
+    }
+    .loss-text {
+        color: var(--mud-palette-error);
+    }
+</style>

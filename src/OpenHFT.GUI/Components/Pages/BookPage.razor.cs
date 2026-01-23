@@ -26,6 +26,19 @@ public partial class BookPage : ComponentBase, IDisposable
         _bookNames = BookCache.GetBookNames();
         BookCache.OnBookUpdated += OnBookCacheUpdated;
     }
+
+    private void ToggleExpand(string bookName)
+    {
+        if (_expandedBooks.Contains(bookName))
+        {
+            _expandedBooks.Remove(bookName);
+        }
+        else
+        {
+            _expandedBooks.Add(bookName);
+        }
+    }
+
     private void OnBookRowClick(TableRowClickEventArgs<string> args)
     {
         if (_expandedBooks.Contains(args.Item))

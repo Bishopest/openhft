@@ -13,40 +13,52 @@ public class BookElementDbo
 {
     public int InstrumentId { get; set; }
     public string BookName { get; set; } = string.Empty;
-    public decimal AvgPrice { get; set; }
-    public decimal Size { get; set; }
-    public decimal RealizedPnLAmount { get; set; }
+    public decimal AvgPriceAccum { get; set; }
+    public decimal SizeAccum { get; set; }
+    public decimal RealizedPnLAccum { get; set; }
     public string RealizedPnLCurrency { get; set; } = string.Empty;
-    public decimal VolumeInUsdtAmount { get; set; }
-    public string VolumeInUsdtCurrency { get; set; } = string.Empty;
+    public decimal VolumeAccum { get; set; }
+    public string VolumeCurrency { get; set; } = string.Empty;
     public long LastUpdateTime { get; set; }
 
+    /// <summary>
+    /// Creates a DTO from a BookElement, saving only the cumulative data.
+    /// </summary>
     public static BookElementDbo FromBookElement(BookElement element)
     {
         return new BookElementDbo
         {
             InstrumentId = element.InstrumentId,
             BookName = element.BookName,
-            AvgPrice = element.AvgPrice.ToDecimal(),
-            Size = element.Size.ToDecimal(),
-            RealizedPnLAmount = element.RealizedPnL.Amount,
-            RealizedPnLCurrency = element.RealizedPnL.Currency.Symbol,
-            VolumeInUsdtAmount = element.Volume.Amount,
-            VolumeInUsdtCurrency = element.Volume.Currency.Symbol,
+            AvgPriceAccum = element.AvgPriceAccum.ToDecimal(),
+            SizeAccum = element.SizeAccum.ToDecimal(),
+            RealizedPnLAccum = element.RealizedPnLAccum.Amount,
+            RealizedPnLCurrency = element.RealizedPnLAccum.Currency.Symbol,
+            VolumeAccum = element.VolumeAccum.Amount,
+            VolumeCurrency = element.VolumeAccum.Currency.Symbol,
             LastUpdateTime = element.LastUpdateTime
         };
     }
 
     public BookElement ToBookElement()
     {
+        // This is equivalent to calling the CreateWithBasePosition factory method.
         return new BookElement(
-            BookName,
-            InstrumentId,
-            Price.FromDecimal(AvgPrice),
-            Quantity.FromDecimal(Size),
-            CurrencyAmount.FromDecimal(RealizedPnLAmount, Currency.FromString(RealizedPnLCurrency)),
-            CurrencyAmount.FromDecimal(VolumeInUsdtAmount, Currency.FromString(VolumeInUsdtCurrency)),
-            LastUpdateTime
+            bookName: BookName,
+            instrumentId: InstrumentId,
+            lastUpdateTime: LastUpdateTime,
+
+            // Session fields are initialized to zero
+            avgPrice: Price.Zero,
+            size: Quantity.Zero,
+            realizedPnL: CurrencyAmount.Zero(Currency.USDT),
+            volume: CurrencyAmount.Zero(Currency.USDT),
+
+            // Cumulative fields are restored from the database
+            avgPriceAccum: Price.FromDecimal(AvgPriceAccum),
+            sizeAccum: Quantity.FromDecimal(SizeAccum),
+            realizedPnLAccum: CurrencyAmount.FromDecimal(RealizedPnLAccum, Currency.FromString(RealizedPnLCurrency)),
+            volumeAccum: CurrencyAmount.FromDecimal(VolumeAccum, Currency.FromString(VolumeCurrency))
         );
     }
 }
