@@ -195,9 +195,10 @@ public class Order : IOrder, IOrderUpdatable
             _logger.LogWarningWithCaller($"Cannot cancel order in '{Status}' state. Info => {ToString()}");
             return;
         }
+
         if (string.IsNullOrEmpty(ExchangeOrderId))
         {
-            _logger.LogWarningWithCaller($"Cannot cancel order: ExchangeOrderId is not yet known. Info => {ToString()}");
+            _logger.LogDebug($"Cannot cancel order: ExchangeOrderId is not yet known. Info => {ToString()}");
             return;
         }
 
