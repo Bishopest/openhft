@@ -83,6 +83,14 @@ public class BithumbOrderGateway : IOrderGateway
 
         if (!result.IsSuccess)
         {
+            // Check if the failure was due to the order not being found.
+            // This often happens if the order was already filled or cancelled.
+            // We treat this specific error as a "successful" cancellation from our perspective.
+            if (result.Error.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return new OrderModificationResult(true, request.OrderId);
+            }
+
             _logger.LogWarningWithCaller($"Failed to cancel Bithumb order {request.OrderId}: {result.Error.Message}");
             return new OrderModificationResult(false, request.OrderId, result.Error.Message);
         }

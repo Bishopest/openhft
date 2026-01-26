@@ -34,8 +34,8 @@ public class QuoterFactory : IQuoterFactory
             throw new ArgumentNullException("instrument not found when creating quoter");
         }
 
-        _loggerFactory.CreateLogger<QuoterFactory>().LogInformationWithCaller($"Creating quoter of type {parameters.AskQuoterType} for instrument {instrument.Symbol} on side {side}.");
         var sidedQuoterType = side == Side.Sell ? parameters.AskQuoterType : parameters.BidQuoterType;
+        _loggerFactory.CreateLogger<QuoterFactory>().LogInformationWithCaller($"Creating quoter of type {sidedQuoterType} for instrument {instrument.Symbol} on side {side}.");
         switch (sidedQuoterType)
         {
             case QuoterType.Log:
