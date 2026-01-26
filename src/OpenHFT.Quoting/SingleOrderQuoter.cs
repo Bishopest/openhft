@@ -309,7 +309,7 @@ public class SingleOrderQuoter : IQuoter
             // Ensure there isn't already an active order (race condition check)
             if (_activeOrder is not null)
             {
-                _logger.LogWarningWithCaller($"({_side}) Aborting StartNewQuoteAsync; an active order was created concurrently.");
+                _logger.LogDebug($"({_side}) Aborting StartNewQuoteAsync; an active order was created concurrently.");
                 newOrder.RemoveStatusChangedHandler(OnOrderStatusChanged);
                 newOrder.RemoveFillHandler(OnOrderFilled);
                 return;
