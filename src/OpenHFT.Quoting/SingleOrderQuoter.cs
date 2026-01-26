@@ -331,6 +331,9 @@ public class SingleOrderQuoter : IQuoter
         switch (report.Status)
         {
             case OrderStatus.Filled:
+                ClearActiveOrder(report);
+                _pendingReentryQuote = null;
+                break;
             case OrderStatus.Cancelled:
             case OrderStatus.Rejected:
                 ClearActiveOrder(report);
