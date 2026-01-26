@@ -268,10 +268,11 @@ public class SingleOrderQuoter : IQuoter
     {
         try
         {
-            LatestQuote = null;
             IOrder? orderToCancel;
             lock (_stateLock)
             {
+                _pendingReentryQuote = null;
+                LatestQuote = null;
                 orderToCancel = _activeOrder;
             }
 
