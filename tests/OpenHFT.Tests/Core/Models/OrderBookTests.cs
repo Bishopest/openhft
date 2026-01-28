@@ -397,4 +397,84 @@ public class OrderBookTests
         var (bestBid, _) = orderBook.GetBestBid();
         bestBid.Should().Be(Price.FromDecimal(50000m)); // Should not be updated by the out-of-order event
     }
+
+    [Test]
+    public void IsTightSpread_WhenSpreadIsExactlyOneTick_ShouldReturnTrue()
+    {
+        // Arrange
+        // BTCUSDT (Spot) has a tick size of 0.01
+        var orderBook = new OrderBook(_btc, _logger);
+        var symbolId = _btc.InstrumentId;
+        var exchange = _btc.SourceExchange;
+        var tickSize = _btc.TickSize.ToDecimal();
+
+        var bidPrice = 50000.00m;
+        var askPrice = bidPrice + tickSize; // Exactly one tick apart
+
+        var updates = new PriceLevelEntryArray();
+        updates[0] = new PriceLevelEntry(Side.Buy, bidPrice, 1m);
+        updates[1] = new PriceLevelEntry(Side.Sell, askPrice, 1m);
+        var marketDataEvent = new MarketDataEvent(1, 0, EventKind.Add, symbolId, exchange, updateCount: 2, updates: updates);
+
+        orderBook.ApplyEvent(marketDataEvent);
+
+        // Act
+        var isTight = orderBook.IsTightSpread();
+
+        // Assert
+        isTight.Should().BeTrue("because the spread (ask - bid) is exactly equal to the instrument's tick size.");
+    }
+
+    [Test]
+    public void IsTightSpread_WhenSpreadIsWiderThanOneTick_ShouldReturnFalse()
+    {
+        // Arrange
+        var orderBook = new OrderBook(_btc, _logger);
+        var symbolId = _btc.InstrumentId;
+        var exchange = _btc.SourceExchange;
+        var tickSize = _btc.TickSize.ToDecimal();
+
+        var bidPrice = 50000.00m;
+        var askPrice = bidPrice + (tickSize * 2); // Two ticks apart
+
+        var updates = new PriceLevelEntryArray();
+        updates[0] = new PriceLevelEntry(Side.Buy, bidPrice, 1m);
+        updates[1] = new PriceLevelEntry(Side.Sell, askPrice, 1m);
+        var marketDataEvent = new MarketDataEvent(1, 0, EventKind.Add, symbolId, exchange, updateCount: 2, updates: updates);
+
+        orderBook.ApplyEvent(marketDataEvent);
+
+        // Act
+        var isTight = orderBook.IsTightSpread();
+
+        // Assert
+        isTight.Should().BeFalse("because the spread is wider than one tick.");
+    }
+
+    [Test]
+    [TestCase(0, 50000, "Book is empty")]
+    [TestCase(50000, 0, "Ask side is empty")]
+    [TestCase(0, 0, "Bid side is empty")]
+    [TestCase(50001, 50000, "Book is crossed")]
+    public void IsTightSpread_ForInvalidBookStates_ShouldReturnFalse(decimal bidPrice, decimal askPrice, string reason)
+    {
+        // Arrange
+        var orderBook = new OrderBook(_btc, _logger);
+        var symbolId = _btc.InstrumentId;
+        var exchange = _btc.SourceExchange;
+
+        var updates = new PriceLevelEntryArray();
+        int count = 0;
+        if (bidPrice > 0) updates[count++] = new PriceLevelEntry(Side.Buy, bidPrice, 1m);
+        if (askPrice > 0) updates[count++] = new PriceLevelEntry(Side.Sell, askPrice, 1m);
+
+        var marketDataEvent = new MarketDataEvent(1, 0, EventKind.Add, symbolId, exchange, updateCount: count, updates: updates);
+        orderBook.ApplyEvent(marketDataEvent);
+
+        // Act
+        var isTight = orderBook.IsTightSpread();
+
+        // Assert
+        isTight.Should().BeFalse($"because the book state is invalid: {reason}.");
+    }
 }

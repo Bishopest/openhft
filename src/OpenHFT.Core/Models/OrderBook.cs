@@ -224,6 +224,39 @@ public class OrderBook
     }
 
     /// <summary>
+    /// Checks if the spread between the best bid and best ask is exactly one tick size.
+    /// This indicates a "tight" or minimum possible spread for the instrument.
+    /// </summary>
+    /// <returns>
+    /// True if the spread is exactly one tick; otherwise, false.
+    /// Returns false if the book is invalid (crossed, or no bid/ask).
+    /// </returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsTightSpread()
+    {
+        // 1. Get the best bid and ask prices.
+        var (bestBid, _) = GetBestBid();
+        var (bestAsk, _) = GetBestAsk();
+
+        // 2. Validate that both bid and ask prices are valid.
+        // If either is zero, or if the book is crossed, the spread is not considered tight.
+        if (bestBid.ToTicks() <= 0 || bestAsk.ToTicks() <= 0 || bestBid >= bestAsk)
+        {
+            return false;
+        }
+
+        // 3. Calculate the spread in ticks.
+        long spreadInTicks = bestAsk.ToTicks() - bestBid.ToTicks();
+
+        // 4. Get the instrument's minimum tick size.
+        long tickSizeInTicks = _instrument.TickSize.ToTicks();
+
+        // 5. Compare the spread with the tick size.
+        // It's a tight spread if and only if the difference is exactly one tick.
+        return spreadInTicks <= tickSizeInTicks;
+    }
+
+    /// <summary>
     /// Get the mid price in ticks
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
