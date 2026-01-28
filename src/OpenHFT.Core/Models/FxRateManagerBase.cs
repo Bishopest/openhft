@@ -51,7 +51,7 @@ public abstract class FxRateManagerBase : IFxRateService
         return false;
     }
 
-    protected abstract Price? GetMidPrice(int instrumentId);
+    protected abstract Price? GetConversionPrice(int instrumentId);
 
     public CurrencyAmount? Convert(CurrencyAmount source, Currency target)
     {
@@ -71,7 +71,7 @@ public abstract class FxRateManagerBase : IFxRateService
         decimal currentAmount = source.Amount;
         foreach (var (instrument, isInverted) in path)
         {
-            var midPrice = GetMidPrice(instrument.InstrumentId);
+            var midPrice = GetConversionPrice(instrument.InstrumentId);
             if (midPrice == null || midPrice.Value.ToDecimal() <= 0)
             {
                 _logger.LogWarningWithCaller($"Price not available for {instrument.Symbol} during conversion.");

@@ -18,7 +18,7 @@ public class GuiFxRateManager : FxRateManagerBase
         _orderBookManager = orderBookManager;
     }
 
-    protected override Price? GetMidPrice(int instrumentId)
+    protected override Price? GetConversionPrice(int instrumentId)
     {
         return _orderBookManager.GetOrderBook(instrumentId)?.GetMidPrice();
     }
