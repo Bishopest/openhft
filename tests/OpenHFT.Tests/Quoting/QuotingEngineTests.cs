@@ -356,10 +356,9 @@ public class QuotingEngineTests
 
         // Assert
         // Buy fills should be reduced by the sell amount (100 - 30 = 70)
-        _engine.TotalBuyFills.ToDecimal().Should().Be(100);
+        _engine.TotalBuyFills.ToDecimal().Should().Be(70);
         // Sell fills are added, then reduced by the buy amount (0 + 30 - 30 = 0, no wait, the logic is increase sell and decrease buy)
-        // Correct logic: TotalSell = 30, TotalBuy becomes 100 - 30 = 70
-        _engine.TotalSellFills.ToDecimal().Should().Be(30);
+        _engine.TotalSellFills.ToDecimal().Should().Be(0);
     }
 
     [Test]
@@ -377,9 +376,9 @@ public class QuotingEngineTests
 
         // Assert
         // Sell fills should be reduced by the buy amount (50 - 20 = 30)
-        _engine.TotalSellFills.ToDecimal().Should().Be(50);
-        // TotalBuy = 20, TotalSell becomes 50 - 20 = 30
-        _engine.TotalBuyFills.ToDecimal().Should().Be(20);
+        _engine.TotalSellFills.ToDecimal().Should().Be(30);
+        // TotalBuy = 20, TotalSell becomes  0 + 20 - 20 = 0
+        _engine.TotalBuyFills.ToDecimal().Should().Be(0);
     }
 
     [Test]
@@ -391,11 +390,11 @@ public class QuotingEngineTests
 
         // Act
         _bidQuoter.InvokeOrderFilled(buyFill); // TotalBuy = 100, TotalSell = 0
-        _askQuoter.InvokeOrderFilled(largeSellFill); // TotalSell = 150, TotalBuy becomes Max(0, 100 - 150) = 0
+        _askQuoter.InvokeOrderFilled(largeSellFill); // TotalBuy = 0, TotalSell = 50, TotalBuy becomes Max(0, 100 - 150) = 0
 
         // Assert
-        _engine.TotalBuyFills.ToDecimal().Should().Be(100m, "because a larger sell fill should reduce it to zero, not negative.");
-        _engine.TotalSellFills.ToDecimal().Should().Be(150m);
+        _engine.TotalBuyFills.ToDecimal().Should().Be(0m, "because a larger sell fill should reduce it to zero, not negative.");
+        _engine.TotalSellFills.ToDecimal().Should().Be(50m);
     }
 
     [Test]

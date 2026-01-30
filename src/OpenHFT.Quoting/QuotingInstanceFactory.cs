@@ -73,25 +73,25 @@ public class QuotingInstanceFactory : IQuotingInstanceFactory
             _loggerFactory.CreateLogger<QuotingInstanceFactory>().LogInformationWithCaller($"Quote currencies for {instrument.Symbol} differ ({fvInstrument.QuoteCurrency} -> {instrument.QuoteCurrency}). Setting up FxConverter.");
             var unitAmount = new CurrencyAmount(1m, fvInstrument.QuoteCurrency);
             var convertedAmount = _fxRateManager.Convert(unitAmount, instrument.QuoteCurrency);
-            // if (convertedAmount.HasValue && convertedAmount.Value.Amount > 0)
-            // {
-            //     decimal fixedRate = convertedAmount.Value.Amount;
-            //     _loggerFactory.CreateLogger<QuotingInstanceFactory>().LogInformationWithCaller($"Initialized FixedFxConverter for {instrument.Symbol} with rate: 1 {fvInstrument.QuoteCurrency} = {fixedRate} {instrument.QuoteCurrency}");
-            //     fxConverter = new FixedFxConverter(fixedRate);
-            // }
-            // else
-            // {
-            //     _loggerFactory.CreateLogger<QuotingInstanceFactory>().LogWarningWithCaller($"Could not fetch initial fixed FX rate for {instrument.Symbol}. Falling back to RealtimeFxConverter.");
-            //     fxConverter = new RealtimeFxConverter(
-            //         _fxRateManager,
-            //         _loggerFactory.CreateLogger<RealtimeFxConverter>()
-            //     );
-            // }
-            _loggerFactory.CreateLogger<QuotingInstanceFactory>().LogWarningWithCaller($"Could not fetch initial fixed FX rate for {instrument.Symbol}. Falling back to RealtimeFxConverter.");
-            fxConverter = new RealtimeFxConverter(
-                _fxRateManager,
-                _loggerFactory.CreateLogger<RealtimeFxConverter>()
-            );
+            if (convertedAmount.HasValue && convertedAmount.Value.Amount > 0)
+            {
+                decimal fixedRate = convertedAmount.Value.Amount;
+                _loggerFactory.CreateLogger<QuotingInstanceFactory>().LogInformationWithCaller($"Initialized FixedFxConverter for {instrument.Symbol} with rate: 1 {fvInstrument.QuoteCurrency} = {fixedRate} {instrument.QuoteCurrency}");
+                fxConverter = new FixedFxConverter(fixedRate);
+            }
+            else
+            {
+                _loggerFactory.CreateLogger<QuotingInstanceFactory>().LogWarningWithCaller($"Could not fetch initial fixed FX rate for {instrument.Symbol}. Falling back to RealtimeFxConverter.");
+                fxConverter = new RealtimeFxConverter(
+                    _fxRateManager,
+                    _loggerFactory.CreateLogger<RealtimeFxConverter>()
+                );
+            }
+            // _loggerFactory.CreateLogger<QuotingInstanceFactory>().LogWarningWithCaller($"Could not fetch initial fixed FX rate for {instrument.Symbol}. Falling back to RealtimeFxConverter.");
+            // fxConverter = new RealtimeFxConverter(
+            //     _fxRateManager,
+            //     _loggerFactory.CreateLogger<RealtimeFxConverter>()
+            // );
         }
 
         var engine = new QuotingEngine(_loggerFactory.CreateLogger<QuotingEngine>(), instrument, fvInstrument, mm, fvProvider, parameters, _marketDataManager, fxConverter);

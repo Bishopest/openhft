@@ -205,33 +205,36 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
 
         if (fill.Side == Side.Buy)
         {
-            // 매수 체결이 들어오면, 먼저 _unappliedSellFillsInTicks와 상계하고,
-            // 남은 양을 _unappliedBuyFillsInTicks에 더합니다.
+            // Unapplied Buy Fills (Adjusted after skew)
             InterlockedNetAndAdd(
                 ref _unappliedBuyFillsInTicks,
                 ref _unappliedSellFillsInTicks,
                 fillQuantityInTicks
             );
-            // Increase the absolute buy fills.
-            Interlocked.Add(ref _totalBuyFillsInTicks, fillQuantityInTicks);
-            // Decrease the absolute sell fills, but not below zero.
-            // InterlockedDecrementToZero(ref _totalSellFillsInTicks, fillQuantityInTicks);
+
+            // Total Fills (Net Position) update
+            InterlockedNetAndAdd(
+                ref _totalBuyFillsInTicks,
+                ref _totalSellFillsInTicks,
+                fillQuantityInTicks
+            );
             _logger.LogInformationWithCaller($"Buy fill received for {QuotingInstrument.Symbol}. Quantity: {fill.Quantity}. New total buy: {TotalBuyFills}. New Unapplied buy: {_unappliedBuyFillsInTicks}");
         }
-        else // Side.Sell
+        else
         {
-            // 매도 체결이 들어오면, 먼저 _unappliedBuyFillsInTicks와 상계하고,
-            // 남은 양을 _unappliedSellFillsInTicks에 더합니다.
+            // Unapplied Sell Fills (Adjusted after skew)
             InterlockedNetAndAdd(
                 ref _unappliedSellFillsInTicks,
                 ref _unappliedBuyFillsInTicks,
                 fillQuantityInTicks
             );
 
-            // Increase the absolute sell fills.
-            Interlocked.Add(ref _totalSellFillsInTicks, fillQuantityInTicks);
-            // Decrease the absolute buy fills, but not below zero.
-            // InterlockedDecrementToZero(ref _totalBuyFillsInTicks, fillQuantityInTicks);
+            // Total Fills (Net Position) update
+            InterlockedNetAndAdd(
+                ref _totalSellFillsInTicks,
+                ref _totalBuyFillsInTicks,
+                fillQuantityInTicks
+            );
             _logger.LogInformationWithCaller($"Sell fill received for {QuotingInstrument.Symbol}. Quantity: {fill.Quantity}. New total sell: {TotalSellFills}. New Unapplied sell: {_unappliedSellFillsInTicks}");
         }
     }
