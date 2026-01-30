@@ -239,6 +239,60 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
         }
     }
 
+    /// <summary>
+    /// Checks if the total position exceeds the limits. If so, applies a penalty to the spread
+    /// to ensure the quote moves away from the market (becomes less aggressive).
+    /// </summary>
+    private void ApplyPositionLimitPenalty(Price askCandidate, Price bidCandidate)
+    {
+        QuotingParameters currentParams;
+        lock (_lock)
+        {
+            currentParams = _parameters;
+        }
+
+        var totalBuy = TotalBuyFills;
+        var totalSell = TotalSellFills;
+        bool paramsChanged = false;
+
+        decimal newBidSpreadBp = currentParams.BidSpreadBp;
+        decimal newAskSpreadBp = currentParams.AskSpreadBp;
+
+        var bestAsk = _marketDataManager.GetOrderBook(QuotingInstrument.InstrumentId)?.GetBestAsk().price ?? null;
+        var bestBid = _marketDataManager.GetOrderBook(QuotingInstrument.InstrumentId)?.GetBestBid().price ?? null;
+        if (bestAsk == null || bestBid == null) return;
+
+        var buyCumFillViolated = totalBuy > currentParams.MaxCumBidFills;
+        var buyQuoteAggressive = bidCandidate > bestAsk;
+        var sellCumFillViolated = totalSell > currentParams.MaxCumAskFills;
+        var sellQuoteAggressive = askCandidate < bestBid;
+
+        // 1. 매수 포지션 한도 초과 && 공격적 매수 가격 -> 매수 호가를 더 낮춤 (Spread를 더 마이너스로)
+        if (buyCumFillViolated && buyQuoteAggressive)
+        {
+            newAskSpreadBp -= currentParams.SkewBp;
+            newBidSpreadBp -= currentParams.SkewBp;
+            paramsChanged = true;
+
+            _logger.LogWarningWithCaller($"Max Buy Position Exceeded with aggressive quote. Applying penalty: BidSpread {currentParams.BidSpreadBp} -> {newBidSpreadBp}");
+        }
+
+        // 2. 매도 포지션 한도 초과 && 공격적 매도 가격 -> 매도 호가를 더 높임 (Spread를 더 플러스로)
+        if (sellCumFillViolated && sellQuoteAggressive)
+        {
+            newAskSpreadBp += currentParams.SkewBp;
+            newBidSpreadBp += currentParams.SkewBp;
+            paramsChanged = true;
+
+            _logger.LogWarningWithCaller($"Max Sell Position Exceeded with aggressive quote. Applying penalty: AskSpread {currentParams.AskSpreadBp} -> {newAskSpreadBp}");
+        }
+
+        if (paramsChanged)
+        {
+            UpdateSkewedParameters(newBidSpreadBp, newAskSpreadBp);
+        }
+    }
+
     private void ApplySkew()
     {
         QuotingParameters currentParams;
@@ -490,6 +544,10 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
 
         var groupedQuotePair = ApplyGrouping(targetQuotePair);
 
+        // apply position limit by adjusting skew when max position exceeds limit with aggressive quote
+        // will be applied following quote
+        ApplyPositionLimitPenalty(Price.FromTicks(roundedAskTicks), Price.FromTicks(roundedBidTicks));
+
         // Delegate execution to the MarketMaker
         // This is a fire-and-forget call to avoid blocking the fair value update thread.
         QuotePairCalculated?.Invoke(this, groupedQuotePair);
@@ -504,6 +562,7 @@ public class QuotingEngine : IQuotingEngine, IQuotingStateProvider
             _ = _marketMaker.UpdateQuoteTargetAsync(groupedQuotePair);
         }
     }
+
     /// <summary>
     /// Helper method to check if two currencies are functionally equivalent (e.g., USD and USDT).
     /// </summary>
