@@ -150,6 +150,17 @@ public class Program
                                     );
                                 });
                                 break;
+                            case ExchangeEnum.CRYPTODOTCOM:
+                                services.AddSingleton<IFeedAdapter>(provider =>
+                                {
+                                    return new CryptodotcomAdapter(
+                                        provider.GetRequiredService<ILogger<CryptodotcomAdapter>>(),
+                                        productType,
+                                        provider.GetRequiredService<IInstrumentRepository>(),
+                                        executionConfig.Feed
+                                    );
+                                });
+                                break;
                         }
                     }
                 }

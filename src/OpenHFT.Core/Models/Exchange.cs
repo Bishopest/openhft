@@ -15,6 +15,7 @@ public enum ExchangeEnum
     BITGET = 104,
     BITHUMB = 105,
     COINONE = 106,
+    CRYPTODOTCOM = 107,
 }
 
 /// <summary>
@@ -37,6 +38,7 @@ public static class Exchange
             Tuple.Create(BITGET, ExchangeEnum.BITGET),
             Tuple.Create(BITHUMB, ExchangeEnum.BITHUMB),
             Tuple.Create(COINONE, ExchangeEnum.COINONE),
+            Tuple.Create(CRYPTODOTCOM, ExchangeEnum.CRYPTODOTCOM)
             // Add other exchanges here as needed
         };
 
@@ -70,6 +72,8 @@ public static class Exchange
     public const string BITHUMB = "bithumb";
 
     public const string COINONE = "coinone";
+
+    public const string CRYPTODOTCOM = "cryptodotcom";
 
     /// <summary>
     /// Gets the internal ExchangeEnum code for the specified exchange name.

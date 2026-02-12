@@ -147,7 +147,6 @@ public class Program
                 services.AddSingleton<IClientIdGenerator, ClientIdGenerator>();
                 services.AddSingleton<QuoteDebugger>();
                 services.AddSingleton<BookManager>();
-                services.AddSingleton<BookManager>();
                 services.AddSingleton<IBookManager>(p => p.GetRequiredService<BookManager>());
                 services.AddHostedService(p => p.GetRequiredService<BookManager>());
                 services.AddSingleton<WebSocketChannel>();

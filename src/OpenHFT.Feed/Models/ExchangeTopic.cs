@@ -304,6 +304,73 @@ public class CoinoneTopic : ExchangeTopic
     }
 }
 
+public class CryptodotcomTopic : ExchangeTopic
+{
+    private readonly string _topicSuffix;
+    private readonly string _topicName;
+
+    private CryptodotcomTopic(string eventTypeString, string topicSuffix, string topicName, bool isSymbolSpecific = true) : base(eventTypeString, isSymbolSpecific)
+    {
+        _topicSuffix = topicSuffix;
+        _topicName = topicName;
+    }
+
+    public override string GetStreamName(string symbol)
+    {
+        if (!IsSymbolSpecific) return _topicSuffix;
+
+        if (_topicSuffix == "book")
+        {
+            return $"{_topicSuffix}.{symbol}.50";
+        }
+        else
+        {
+            return $"{_topicSuffix}.{symbol}";
+        }
+    }
+    public override string GetTopicName() => _topicName;
+
+    // Static properties to access topics like an enum
+    // Live trades
+    public static CryptodotcomTopic Trade { get; } = new("trade", "trade", "trade");
+    // Top level of the book
+    public static CryptodotcomTopic Ticker { get; } = new("ticker", "ticker", "ticker");
+    // Top 10 levels using traditional full book push
+    public static CryptodotcomTopic OrderBook { get; } = new("book", "book", "book");
+
+    public static CryptodotcomTopic Execution { get; } = new("user.trade", "user.trade", "user.trade", isSymbolSpecific: false);
+
+    public override ExchangeEnum Exchange => ExchangeEnum.CRYPTODOTCOM;
+
+    private static readonly Lazy<IEnumerable<CryptodotcomTopic>> _allTopics = new(() =>
+        typeof(CryptodotcomTopic)
+            .GetProperties(BindingFlags.Public | BindingFlags.Static)
+            .Where(p => p.PropertyType == typeof(CryptodotcomTopic))
+            .Select(p => (CryptodotcomTopic)p.GetValue(null)!)
+            .ToList());
+
+    /// <summary>
+    /// Gets all defined market data topics for this exchange.
+    /// </summary>
+    public static IEnumerable<CryptodotcomTopic> GetAllMarketTopics()
+    {
+        return _allTopics.Value.Where(t => t.IsSymbolSpecific && t != Trade);
+    }
+
+    public static IEnumerable<CryptodotcomTopic> GetAllTopics()
+    {
+        return _allTopics.Value;
+    }
+
+    /// <summary>
+    /// Gets all defined private user data topics for this exchange.
+    /// </summary>
+    public static IEnumerable<CryptodotcomTopic> GetAllPrivateTopics()
+    {
+        return _allTopics.Value.Where(t => !t.IsSymbolSpecific);
+    }
+}
+
 /// <summary>
 /// A registry to map event type strings to their corresponding ExchangeTopic objects for fast lookups.
 /// </summary>
@@ -349,6 +416,17 @@ public static class TopicRegistry
         }
 
         foreach (var topic in CoinoneTopic.GetAllPrivateTopics())
+        {
+            RegisterTopic(topic);
+        }
+
+        // Register all Cryptodotcom topics (market and private)
+        foreach (var topic in CryptodotcomTopic.GetAllMarketTopics())
+        {
+            RegisterTopic(topic);
+        }
+
+        foreach (var topic in CryptodotcomTopic.GetAllPrivateTopics())
         {
             RegisterTopic(topic);
         }

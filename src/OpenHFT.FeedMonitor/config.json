@@ -17,6 +17,24 @@
       },
       "productType": "perpetualfuture",
       "symbols": ["BTCUSDT"]
+    },
+    {
+      "exchange": "bithumb",
+      "execution": {
+        "api": "live",
+        "feed": "live"
+      },
+      "productType": "spot",
+      "symbols": ["KRW-ETH"]
+    },
+    {
+      "exchange": "cryptodotcom",
+      "execution": {
+        "api": "live",
+        "feed": "live"
+      },
+      "productType": "spot",
+      "symbols": ["BTC_USD"]
     }
   ],
   "dataFolder": "/Users/jskim/workspace/openhft/data"

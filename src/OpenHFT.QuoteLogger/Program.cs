@@ -5,12 +5,14 @@
 using System.Collections.Concurrent;
 using Disruptor;
 using Disruptor.Dsl;
+using DotNetEnv;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenHFT.Core.Configuration;
+using OpenHFT.Core.DataBase;
 using OpenHFT.Core.Instruments;
 using OpenHFT.Core.Interfaces;
 using OpenHFT.Core.Models;
@@ -39,6 +41,9 @@ public class Program
             .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
             .WriteTo.File("logs/feed_monitor-.log", rollingInterval: RollingInterval.Day)
             .CreateBootstrapLogger();
+
+        Env.Load();
+        Env.TraversePath().Load();
 
         try
         {
@@ -108,7 +113,12 @@ public class Program
                 services.AddSingleton<IQuotingInstanceManager, QuotingInstanceManager>();
                 services.AddSingleton<IOrderGatewayRegistry, OrderGatewayRegistry>();
                 services.AddSingleton<IClientIdGenerator, ClientIdGenerator>();
+                services.AddSingleton<IFxRateService, FxRateManager>();
                 services.AddSingleton<IOrderFactory, OrderFactory>();
+                services.AddSingleton<IBookRepository, SqliteBookRepository>();
+                services.AddSingleton<BookManager>();
+                services.AddSingleton<IBookManager>(p => p.GetRequiredService<BookManager>());
+                services.AddHostedService(p => p.GetRequiredService<BookManager>());
                 services.AddSingleton<QuoteDebugger>();
 
                 // --- 3-1. Adapter 및 RestApiClient 등록 ---
@@ -163,6 +173,17 @@ public class Program
                                 {
                                     return new BithumbPublicAdapter(
                                         provider.GetRequiredService<ILogger<BithumbPublicAdapter>>(),
+                                        productType,
+                                        provider.GetRequiredService<IInstrumentRepository>(),
+                                        executionConfig.Feed
+                                    );
+                                });
+                                break;
+                            case ExchangeEnum.CRYPTODOTCOM:
+                                services.AddSingleton<IFeedAdapter>(provider =>
+                                {
+                                    return new CryptodotcomAdapter(
+                                        provider.GetRequiredService<ILogger<CryptodotcomAdapter>>(),
                                         productType,
                                         provider.GetRequiredService<IInstrumentRepository>(),
                                         executionConfig.Feed

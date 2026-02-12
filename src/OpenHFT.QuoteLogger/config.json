@@ -1,4 +1,5 @@
 {
+  "omsIdentifier": "LOCAL",
   "subscriptions": [
     {
       "exchange": "bitmex",
@@ -7,31 +8,31 @@
         "feed": "live"
       },
       "productType": "perpetualfuture",
-      "symbols": ["LTCUSDT"]
+      "symbols": ["XBTUSD"]
     },
     {
-      "exchange": "binance",
+      "exchange": "cryptodotcom",
       "execution": {
         "api": "testnet",
         "feed": "live"
       },
-      "productType": "perpetualfuture",
-      "symbols": ["LTCUSDT"]
+      "productType": "spot",
+      "symbols": ["BTC_USD"]
     }
   ],
   "quoting": {
-    "exchange": "bitmex",
-    "productType": "perpetualfuture",
+    "exchange": "cryptodotcom",
+    "productType": "spot",
     "bookName": "DMM:LTC",
-    "symbol": "LTCUSDT",
+    "symbol": "BTC_USD",
     "askQuoterType": "log",
     "bidQuoterType": "log",
     "fairValue": {
       "model": "bestMidp",
       "params": {
-        "exchange": "binance",
+        "exchange": "bitmex",
         "productType": "perpetualfuture",
-        "symbol": "LTCUSDT"
+        "symbol": "XBTUSD"
       }
     },
     "askSpreadBp": 33.0,
