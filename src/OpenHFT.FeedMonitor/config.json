@@ -35,6 +35,15 @@
       },
       "productType": "spot",
       "symbols": ["BTC_USD"]
+    },
+    {
+      "exchange": "coinbase",
+      "execution": {
+        "api": "live",
+        "feed": "live"
+      },
+      "productType": "spot",
+      "symbols": ["BTC-USD"]
     }
   ],
   "dataFolder": "/Users/jskim/workspace/openhft/data"

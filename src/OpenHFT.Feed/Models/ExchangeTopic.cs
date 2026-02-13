@@ -371,6 +371,54 @@ public class CryptodotcomTopic : ExchangeTopic
     }
 }
 
+public class CoinbaseTopic : ExchangeTopic
+{
+    private readonly string _topicSuffix;
+    private readonly string _topicName;
+
+    private CoinbaseTopic(string eventTypeString, string topicSuffix, string topicName, bool isSymbolSpecific = true) : base(eventTypeString, isSymbolSpecific)
+    {
+        _topicSuffix = topicSuffix;
+        _topicName = topicName;
+    }
+
+    public override string GetStreamName(string symbol) => _topicSuffix;
+    public override string GetTopicName() => _topicName;
+
+    public static CoinbaseTopic Ticker { get; } = new("ticker", "ticker", "ticker");
+    public static CoinbaseTopic OrderBook { get; } = new("level2", "level2", "level2");
+
+    public override ExchangeEnum Exchange => ExchangeEnum.COINBASE;
+
+    private static readonly Lazy<IEnumerable<CoinbaseTopic>> _allTopics = new(() =>
+        typeof(CoinbaseTopic)
+            .GetProperties(BindingFlags.Public | BindingFlags.Static)
+            .Where(p => p.PropertyType == typeof(CoinbaseTopic))
+            .Select(p => (CoinbaseTopic)p.GetValue(null)!)
+            .ToList());
+
+    /// <summary>
+    /// Gets all defined market data topics for this exchange.
+    /// </summary>
+    public static IEnumerable<CoinbaseTopic> GetAllMarketTopics()
+    {
+        return _allTopics.Value.Where(t => t.IsSymbolSpecific);
+    }
+
+    public static IEnumerable<CoinbaseTopic> GetAllTopics()
+    {
+        return _allTopics.Value;
+    }
+
+    /// <summary>
+    /// Gets all defined private user data topics for this exchange.
+    /// </summary>
+    public static IEnumerable<CoinbaseTopic> GetAllPrivateTopics()
+    {
+        return _allTopics.Value.Where(t => !t.IsSymbolSpecific);
+    }
+}
+
 /// <summary>
 /// A registry to map event type strings to their corresponding ExchangeTopic objects for fast lookups.
 /// </summary>
@@ -427,6 +475,17 @@ public static class TopicRegistry
         }
 
         foreach (var topic in CryptodotcomTopic.GetAllPrivateTopics())
+        {
+            RegisterTopic(topic);
+        }
+
+        // Register all Cryptodotcom topics (market and private)
+        foreach (var topic in CoinbaseTopic.GetAllMarketTopics())
+        {
+            RegisterTopic(topic);
+        }
+
+        foreach (var topic in CoinbaseTopic.GetAllPrivateTopics())
         {
             RegisterTopic(topic);
         }

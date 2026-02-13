@@ -190,6 +190,17 @@ public class Program
                                     );
                                 });
                                 break;
+                            case ExchangeEnum.COINBASE:
+                                services.AddSingleton<IFeedAdapter>(provider =>
+                                {
+                                    return new CoinbaseAdapter(
+                                        provider.GetRequiredService<ILogger<CoinbaseAdapter>>(),
+                                        productType,
+                                        provider.GetRequiredService<IInstrumentRepository>(),
+                                        executionConfig.Feed
+                                    );
+                                });
+                                break;
                         }
                     }
                 }

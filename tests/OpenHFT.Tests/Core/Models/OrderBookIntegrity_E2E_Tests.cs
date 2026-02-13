@@ -47,7 +47,8 @@ public class OrderBookIntegrity_E2E_Tests
 1,BITMEX,XBTUSD,PerpetualFuture,XBT,USD,0.5,1,1,1
 2,BINANCE,BTCUSDT,PerpetualFuture,BTC,USDT,0.01,0.001,1,0.001
 3,BITHUMB,KRW-ETH,Spot,ETH,KRW,1000,0.0001,1,0.002
-4,CRYPTODOTCOM,BTC_USD,Spot,BTC,USD,0.01,0.0001,1,0.002";
+4,CRYPTODOTCOM,BTC_USD,Spot,BTC,USD,0.01,0.0001,1,0.002
+5,COINBASE,BTC-USD,Spot,BTC,USD,0.01,0.0001,1,0.002";
         File.WriteAllText(Path.Combine(_testDirectory, "instruments.csv"), csvContent);
 
         IConfiguration configuration = new ConfigurationBuilder()
@@ -116,6 +117,13 @@ public class OrderBookIntegrity_E2E_Tests
             ExecutionMode.Live
         ));
 
+        services.AddSingleton<IFeedAdapter>(provider => new CoinbaseAdapter(
+            provider.GetRequiredService<ILogger<CoinbaseAdapter>>(),
+            ProductType.Spot,
+            provider.GetRequiredService<IInstrumentRepository>(),
+            ExecutionMode.Live
+        ));
+
         services.AddSingleton<IFeedAdapterRegistry, FeedAdapterRegistry>();
 
         // Use the real MarketDataManager which will create consumers
@@ -151,6 +159,7 @@ public class OrderBookIntegrity_E2E_Tests
     [TestCase(ExchangeEnum.BITMEX, ProductType.PerpetualFuture, "XBTUSD", TestName = "Bitmex_XBTUSD_Perpetual_OrderBookIntegrity")]
     [TestCase(ExchangeEnum.BITHUMB, ProductType.Spot, "KRW-ETH", TestName = "Bithumb_KRW-ETH_Spot_OrderBookIntegrity")]
     [TestCase(ExchangeEnum.CRYPTODOTCOM, ProductType.Spot, "BTC_USD", TestName = "Cryptodotcom_BTCUSD_Spot_OrderBookIntegrity")]
+    [TestCase(ExchangeEnum.COINBASE, ProductType.Spot, "BTC-USD", TestName = "Coinbase_BTCUSD_Spot_OrderBookIntegrity")]
     public async Task LiveStream_ShouldMaintainOrderBookIntegrity_ForDuration(ExchangeEnum exchange, ProductType productType, string symbol)
     {
         // --- Arrange ---
@@ -239,6 +248,7 @@ public class OrderBookIntegrity_E2E_Tests
     [TestCase(ExchangeEnum.BINANCE, ProductType.PerpetualFuture, "BTCUSDT", 2, TestName = "Binance_Reconnection_ChaosTest_WithResub")]
     [TestCase(ExchangeEnum.BITHUMB, ProductType.Spot, "KRW-ETH", 1, TestName = "Bithumb_Reconnection_ChaosTest_WithResub")]
     [TestCase(ExchangeEnum.CRYPTODOTCOM, ProductType.Spot, "BTC_USD", 1, TestName = "Cryptodotcom_Reconnection_ChaosTest_WithResub")]
+    [TestCase(ExchangeEnum.COINBASE, ProductType.Spot, "BTC-USD", 1, TestName = "Coinbase_Reconnection_ChaosTest_WithResub")]
     public async Task Reconnection_Integrity_ChaosTest_WithResubscription(ExchangeEnum exchange, ProductType productType, string symbol, int chaosIterations)
     {
         // --- 1. Arrange ---
@@ -346,6 +356,8 @@ public class OrderBookIntegrity_E2E_Tests
                 return BithumbTopic.OrderBook;
             case ExchangeEnum.CRYPTODOTCOM:
                 return CryptodotcomTopic.OrderBook;
+            case ExchangeEnum.COINBASE:
+                return CoinbaseTopic.OrderBook;
             default:
                 throw new InvalidOperationException($"Unsupported exchange: {exchange}");
         }

@@ -25,6 +25,8 @@ using Microsoft.Extensions.Options;
 using OpenHFT.Gateway;
 using OpenHFT.Gateway.Interfaces;
 using OpenHFT.Service;
+using DotNetEnv;
+
 
 public class Program
 {
@@ -35,6 +37,9 @@ public class Program
             .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
             .WriteTo.File("logs/feed_monitor-.log", rollingInterval: RollingInterval.Day)
             .CreateBootstrapLogger();
+
+        Env.Load();
+        Env.TraversePath().Load();
 
         try
         {
@@ -155,6 +160,17 @@ public class Program
                                 {
                                     return new CryptodotcomAdapter(
                                         provider.GetRequiredService<ILogger<CryptodotcomAdapter>>(),
+                                        productType,
+                                        provider.GetRequiredService<IInstrumentRepository>(),
+                                        executionConfig.Feed
+                                    );
+                                });
+                                break;
+                            case ExchangeEnum.COINBASE:
+                                services.AddSingleton<IFeedAdapter>(provider =>
+                                {
+                                    return new CoinbaseAdapter(
+                                        provider.GetRequiredService<ILogger<CoinbaseAdapter>>(),
                                         productType,
                                         provider.GetRequiredService<IInstrumentRepository>(),
                                         executionConfig.Feed

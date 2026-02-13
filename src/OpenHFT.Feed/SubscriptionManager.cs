@@ -236,6 +236,7 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
             ExchangeEnum.BITMEX => BitmexTopic.GetAllMarketTopics(),
             ExchangeEnum.BITHUMB => BithumbTopic.GetAllMarketTopics(),
             ExchangeEnum.CRYPTODOTCOM => CryptodotcomTopic.GetAllMarketTopics(),
+            ExchangeEnum.COINBASE => CoinbaseTopic.GetAllMarketTopics(),
             // Add other exchanges here
             _ => Enumerable.Empty<ExchangeTopic>()
         };

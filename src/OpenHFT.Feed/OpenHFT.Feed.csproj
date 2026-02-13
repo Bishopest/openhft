@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <PackageReference Include="Disruptor" />
+    <PackageReference Include="Jose-JWT" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="System.Net.WebSockets.Client" />
     <PackageReference Include="System.Text.Json" />

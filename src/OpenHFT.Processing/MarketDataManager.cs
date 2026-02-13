@@ -262,6 +262,16 @@ public class MarketDataManager : IMarketDataManager
                     return CryptodotcomTopic.Ticker;
                 }
                 break;
+            case ExchangeEnum.COINBASE:
+                if (typeof(TConsumer) == typeof(OrderBookConsumer))
+                {
+                    return CoinbaseTopic.OrderBook;
+                }
+                else if (typeof(TConsumer) == typeof(BestOrderBookConsumer))
+                {
+                    return CoinbaseTopic.Ticker;
+                }
+                break;
                 // 다른 거래소에 대한 case를 여기에 추가할 수 있습니다.
                 // case ExchangeEnum.BYBIT: ...
         }
