@@ -11,6 +11,11 @@
           "exchange": "bitmex",
           "productType": "perpetualFuture",
           "executionMode": "live"
+        },
+        {
+          "exchange": "bithumb",
+          "productType": "spot",
+          "executionMode": "live"
         }
       ]
     }
@@ -27,6 +32,11 @@
           "exchange": "bitmex",
           "productType": "perpetualFuture",
           "executionMode": "testnet"
+        },
+        {
+          "exchange": "bithumb",
+          "productType": "spot",
+          "executionMode": "live"
         }
       ]
     }
