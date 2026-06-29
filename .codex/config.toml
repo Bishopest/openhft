@@ -1,0 +1,5 @@
+[mcp_servers.roslyn]
+command = "cwm-roslyn-navigator"
+args = ["--solution", "/Users/jskim/workspace/openhft/OpenHFT-Lab.sln"]
+env = { Logging__LogLevel__Default = "Error" }
+startup_timeout_sec = 120
